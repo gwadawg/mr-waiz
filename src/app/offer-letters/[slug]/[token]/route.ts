@@ -21,9 +21,8 @@ export async function GET(
   { params }: { params: Promise<{ slug: string; token: string }> },
 ) {
   const { slug, token } = await params;
-  if (!letterIsOpen(slug, token)) return wall();
-
   const letter = offerLetters[slug];
+  if (!letter || !letterIsOpen(slug, token)) return wall();
   const sheetsDir = path.join(process.cwd(), 'offer-letters', 'sheets');
   const filePath = path.resolve(sheetsDir, letter.file);
   if (!filePath.startsWith(sheetsDir + path.sep)) return wall();
