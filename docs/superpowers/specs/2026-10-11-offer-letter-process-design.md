@@ -16,10 +16,10 @@ The page uses the Trust One visual system.
 Price and the call story change per person.
 Deliverables, section order, and proof numbers stay in the framework.
 
-The skill that runs this, and publishing to
-`offerletter.waizmedia.net`, are a later pass.
+The skill that fills a letter is a later pass.
+The host and the access rule are decided here.
 This spec stores the frameworks, the letter files, and the rulings
-those later steps will read.
+the skill will read.
 
 ## Purpose
 
@@ -30,11 +30,44 @@ their product, with the deliverables for their package.
 ## Non-goals
 
 - The offer-letter skill
-- Minting a token, editing `offer-letters/registry.ts`, or sending the link
+- Minting a new token or sending a link as part of filling a letter
+- A typed password, a login, or a second channel to open a letter
 - Migrating pages that already live in `public/offers/`
 - Copying framework text into `AGENTS.md`, Cursor rules, or Claude rules
 - A fifth offer shape. Home equity and other products wait
   until a framework file exists for them
+
+## Host and access
+
+`offerletter.waizmedia.net` is a custom domain on the Railway service
+that deploys this repo.
+The hostname moves off Vercel.
+The public marketing page that Vercel serves on that hostname today
+is replaced by this app.
+
+A letter opens only at `/{slug}/{token}`.
+The token is 32 random hex characters, stored in `offer-letters/registry.ts`,
+and it is not written into the HTML.
+A missing token, a wrong token, and an unknown slug all return
+the same private-link page.
+There is no index and no sitemap.
+The response is `noindex`, `nofollow`, `no-referrer`, and `no-store`.
+The token list is read on the server only.
+
+The link is the key.
+Whoever receives the full link can open it,
+including someone they forward it to.
+Guessing a company name does not open a letter, and scraping the host
+does not produce a list of letters.
+A typed password is not added.
+New letters stay out of `public/offers/`.
+
+Order of work:
+
+1. Point `offerletter.waizmedia.net` at Railway and confirm the Trust One
+   link hits the private gate.
+2. Add the frameworks, the shell, the rules, and the Trust One brief.
+3. Build the skill after that hostname is serving the gate.
 
 ## Layout and authority
 
@@ -303,4 +336,7 @@ Each reverse framework is checked against the DSCR list it was
 rewritten from: same roles, reverse language, and proof numbers
 written into the file.
 
-Publishing and the skill are not part of this check.
+The skill is not part of this check.
+The host check is separate: a request to the bare company slug on
+`offerletter.waizmedia.net` returns the private-link page,
+and the full Trust One link returns that sheet.
