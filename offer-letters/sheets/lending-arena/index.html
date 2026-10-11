@@ -1377,6 +1377,36 @@
   }
   .price-card.featured .price-note { color: rgba(255,255,255,0.5); }
 
+  .due { margin: 18px 0 8px; }
+  .due-kicker {
+    display: block;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--mid);
+    margin-bottom: 4px;
+  }
+  .price-card.featured .due-kicker { color: rgba(255,255,255,0.55); }
+  .due-amt {
+    display: block;
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 56px;
+    font-weight: 800;
+    line-height: 0.95;
+    letter-spacing: -0.01em;
+    color: var(--navy);
+  }
+  .price-card.featured .due-amt { color: var(--gold); }
+  .due-split {
+    margin-top: 8px;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--dark);
+    line-height: 1.4;
+  }
+  .price-card.featured .due-split { color: rgba(255,255,255,0.88); }
+
   .scenario {
     background: white;
     border: 1px solid var(--divider);
@@ -1495,10 +1525,11 @@
       <div class="eyebrow">Waiz Media × Lending Arena</div>
       <h1>Reverse + DSCR<em>growth system</em>for Lending Arena</h1>
       <p class="hero-sub">
-        The full scope in writing: deliverables, both pricing options, and how the
-        engagement works. <strong>$1,000 setup</strong>, then <strong>$2,000 a month</strong>
-        for one program or <strong>$2,500 a month</strong> for both, plus
-        <strong>$20 per conversation</strong> we establish for you.
+        The full scope in writing. The first invoice is one payment:
+        the $1,000 setup and the first month together.
+        <strong>$3,000</strong> for one program, or <strong>$3,500</strong> for both.
+        After that, <strong>$2,000</strong> or <strong>$2,500</strong> a month,
+        plus <strong>$20 per conversation</strong>.
       </p>
       <div class="hero-actions">
         <a class="btn btn-primary" href="#deliverables">Deliverables</a>
@@ -1534,7 +1565,7 @@
         </div>
         <div class="brand-feed">
           <div class="brand-feed-label">To start</div>
-          <div class="feed-row"><span class="feed-dot"></span> $1,000 setup inside that number</div>
+          <div class="feed-row"><span class="feed-dot"></span> Due today: setup + first month</div>
           <div class="feed-row"><span class="feed-dot"></span> Then $2,000 or $2,500 a month</div>
           <div class="feed-row"><span class="feed-dot"></span> $20 per established conversation</div>
         </div>
@@ -1631,7 +1662,8 @@
     <div class="label">Pricing</div>
     <h2>One program, or both.</h2>
     <p class="lead">
-      The setup fee is $1,000 either way, already included in the amount due at the start.
+      The first invoice is one payment: the $1,000 setup and the first month, paid together.
+      The monthly fee starts the month after that.
       Ad spend is separate and paid by Lending Arena's card directly to Meta.
     </p>
 
@@ -1649,26 +1681,32 @@
         <div class="opt">One program</div>
         <h3>Reverse or DSCR.</h3>
         <p class="blurb">Ads, landers, and the call center for a single program.</p>
+        <div class="due">
+          <span class="due-kicker">Due today · one payment</span>
+          <strong class="due-amt">$3,000</strong>
+          <p class="due-split">$1,000 setup + $2,000 first month</p>
+        </div>
         <div class="price-lines">
-          <div class="price-line"><span>To start</span><strong>$3,000</strong></div>
-          <div class="price-line"><span>Includes</span><strong>$1,000 setup + first month</strong></div>
-          <div class="price-line"><span>Monthly after</span><strong>$2,000</strong></div>
+          <div class="price-line"><span>Each month after</span><strong>$2,000</strong></div>
           <div class="price-line"><span>Per conversation</span><strong>$20</strong></div>
         </div>
-        <p class="price-note">Month two onward is $2,000 plus $20 for each established conversation.</p>
+        <p class="price-note">The $3,000 is paid once. It is not billed again. Month two is $2,000, plus $20 for each established conversation.</p>
       </div>
       <div class="price-card featured">
         <div class="badge">Both programs</div>
         <div class="opt">Reverse + DSCR</div>
         <h3>Both at the same time.</h3>
         <p class="blurb">Two programs with separate ads and callers, under one retainer.</p>
+        <div class="due">
+          <span class="due-kicker">Due today · one payment</span>
+          <strong class="due-amt">$3,500</strong>
+          <p class="due-split">$1,000 setup + $2,500 first month</p>
+        </div>
         <div class="price-lines">
-          <div class="price-line"><span>To start</span><strong>$3,500</strong></div>
-          <div class="price-line"><span>Includes</span><strong>$1,000 setup + first month</strong></div>
-          <div class="price-line"><span>Monthly after</span><strong>$2,500</strong></div>
+          <div class="price-line"><span>Each month after</span><strong>$2,500</strong></div>
           <div class="price-line"><span>Per conversation</span><strong>$20</strong></div>
         </div>
-        <p class="price-note">Month two onward is $2,500 plus $20 for each established conversation.</p>
+        <p class="price-note">The $3,500 is paid once. It is not billed again. Month two is $2,500, plus $20 for each established conversation.</p>
       </div>
     </div>
 
@@ -1681,27 +1719,27 @@
         <thead>
           <tr>
             <th>Path</th>
-            <th>To start</th>
-            <th>Monthly after</th>
-            <th>Per conversation</th>
+            <th>Due today</th>
+            <th>That payment is</th>
+            <th>Each month after</th>
           </tr>
         </thead>
         <tbody>
           <tr>
             <td>One program</td>
             <td class="num">$3,000</td>
-            <td>$2,000</td>
-            <td>$20</td>
+            <td>$1,000 setup + $2,000 first month</td>
+            <td>$2,000 + $20 / conversation</td>
           </tr>
           <tr class="total">
             <td>Reverse + DSCR</td>
             <td class="num">$3,500</td>
-            <td>$2,500</td>
-            <td>$20</td>
+            <td>$1,000 setup + $2,500 first month</td>
+            <td>$2,500 + $20 / conversation</td>
           </tr>
         </tbody>
       </table>
-      <div class="scenario-foot">Each start amount is the $1,000 setup plus the first month of service. Meta ad spend is billed to your card directly, on top of this.</div>
+      <div class="scenario-foot">Due today is a single invoice. The monthly amount starts the following month. Meta ad spend is billed to your card directly, on top of this.</div>
     </div>
   </div>
 </section>
@@ -1760,12 +1798,12 @@
       <div class="scale-card">
         <div class="phase">Option 1</div>
         <h3>One program</h3>
-        <p>$3,000 to start, then $2,000 a month plus $20 per established conversation.</p>
+        <p>Due today: $3,000, which is the $1,000 setup and the $2,000 first month together. Then $2,000 a month, plus $20 per conversation.</p>
       </div>
       <div class="scale-card">
         <div class="phase">Option 2</div>
         <h3>Reverse + DSCR</h3>
-        <p>$3,500 to start, then $2,500 a month plus $20 per established conversation.</p>
+        <p>Due today: $3,500, which is the $1,000 setup and the $2,500 first month together. Then $2,500 a month, plus $20 per conversation.</p>
       </div>
       <div class="scale-card">
         <div class="phase">Then</div>
