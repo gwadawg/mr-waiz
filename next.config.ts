@@ -76,14 +76,6 @@ const nextConfig: NextConfig = {
         source: "/offers/chuck-eueno/",
         destination: "/offers/chuck-eueno/index.html",
       },
-      {
-        source: "/offers/trust-one",
-        destination: "/offers/trust-one/index.html",
-      },
-      {
-        source: "/offers/trust-one/",
-        destination: "/offers/trust-one/index.html",
-      },
     ];
   },
 };

@@ -1,6 +1,12 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import {
+  decideOfferLetterRequest,
+  isOfferLetterHost,
+  PRIVATE_HEADERS,
+  PRIVATE_LINK_HTML,
+} from '../offer-letters/gate';
 
 // Routes that handle their own auth (API key or admin secret) or are public
 const BYPASS_ROUTES = [
@@ -93,8 +99,22 @@ function handleCardHost(request: NextRequest): NextResponse {
   return NextResponse.rewrite(rewriteUrl);
 }
 
+function handleOfferLetterHost(request: NextRequest): NextResponse {
+  const decision = decideOfferLetterRequest(request.headers.get('host'), request.nextUrl.pathname);
+  if (decision.kind === 'serve') {
+    const rewriteUrl = request.nextUrl.clone();
+    rewriteUrl.pathname = `/offer-letters/${decision.slug}/${decision.token}`;
+    return NextResponse.rewrite(rewriteUrl);
+  }
+  return new NextResponse(PRIVATE_LINK_HTML, { status: 404, headers: PRIVATE_HEADERS });
+}
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  if (isOfferLetterHost(request.headers.get('host'))) {
+    return handleOfferLetterHost(request);
+  }
 
   if (isCardHost(request.headers.get('host'))) {
     return handleCardHost(request);
