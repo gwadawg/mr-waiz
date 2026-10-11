@@ -12,7 +12,7 @@ related_docs:
 
 After a sales call, produce a designed offer page for that person
 from one of four frameworks.
-The page uses the Trust One visual system.
+The page uses the current private-letter visual system.
 Price and the call story change per person.
 Deliverables, section order, and proof numbers stay in the framework.
 
@@ -32,6 +32,7 @@ their product, with the deliverables for their package.
 - The offer-letter skill
 - Minting a new token or sending a link as part of filling a letter
 - A typed password, a login, or a second channel to open a letter
+- Migrating any existing client page, including sheets already in this repo
 - Migrating pages that already live in `public/offers/`
 - Copying framework text into `AGENTS.md`, Cursor rules, or Claude rules
 - A fifth offer shape. Home equity and other products wait
@@ -64,9 +65,9 @@ New letters stay out of `public/offers/`.
 
 Order of work:
 
-1. Point `offerletter.waizmedia.net` at Railway and confirm the Trust One
-   link hits the private gate.
-2. Add the frameworks, the shell, the rules, and the Trust One brief.
+1. Point `offerletter.waizmedia.net` at Railway and confirm an unknown
+   path returns the private-link page.
+2. Add the frameworks, the shell, and the rules.
 3. Build the skill after that hostname is serving the gate.
 
 ## Layout and authority
@@ -98,8 +99,9 @@ offer-letters/
 `README.md` is the map.
 `RULES.md` holds the production paths and the stop rules in this spec.
 Deliverables and proof numbers stay in the framework files.
-`shell/index.html` is the visual system taken from the Trust One page,
-stored once, with slots for the framework copy and the brief.
+`shell/index.html` is the visual system taken from the current
+private-letter page, stored once, with slots for the framework copy,
+the brief, and any additions.
 Each framework file is one complete offer.
 `letters/{slug}/` is that person's state.
 `sheets/{slug}/index.html` is the page they open.
@@ -142,7 +144,7 @@ The product decides the words and the proof numbers.
 Reverse and DSCR share deliverable roles inside a package.
 They do not share proof numbers.
 
-Call center roles, taken from the Trust One page:
+Call center roles, taken from the current DSCR call-center page:
 
 - Meta ads under their brand
 - Campaign management
@@ -169,7 +171,7 @@ First drafts:
 
 | Framework | Source |
 |---|---|
-| DSCR call center | The Trust One sheet |
+| DSCR call center | The current DSCR call-center page in `offer-letters/sheets/` |
 | DSCR leads only | The Chuck Eueno sheet, leaving out facts that are only his |
 | Reverse call center | The DSCR call-center roles, in reverse language |
 | Reverse leads only | The DSCR leads-only roles, in reverse language |
@@ -190,7 +192,7 @@ Until that review is recorded in the file, a reverse letter is not filled.
 
 The slug is the lowercase kebab-case of the company name.
 Drop a trailing legal word such as Financial, Group, or LLC
-when the short name is already clear, as in `trust-one`.
+when the short name is already clear. Acme Financial becomes `acme`.
 When that company already has a letter, the slug is the existing one.
 
 ```text
@@ -203,6 +205,7 @@ letters/{slug}/brief.md
   transcript:   path to transcript.txt, or none
   recording:    optional link
   email:        optional
+  additions:    optional instructions for this letter only
 ```
 
 The product and package select the framework file.
@@ -231,6 +234,7 @@ The page is filled in one pass.
 - The Plan block is the transition or the mission statement.
 - The Scenario table uses only figures already in the price.
 - A missing recording link or email is left off the page.
+- Additions are rendered only from instructions on that brief.
 
 The company name is filled into the headline and the deliverables.
 The rest of that locked copy stays as written in the framework.
@@ -242,23 +246,32 @@ Changing the offer for everyone on that package means editing
 the framework.
 Letters already filled stay as they are until they are filled again.
 
-### Existing sheets
+### Additions
 
-Trust One stays the first sheet.
-Its DSCR call-center copy is extracted into
-`frameworks/dscr-call-center.md`.
-The Plan copy already on that page is saved as
-`letters/trust-one/transition.md`.
-The brief records the name, company, price, and recording link
-from the page.
-`transcript.txt` is added when the call file is available.
-Until then the brief sets `transcript` to `none`,
-and the page keeps the saved transition.
-It does not switch to the mission statement
-just because the raw call is not in the repo yet.
+An addition is an instruction on this letter only.
+It can add a block or a control.
+It cannot change the deliverables, the proof numbers, the price,
+or the order of the six core sections.
 
-Chuck Eueno is a source for the DSCR leads-only framework.
-His page stays in `public/offers/`.
+Two kinds are expected:
+
+- A recording button, when the brief has a recording link.
+  The button opens that link.
+- A resource section whose links are the ones named
+  in the instruction.
+
+The resource section is placed after the core sections.
+Links that were not supplied are not invented.
+If an instruction asks to change locked copy, the letter waits
+until that instruction is restated as an addition
+or as an edit to the framework.
+
+### Copy sources
+
+Framework drafts are written from the pages named above.
+This process does not rebuild those client pages
+and does not add briefs for them.
+The leads-only source page stays in `public/offers/`.
 
 ## When the process stops
 
@@ -326,17 +339,16 @@ the table is absent and the price words are shown.
 
 An existing slug updates that letter's brief and page.
 
-Trust One is the first regression case.
-`frameworks/dscr-call-center.md` is taken from that sheet,
-and a refilled page keeps its deliverables, proof numbers,
+A filled page keeps the framework's deliverables, proof numbers,
 and section order.
 The DSCR leads-only framework is checked against the
-leads-only roles above, with Chuck Eueno's personal facts left out.
+leads-only roles above, with that source client's personal facts left out.
+An addition appears only when the brief contains that instruction,
+and it leaves the six core sections in order.
 Each reverse framework is checked against the DSCR list it was
 rewritten from: same roles, reverse language, and proof numbers
 written into the file.
 
 The skill is not part of this check.
-The host check is separate: a request to the bare company slug on
-`offerletter.waizmedia.net` returns the private-link page,
-and the full Trust One link returns that sheet.
+The host check is separate: an unknown path on
+`offerletter.waizmedia.net` returns the private-link page.
