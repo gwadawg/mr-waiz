@@ -1,0 +1,1796 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lending Arena · Reverse and DSCR · Waiz Media</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800;900&family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --navy: #061A4A;
+    --royal: #0E2F73;
+    --accent: #4FA3FF;
+    --accent-deep: #2B7DE0;
+    --green: #7CFF7A;
+    --gold: #F5C842;
+    --white: #FFFFFF;
+    --light: #F4F7FC;
+    --dark: #0B1220;
+    --mid: #5B6475;
+    --soft: #8B93A7;
+    --divider: #D1D9F0;
+    --line: rgba(255, 255, 255, 0.12);
+    --shadow: 0 22px 56px rgba(6, 26, 74, 0.14);
+    --radius: 8px;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+
+  body {
+    font-family: 'IBM Plex Sans', sans-serif;
+    background: var(--light);
+    color: var(--dark);
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.5;
+  }
+
+  a { color: inherit; text-decoration: none; }
+
+  /* ── Banner ── */
+  .banner {
+    background: var(--royal);
+    color: rgba(255, 255, 255, 0.92);
+    text-align: center;
+    padding: 11px 20px;
+    font-size: 13px;
+    font-weight: 500;
+  }
+  .banner strong { color: var(--white); font-weight: 600; }
+
+  /* ── Hero ── */
+  .hero {
+    position: relative;
+    background:
+      radial-gradient(ellipse 65% 70% at 95% 5%, rgba(79, 163, 255, 0.28), transparent 55%),
+      radial-gradient(ellipse 45% 55% at 5% 95%, rgba(124, 255, 122, 0.1), transparent 50%),
+      linear-gradient(165deg, #041436 0%, var(--navy) 55%, #0a2458 100%);
+    color: var(--white);
+    padding: 56px 28px 80px;
+    overflow: hidden;
+  }
+
+  .hero::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+    background-size: 48px 48px;
+    mask-image: radial-gradient(ellipse 80% 70% at 50% 40%, black, transparent);
+    pointer-events: none;
+  }
+
+  .hero-inner {
+    position: relative;
+    max-width: 1180px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: 1.15fr 0.85fr;
+    gap: 48px;
+    align-items: center;
+  }
+
+  .eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 18px;
+  }
+  .eyebrow::before {
+    content: "";
+    width: 28px;
+    height: 2px;
+    background: var(--accent);
+  }
+
+  .hero h1 {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: clamp(44px, 6.5vw, 72px);
+    font-weight: 900;
+    line-height: 0.94;
+    text-transform: uppercase;
+    letter-spacing: 0.01em;
+    margin-bottom: 20px;
+  }
+  .hero h1 em {
+    font-style: normal;
+    color: var(--accent);
+    display: block;
+  }
+
+  .hero-sub {
+    font-size: clamp(16px, 1.8vw, 18px);
+    font-weight: 300;
+    color: rgba(255, 255, 255, 0.78);
+    max-width: 34em;
+    line-height: 1.65;
+    margin-bottom: 28px;
+  }
+  .hero-sub strong { color: var(--white); font-weight: 500; }
+
+  .hero-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 28px;
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border-radius: 4px;
+    font-weight: 600;
+    transition: transform 0.15s ease, background 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+  }
+  .btn:active { transform: translateY(1px); }
+
+  .btn-primary {
+    background: var(--accent);
+    color: var(--navy);
+    padding: 14px 24px;
+    font-size: 15px;
+  }
+  .btn-primary:hover {
+    background: #6ab3ff;
+    box-shadow: 0 8px 24px rgba(79, 163, 255, 0.35);
+  }
+
+  .btn-ghost {
+    background: transparent;
+    color: rgba(255, 255, 255, 0.88);
+    padding: 14px 20px;
+    font-size: 15px;
+    border: 1px solid rgba(255, 255, 255, 0.22);
+  }
+  .btn-ghost:hover { border-color: rgba(255, 255, 255, 0.5); color: var(--white); }
+
+  .hero-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .pill {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    padding: 7px 12px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid var(--line);
+    color: rgba(255, 255, 255, 0.8);
+  }
+
+  /* Hero brand card mock */
+  .hero-visual {
+    display: flex;
+    justify-content: center;
+    perspective: 900px;
+  }
+
+  .brand-card {
+    width: min(100%, 340px);
+    background: linear-gradient(160deg, #0c2a6b, #061A4A 70%);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 16px;
+    padding: 28px 24px 24px;
+    box-shadow: 0 30px 80px rgba(0, 0, 0, 0.35);
+    transform: rotateY(-6deg) rotateX(4deg);
+    animation: floatCard 6s ease-in-out infinite;
+  }
+
+  @keyframes floatCard {
+    0%, 100% { transform: rotateY(-6deg) rotateX(4deg) translateY(0); }
+    50% { transform: rotateY(-4deg) rotateX(2deg) translateY(-10px); }
+  }
+
+  .brand-card-top {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 22px;
+  }
+
+  .avatar {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    background:
+      linear-gradient(135deg, var(--accent), var(--royal));
+    display: grid;
+    place-items: center;
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 22px;
+    font-weight: 800;
+    color: var(--white);
+    border: 2px solid rgba(255, 255, 255, 0.25);
+  }
+
+  .brand-card-top h3 {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 28px;
+    font-weight: 800;
+    text-transform: uppercase;
+    line-height: 1;
+  }
+  .brand-card-top p {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.55);
+    margin-top: 4px;
+  }
+
+  .brand-tag {
+    display: inline-block;
+    margin-top: 6px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--navy);
+    background: var(--gold);
+    padding: 3px 8px;
+    border-radius: 2px;
+  }
+
+  .brand-stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 18px;
+  }
+  .brand-stat {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 12px;
+  }
+  .brand-stat span {
+    display: block;
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.45);
+    margin-bottom: 4px;
+  }
+  .brand-stat strong {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 22px;
+    font-weight: 800;
+  }
+
+  .brand-feed {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 10px;
+    padding: 12px;
+    border: 1px solid var(--line);
+  }
+  .brand-feed-label {
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 8px;
+  }
+  .feed-row {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    padding: 8px 0;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.82);
+  }
+  .feed-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--green);
+    flex-shrink: 0;
+  }
+
+  /* ── Layout ── */
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 0 28px;
+  }
+
+  section.block { padding: 80px 0; }
+
+  .label {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--accent-deep);
+    margin-bottom: 12px;
+  }
+
+  .block h2 {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: clamp(34px, 4.5vw, 48px);
+    font-weight: 800;
+    color: var(--navy);
+    line-height: 1.05;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+    max-width: 20ch;
+  }
+
+  .block .lead {
+    font-size: 17px;
+    color: var(--mid);
+    max-width: 42em;
+    line-height: 1.65;
+    margin-bottom: 40px;
+  }
+  .block .lead strong { color: var(--navy); font-weight: 600; }
+
+  /* ── Contrast strip ── */
+  .contrast {
+    background: var(--white);
+    border-bottom: 1px solid var(--divider);
+  }
+
+  .contrast-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+
+  .contrast-card {
+    border-radius: var(--radius);
+    padding: 28px 26px;
+    border: 1px solid var(--divider);
+  }
+  .contrast-card.old {
+    background: #f8f9fc;
+  }
+  .contrast-card.new {
+    background: var(--navy);
+    color: var(--white);
+    border-color: transparent;
+    box-shadow: var(--shadow);
+  }
+
+  .contrast-card h3 {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 26px;
+    font-weight: 800;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+  .contrast-card.old h3 { color: var(--soft); }
+  .contrast-card.new h3 { color: var(--gold); }
+
+  .contrast-card p {
+    font-size: 15px;
+    line-height: 1.6;
+    margin-bottom: 16px;
+  }
+  .contrast-card.old p { color: var(--mid); }
+  .contrast-card.new p { color: rgba(255, 255, 255, 0.75); }
+
+  .contrast-card ul {
+    list-style: none;
+    display: grid;
+    gap: 8px;
+  }
+  .contrast-card li {
+    font-size: 14px;
+    padding-left: 18px;
+    position: relative;
+  }
+  .contrast-card.old li { color: var(--mid); }
+  .contrast-card.old li::before {
+    content: "–";
+    position: absolute;
+    left: 0;
+    color: var(--soft);
+  }
+  .contrast-card.new li { color: rgba(255, 255, 255, 0.88); }
+  .contrast-card.new li::before {
+    content: "→";
+    position: absolute;
+    left: 0;
+    color: var(--green);
+  }
+
+  /* ── Pillar nav ── */
+  .pillar-nav {
+    background: var(--light);
+    border-bottom: 1px solid var(--divider);
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    backdrop-filter: blur(10px);
+  }
+  .pillar-nav-inner {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 0 28px;
+    display: flex;
+    gap: 4px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .pillar-nav a {
+    flex: 0 0 auto;
+    padding: 16px 18px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--mid);
+    border-bottom: 2px solid transparent;
+    white-space: nowrap;
+    transition: color 0.15s ease, border-color 0.15s ease;
+  }
+  .pillar-nav a:hover,
+  .pillar-nav a:focus {
+    color: var(--navy);
+    border-bottom-color: var(--accent);
+  }
+  .pillar-nav a span {
+    display: inline-block;
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 14px;
+    font-weight: 800;
+    color: var(--accent-deep);
+    margin-right: 6px;
+  }
+
+  /* ── Pillars ── */
+  .pillars { background: var(--white); }
+
+  .pillar {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 48px;
+    align-items: center;
+    padding: 72px 0;
+    border-top: 1px solid var(--divider);
+  }
+  .pillar:first-child { border-top: none; padding-top: 0; }
+  .pillar:nth-child(even) .pillar-copy { order: 2; }
+  .pillar:nth-child(even) .pillar-demo { order: 1; }
+
+  .pillar-num {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 14px;
+    font-weight: 800;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--accent-deep);
+    margin-bottom: 10px;
+  }
+
+  .pillar h3 {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: clamp(30px, 3.5vw, 40px);
+    font-weight: 800;
+    text-transform: uppercase;
+    color: var(--navy);
+    line-height: 1.05;
+    margin-bottom: 14px;
+  }
+
+  .pillar-body {
+    font-size: 16px;
+    color: var(--mid);
+    line-height: 1.65;
+    margin-bottom: 20px;
+  }
+  .pillar-body strong { color: var(--navy); font-weight: 600; }
+
+  .meta-row {
+    display: grid;
+    gap: 14px;
+    margin-bottom: 20px;
+  }
+  .meta-item {
+    background: var(--light);
+    border: 1px solid var(--divider);
+    border-radius: 6px;
+    padding: 14px 16px;
+  }
+  .meta-item dt {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent-deep);
+    margin-bottom: 4px;
+  }
+  .meta-item dd {
+    font-size: 14px;
+    color: var(--dark);
+    line-height: 1.5;
+  }
+
+  .deliver-list {
+    list-style: none;
+    display: grid;
+    gap: 8px;
+  }
+  .deliver-list li {
+    font-size: 14px;
+    color: var(--dark);
+    padding: 10px 12px 10px 36px;
+    background: var(--light);
+    border-radius: 6px;
+    position: relative;
+    line-height: 1.45;
+  }
+  .deliver-list li::before {
+    content: "";
+    position: absolute;
+    left: 12px;
+    top: 14px;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: rgba(79, 163, 255, 0.18);
+    box-shadow: inset 0 0 0 3px var(--accent);
+  }
+
+  /* ── Demo frames ── */
+  .demo-stage {
+    position: relative;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 420px;
+  }
+
+  .demo-glow {
+    position: absolute;
+    width: 70%;
+    height: 70%;
+    background: radial-gradient(circle, rgba(79, 163, 255, 0.18), transparent 70%);
+    filter: blur(20px);
+    pointer-events: none;
+  }
+
+  /* Phone shell */
+  .phone {
+    position: relative;
+    width: 260px;
+    background: #111827;
+    border-radius: 32px;
+    padding: 10px;
+    box-shadow: var(--shadow), 0 0 0 1px rgba(255,255,255,0.08);
+    z-index: 1;
+  }
+  .phone-notch {
+    width: 90px;
+    height: 18px;
+    background: #0b1220;
+    border-radius: 0 0 12px 12px;
+    margin: 0 auto 8px;
+  }
+  .phone-screen {
+    background: #f3f5f9;
+    border-radius: 24px;
+    overflow: hidden;
+    min-height: 460px;
+  }
+
+  .phone.phone-dark .phone-screen { background: #0f172a; }
+
+  /* Ad mock */
+  .ad-feed {
+    padding: 12px;
+  }
+  .ad-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+  .ad-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent), var(--royal));
+    display: grid;
+    place-items: center;
+    color: white;
+    font-size: 11px;
+    font-weight: 700;
+  }
+  .ad-header strong {
+    display: block;
+    font-size: 12px;
+    color: #111;
+  }
+  .ad-header span {
+    font-size: 10px;
+    color: #6b7280;
+  }
+  .ad-sponsored {
+    font-size: 10px;
+    color: #9ca3af;
+    margin-left: auto;
+  }
+
+  .ad-copy {
+    font-size: 12px;
+    color: #1f2937;
+    line-height: 1.45;
+    margin-bottom: 10px;
+  }
+
+  .carousel {
+    display: flex;
+    gap: 8px;
+    overflow: hidden;
+    margin-bottom: 10px;
+  }
+  .carousel-card {
+    flex: 0 0 78%;
+    background: var(--navy);
+    border-radius: 10px;
+    padding: 14px;
+    color: white;
+    min-height: 150px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    animation: slideHint 8s ease-in-out infinite;
+  }
+  .carousel-card.alt {
+    background: linear-gradient(145deg, #0e2f73, #163e94);
+    flex-basis: 70%;
+  }
+  @keyframes slideHint {
+    0%, 40% { transform: translateX(0); }
+    50%, 90% { transform: translateX(-12px); }
+    100% { transform: translateX(0); }
+  }
+  .carousel-card .chip {
+    align-self: flex-start;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    background: var(--gold);
+    color: var(--navy);
+    padding: 3px 6px;
+    border-radius: 2px;
+  }
+  .carousel-card h4 {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 20px;
+    font-weight: 800;
+    text-transform: uppercase;
+    line-height: 1.05;
+    margin: 10px 0;
+  }
+  .carousel-card p {
+    font-size: 11px;
+    color: rgba(255,255,255,0.7);
+  }
+
+  .ad-cta {
+    display: block;
+    text-align: center;
+    background: var(--accent);
+    color: var(--navy);
+    font-size: 12px;
+    font-weight: 700;
+    padding: 10px;
+    border-radius: 6px;
+  }
+
+  /* Browser lander mock */
+  .browser {
+    width: min(100%, 420px);
+    background: var(--white);
+    border-radius: 12px;
+    border: 1px solid var(--divider);
+    box-shadow: var(--shadow);
+    overflow: hidden;
+    z-index: 1;
+    position: relative;
+  }
+  .browser-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    background: #eef1f7;
+    border-bottom: 1px solid var(--divider);
+  }
+  .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #c5ccd8;
+  }
+  .dot:nth-child(1) { background: #ff5f57; }
+  .dot:nth-child(2) { background: #febc2e; }
+  .dot:nth-child(3) { background: #28c840; }
+  .url {
+    flex: 1;
+    background: white;
+    border: 1px solid var(--divider);
+    border-radius: 4px;
+    padding: 5px 10px;
+    font-size: 11px;
+    color: var(--mid);
+  }
+
+  .lander {
+    padding: 20px 18px 22px;
+    background:
+      linear-gradient(180deg, #061A4A 0%, #0a2460 42%, #f4f7fc 42%);
+  }
+  .lander-kicker {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 8px;
+  }
+  .lander h4 {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 28px;
+    font-weight: 800;
+    text-transform: uppercase;
+    color: white;
+    line-height: 1.05;
+    max-width: 14ch;
+    margin-bottom: 8px;
+  }
+  .lander .sub {
+    font-size: 12px;
+    color: rgba(255,255,255,0.7);
+    margin-bottom: 14px;
+    max-width: 28ch;
+  }
+  .lander-cta {
+    display: inline-block;
+    background: var(--accent);
+    color: var(--navy);
+    font-size: 12px;
+    font-weight: 700;
+    padding: 9px 14px;
+    border-radius: 4px;
+    margin-bottom: 28px;
+  }
+  .lander-panel {
+    background: white;
+    border-radius: 8px;
+    border: 1px solid var(--divider);
+    padding: 14px;
+    box-shadow: 0 10px 30px rgba(6, 26, 74, 0.08);
+  }
+  .lander-panel h5 {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 16px;
+    font-weight: 800;
+    text-transform: uppercase;
+    color: var(--navy);
+    margin-bottom: 8px;
+  }
+  .fit-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+  }
+  .fit-item {
+    font-size: 11px;
+    background: var(--light);
+    border-radius: 4px;
+    padding: 8px;
+    color: var(--dark);
+  }
+  .fit-item span {
+    display: block;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent-deep);
+    margin-bottom: 2px;
+  }
+
+  /* Quiz phone overlay */
+  .quiz-float {
+    position: absolute;
+    right: -8px;
+    bottom: -24px;
+    width: 180px;
+    background: white;
+    border-radius: 16px;
+    border: 1px solid var(--divider);
+    box-shadow: var(--shadow);
+    padding: 12px;
+    z-index: 2;
+    animation: riseIn 0.8s ease both;
+  }
+  @keyframes riseIn {
+    from { opacity: 0; transform: translateY(16px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .quiz-float .step {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent-deep);
+    margin-bottom: 6px;
+  }
+  .quiz-float h5 {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--navy);
+    margin-bottom: 10px;
+    line-height: 1.35;
+  }
+  .quiz-opt {
+    font-size: 11px;
+    padding: 8px 10px;
+    border: 1px solid var(--divider);
+    border-radius: 6px;
+    margin-bottom: 6px;
+    color: var(--dark);
+  }
+  .quiz-opt.active {
+    border-color: var(--accent);
+    background: #eef5ff;
+    font-weight: 600;
+  }
+  .quiz-progress {
+    height: 4px;
+    background: #e5eaf3;
+    border-radius: 2px;
+    margin-top: 8px;
+    overflow: hidden;
+  }
+  .quiz-progress i {
+    display: block;
+    width: 45%;
+    height: 100%;
+    background: var(--accent);
+  }
+
+  /* SMS mock */
+  .sms-thread {
+    padding: 14px 12px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-height: 460px;
+  }
+  .sms-day {
+    align-self: center;
+    font-size: 10px;
+    color: #94a3b8;
+    margin: 4px 0 8px;
+  }
+  .bubble {
+    max-width: 88%;
+    padding: 10px 12px;
+    border-radius: 14px;
+    font-size: 12px;
+    line-height: 1.45;
+    animation: bubbleIn 0.5s ease both;
+  }
+  .bubble.from {
+    align-self: flex-start;
+    background: #1e293b;
+    color: #e2e8f0;
+    border-bottom-left-radius: 4px;
+  }
+  .bubble.to {
+    align-self: flex-end;
+    background: #2563eb;
+    color: white;
+    border-bottom-right-radius: 4px;
+  }
+  .bubble .who {
+    display: block;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    opacity: 0.65;
+    margin-bottom: 4px;
+  }
+  .bubble:nth-child(3) { animation-delay: 0.15s; }
+  .bubble:nth-child(4) { animation-delay: 0.3s; }
+  .bubble:nth-child(5) { animation-delay: 0.45s; }
+  .bubble:nth-child(6) { animation-delay: 0.6s; }
+  @keyframes bubbleIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .sms-book {
+    margin-top: auto;
+    background: rgba(124, 255, 122, 0.12);
+    border: 1px solid rgba(124, 255, 122, 0.35);
+    border-radius: 10px;
+    padding: 12px;
+    color: #bbf7d0;
+  }
+  .sms-book strong {
+    display: block;
+    font-size: 12px;
+    margin-bottom: 4px;
+    color: var(--green);
+  }
+  .sms-book span {
+    font-size: 11px;
+    color: #94a3b8;
+  }
+
+  /* Dashboard mock */
+  .dash {
+    width: min(100%, 440px);
+    background: white;
+    border: 1px solid var(--divider);
+    border-radius: 12px;
+    box-shadow: var(--shadow);
+    overflow: hidden;
+    z-index: 1;
+    position: relative;
+  }
+  .dash-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 16px;
+    background: var(--navy);
+    color: white;
+  }
+  .dash-head h4 {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 18px;
+    font-weight: 800;
+    text-transform: uppercase;
+  }
+  .dash-head span {
+    font-size: 11px;
+    color: rgba(255,255,255,0.55);
+  }
+  .dash-kpis {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1px;
+    background: var(--divider);
+    border-bottom: 1px solid var(--divider);
+  }
+  .kpi {
+    background: white;
+    padding: 14px 12px;
+  }
+  .kpi span {
+    display: block;
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--soft);
+    margin-bottom: 4px;
+  }
+  .kpi strong {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 26px;
+    font-weight: 800;
+    color: var(--navy);
+    line-height: 1;
+  }
+  .kpi em {
+    font-style: normal;
+    font-size: 11px;
+    color: #168a3a;
+    font-weight: 600;
+  }
+  .funnel-bars {
+    padding: 16px;
+    display: grid;
+    gap: 10px;
+  }
+  .bar-row {
+    display: grid;
+    grid-template-columns: 90px 1fr 36px;
+    gap: 10px;
+    align-items: center;
+  }
+  .bar-row label {
+    font-size: 11px;
+    color: var(--mid);
+  }
+  .bar-track {
+    height: 8px;
+    background: #eef1f7;
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .bar-track i {
+    display: block;
+    height: 100%;
+    background: linear-gradient(90deg, var(--royal), var(--accent));
+    border-radius: 4px;
+    transform-origin: left;
+    animation: growBar 1.2s ease both;
+  }
+  .bar-row:nth-child(1) i { width: 100%; }
+  .bar-row:nth-child(2) i { width: 62%; animation-delay: 0.1s; }
+  .bar-row:nth-child(3) i { width: 41%; animation-delay: 0.2s; }
+  .bar-row:nth-child(4) i { width: 28%; animation-delay: 0.3s; }
+  .bar-row:nth-child(5) i { width: 14%; animation-delay: 0.4s; }
+  @keyframes growBar {
+    from { transform: scaleX(0); }
+    to { transform: scaleX(1); }
+  }
+  .bar-row b {
+    font-size: 11px;
+    color: var(--navy);
+    text-align: right;
+  }
+
+  /* ── Scale ── */
+  .scale {
+    background:
+      radial-gradient(ellipse 50% 60% at 100% 0%, rgba(79, 163, 255, 0.12), transparent 55%),
+      var(--light);
+    border-top: 1px solid var(--divider);
+    border-bottom: 1px solid var(--divider);
+  }
+
+  .scale-steps {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+  }
+  .scale-card {
+    background: white;
+    border: 1px solid var(--divider);
+    border-radius: var(--radius);
+    padding: 24px 22px;
+    position: relative;
+    overflow: hidden;
+  }
+  .scale-card::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: var(--accent);
+  }
+  .scale-card:nth-child(2)::after { background: var(--gold); }
+  .scale-card:nth-child(3)::after { background: var(--green); }
+
+  .scale-card .phase {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent-deep);
+    margin-bottom: 8px;
+  }
+  .scale-card h3 {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 26px;
+    font-weight: 800;
+    text-transform: uppercase;
+    color: var(--navy);
+    margin-bottom: 10px;
+    line-height: 1.05;
+  }
+  .scale-card p {
+    font-size: 14px;
+    color: var(--mid);
+    line-height: 1.55;
+  }
+
+  /* ── Checklist / next ── */
+  .next {
+    background: var(--navy);
+    color: white;
+  }
+  .next .label { color: var(--accent); }
+  .next h2 { color: white; max-width: 22ch; }
+  .next .lead { color: rgba(255,255,255,0.7); }
+  .next .lead strong { color: white; }
+
+  .checklist {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 36px;
+  }
+  .check-item {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 16px;
+  }
+  .check-item .mark {
+    flex-shrink: 0;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: rgba(124, 255, 122, 0.15);
+    border: 1.5px solid var(--green);
+    display: grid;
+    place-items: center;
+    color: var(--green);
+    font-size: 12px;
+    font-weight: 700;
+    margin-top: 1px;
+  }
+  .check-item strong {
+    display: block;
+    font-size: 15px;
+    margin-bottom: 4px;
+  }
+  .check-item span {
+    font-size: 13px;
+    color: rgba(255,255,255,0.55);
+    line-height: 1.45;
+  }
+
+  .timeline {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+  }
+  .t-step {
+    background: rgba(255,255,255,0.05);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 18px;
+  }
+  .t-step b {
+    display: block;
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 14px;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--gold);
+    margin-bottom: 6px;
+  }
+  .t-step p {
+    font-size: 14px;
+    color: rgba(255,255,255,0.75);
+    line-height: 1.5;
+  }
+
+  /* Footer */
+  footer {
+    background: #041436;
+    color: rgba(255,255,255,0.5);
+    text-align: center;
+    padding: 28px;
+    font-size: 13px;
+  }
+  footer strong { color: rgba(255,255,255,0.85); font-weight: 600; }
+
+  /* Motion entrance */
+  .reveal {
+    animation: revealUp 0.7s ease both;
+  }
+  @keyframes revealUp {
+    from { opacity: 0; transform: translateY(18px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Responsive */
+  @media (max-width: 960px) {
+    .hero-inner,
+    .pillar,
+    .contrast-grid,
+    .scale-steps,
+    .checklist,
+    .timeline {
+      grid-template-columns: 1fr;
+    }
+    .pillar:nth-child(even) .pillar-copy,
+    .pillar:nth-child(even) .pillar-demo {
+      order: unset;
+    }
+    .hero-visual { display: none; }
+    .quiz-float {
+      right: 12px;
+      bottom: -12px;
+    }
+    .brand-card { transform: none; animation: none; }
+  }
+
+  @media (max-width: 640px) {
+    .hero { padding: 40px 20px 56px; }
+    .wrap { padding: 0 20px; }
+    section.block { padding: 56px 0; }
+    .pillar { padding: 48px 0; gap: 28px; }
+    .phone { width: 230px; }
+    .phone-screen { min-height: 400px; }
+    .quiz-float { position: relative; right: auto; bottom: auto; width: 100%; margin-top: 16px; }
+    .demo-stage { flex-direction: column; min-height: auto; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation: none !important;
+      transition: none !important;
+    }
+  }
+
+  /* Pricing / recap extras */
+  .rec-link {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 14px 16px;
+    margin-top: 8px;
+    transition: border-color 0.15s ease, background 0.15s ease;
+  }
+  .rec-link:hover {
+    border-color: rgba(79,163,255,0.55);
+    background: rgba(79,163,255,0.1);
+  }
+  .rec-icon {
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    background: rgba(79,163,255,0.18);
+    border: 1px solid rgba(79,163,255,0.4);
+    display: grid;
+    place-items: center;
+    color: var(--accent);
+    font-size: 16px;
+    flex-shrink: 0;
+  }
+  .rec-link strong {
+    display: block;
+    font-size: 14px;
+    color: white;
+    margin-bottom: 2px;
+  }
+  .rec-link span {
+    font-size: 12px;
+    color: rgba(255,255,255,0.55);
+  }
+
+  .price-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 40px;
+  }
+  .price-grid.single {
+    grid-template-columns: 1fr;
+  }
+  .price-card {
+    background: white;
+    border: 1px solid var(--divider);
+    border-radius: 12px;
+    padding: 28px 26px;
+    position: relative;
+    overflow: hidden;
+  }
+  .price-card.featured {
+    border-color: transparent;
+    background: var(--navy);
+    color: white;
+    box-shadow: var(--shadow);
+  }
+  .price-card .badge {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    background: var(--gold);
+    color: var(--navy);
+    padding: 4px 8px;
+    border-radius: 2px;
+  }
+  .price-card .opt {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent-deep);
+    margin-bottom: 8px;
+  }
+  .price-card.featured .opt { color: var(--accent); }
+  .price-card h3 {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 32px;
+    font-weight: 800;
+    text-transform: uppercase;
+    color: var(--navy);
+    line-height: 1.05;
+    margin-bottom: 8px;
+  }
+  .price-card.featured h3 { color: white; }
+  .price-card .blurb {
+    font-size: 14px;
+    color: var(--mid);
+    line-height: 1.55;
+    margin-bottom: 20px;
+  }
+  .price-card.featured .blurb { color: rgba(255,255,255,0.7); }
+
+  .price-lines {
+    display: grid;
+    gap: 10px;
+    margin-bottom: 18px;
+  }
+  .price-line {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: baseline;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--divider);
+    font-size: 14px;
+  }
+  .price-card.featured .price-line { border-bottom-color: var(--line); }
+  .price-line span { color: var(--mid); }
+  .price-card.featured .price-line span { color: rgba(255,255,255,0.6); }
+  .price-line strong {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 22px;
+    font-weight: 800;
+    color: var(--navy);
+    white-space: nowrap;
+  }
+  .price-card.featured .price-line strong { color: var(--gold); }
+  .price-note {
+    font-size: 12px;
+    color: var(--soft);
+    line-height: 1.5;
+  }
+  .price-card.featured .price-note { color: rgba(255,255,255,0.5); }
+
+  .scenario {
+    background: white;
+    border: 1px solid var(--divider);
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 16px;
+  }
+  .scenario-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 16px 20px;
+    background: var(--light);
+    border-bottom: 1px solid var(--divider);
+  }
+  .scenario-head h4 {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 22px;
+    font-weight: 800;
+    text-transform: uppercase;
+    color: var(--navy);
+  }
+  .scenario-head .tag {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent-deep);
+    background: rgba(79,163,255,0.12);
+    padding: 5px 10px;
+    border-radius: 999px;
+  }
+  table.months {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+  }
+  table.months th,
+  table.months td {
+    padding: 12px 16px;
+    text-align: left;
+    border-bottom: 1px solid var(--divider);
+  }
+  table.months th {
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--soft);
+    font-weight: 700;
+    background: #fafbfd;
+  }
+  table.months td { color: var(--dark); }
+  table.months td.num {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 18px;
+    font-weight: 800;
+    color: var(--navy);
+    white-space: nowrap;
+  }
+  table.months tr:last-child td { border-bottom: none; }
+  table.months tr.total td {
+    background: #f0f6ff;
+    font-weight: 600;
+  }
+  table.months tr.total td.num { color: var(--accent-deep); font-size: 20px; }
+  .scenario-foot {
+    padding: 12px 16px 16px;
+    font-size: 12px;
+    color: var(--soft);
+    line-height: 1.5;
+  }
+
+  .split-note {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 14px;
+    align-items: start;
+    background: #fff8e6;
+    border: 1px solid #f0d98a;
+    border-radius: 10px;
+    padding: 16px 18px;
+    margin-bottom: 28px;
+  }
+  .split-note b {
+    font-size: 12px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #8a6a00;
+  }
+  .split-note p {
+    font-size: 14px;
+    color: #5c4a14;
+    line-height: 1.55;
+  }
+
+  @media (max-width: 960px) {
+    .price-grid { grid-template-columns: 1fr; }
+    table.months { font-size: 13px; }
+    table.months th, table.months td { padding: 10px 12px; }
+  }
+
+</style>
+
+</head>
+<body>
+
+<div class="banner">
+  <strong>Custom for Romik Yeghnazary</strong> · Lending Arena · Reverse and DSCR · October 11, 2026
+</div>
+
+<header class="hero">
+  <div class="hero-inner">
+    <div class="reveal">
+      <div class="eyebrow">Waiz Media × Lending Arena</div>
+      <h1>One offer.<em>Or both.</em>The spend stays in ads.</h1>
+      <p class="hero-sub">
+        For Romik. Start with reverse or DSCR, or run them together.
+        <strong>$1,000 to set up.</strong>
+        Then <strong>$2,000 a month</strong> for one offer, or <strong>$2,500 a month</strong> for both.
+        Every conversation we get you is <strong>$20</strong>. Your card pays Meta.
+      </p>
+      <div class="hero-actions">
+        <a class="btn btn-primary" href="#pricing">See both options</a>
+        <a class="btn btn-ghost" href="#deliverables">Deliverables</a>
+      </div>
+      <div class="hero-pills">
+        <span class="pill">Reverse or DSCR</span>
+        <span class="pill">Both at once</span>
+        <span class="pill">Your Meta account</span>
+        <span class="pill">Exclusive leads</span>
+      </div>
+    </div>
+
+    <div class="hero-visual reveal" aria-hidden="true">
+      <div class="brand-card">
+        <div class="brand-card-top">
+          <div class="avatar">LA</div>
+          <div>
+            <h3>Lending Arena</h3>
+            <p>Romik Yeghnazary</p>
+            <span class="brand-tag">Starter pack</span>
+          </div>
+        </div>
+        <div class="brand-stats">
+          <div class="brand-stat">
+            <span>One offer</span>
+            <strong>$3,000</strong>
+          </div>
+          <div class="brand-stat">
+            <span>Both</span>
+            <strong>$3,500</strong>
+          </div>
+        </div>
+        <div class="brand-feed">
+          <div class="brand-feed-label">To start</div>
+          <div class="feed-row"><span class="feed-dot"></span> $1,000 setup inside that number</div>
+          <div class="feed-row"><span class="feed-dot"></span> Then $2,000 or $2,500 a month</div>
+          <div class="feed-row"><span class="feed-dot"></span> $20 when we get you on the phone</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<nav class="pillar-nav" aria-label="Sections">
+  <div class="pillar-nav-inner">
+    <a href="#plan"><span>01</span> The plan</a>
+    <a href="#deliverables"><span>02</span> Deliverables</a>
+    <a href="#pricing"><span>03</span> Pricing</a>
+    <a href="#next"><span>✓</span> Next step</a>
+  </div>
+</nav>
+
+<section class="block contrast" id="plan">
+  <div class="wrap">
+    <div class="label">From the call</div>
+    <h2>Reverse is home. DSCR is the new one.</h2>
+    <p class="lead">
+      Romik has spent years in reverse. DSCR is the newer product, and Vic asked for this in writing so the two of you can sit with it.
+      The last campaign never showed the message. It was a mortgage calculator, and the people who came in were not looking for a loan.
+    </p>
+    <div class="contrast-grid">
+      <div class="contrast-card old">
+        <h3>What that produced</h3>
+        <p>A cheap opt-in, a message you never approved, and loan officers chasing people who did not ask for a conversation.</p>
+        <ul>
+          <li>Calculator and lead-magnet ads</li>
+          <li>The same “apply for a reverse mortgage” line banks have run for years</li>
+          <li>Leads sold onward, or worked by someone who does not represent you</li>
+          <li>The loan officer doing the dials on top of closing</li>
+        </ul>
+      </div>
+      <div class="contrast-card new">
+        <h3>What we build for Lending Arena</h3>
+        <p>Your brand. Your ad account. Exclusive inbound. We run the front. The loan officer closes.</p>
+        <ul>
+          <li>Ads that speak to a real problem: a widow, healthcare costs, a balloon, the next rental</li>
+          <li>Landers that match the ad. You review the copy before it goes out</li>
+          <li>A call center trained on reverse and on DSCR</li>
+          <li>You pay the conversation fee only when we get you on the phone</li>
+        </ul>
+      </div>
+    </div>
+    <div class="split-note" style="margin-top:28px">
+      <b>This is the starter pack</b>
+      <p>
+        We keep this first system lean so more of the money can sit in ads.
+        Running reverse and DSCR together takes more of our bandwidth.
+        Once the account has proof, the partnership can move: the retainer can come down, more of the budget goes into ad spend, and more of what we earn comes on the back end.
+        That next step is a direction. It is not part of this price.
+      </p>
+    </div>
+  </div>
+</section>
+
+<section class="block next" id="deliverables" style="padding-top:80px">
+  <div class="wrap">
+    <div class="label">Your build</div>
+    <h2>Deliverables — call center, branded to Lending Arena.</h2>
+    <p class="lead">
+      Same machine for one offer or both. Reverse and DSCR get their own ads, landers, and callers.
+      We manage it. Your card pays Meta. We do not touch the ad spend.
+    </p>
+
+    <div class="checklist">
+      <div class="check-item">
+        <div class="mark">✓</div>
+        <div>
+          <strong>Meta ads under Lending Arena</strong>
+          <span>Facebook and Instagram, on the account you already have. We clean the page up and rebrand it. Video and static, written to a specific person, not a calculator and not a lead magnet. Google is a later channel, after this is working. You sign off on the copy.</span>
+        </div>
+      </div>
+      <div class="check-item">
+        <div class="mark">✓</div>
+        <div>
+          <strong>Campaign management</strong>
+          <span>We run the account. One offer, or reverse and DSCR at the same time as two separate campaigns. Month one stays lighter while the message and the handoff get proven. Then we scale what is working.</span>
+        </div>
+      </div>
+      <div class="check-item">
+        <div class="mark">✓</div>
+        <div>
+          <strong>Sites, funnels, and landers</strong>
+          <span>A page for the ad that sent them. Compliance reviewed, then sent to you to edit before it is final. Every name opts in to Lending Arena. We do not sell the leads.</span>
+        </div>
+      </div>
+      <div class="check-item">
+        <div class="mark">✓</div>
+        <div>
+          <strong>Live call center</strong>
+          <span>Real setters. Dial and text. About twelve hours a day, booking through the week. A reverse team and a DSCR team, each trained on that product. Reverse can handle the objections and explain the product inside compliance.</span>
+        </div>
+      </div>
+      <div class="check-item">
+        <div class="mark">✓</div>
+        <div>
+          <strong>Qualify, then hand off</strong>
+          <span>If you want filters, we prequalify before the handoff. Then the borrower is on the phone with you. The loan officer sells the loan. We do the front.</span>
+        </div>
+      </div>
+      <div class="check-item">
+        <div class="mark">✓</div>
+        <div>
+          <strong>Reporting</strong>
+          <span>Spend, leads, conversations, and what it cost to get someone on the phone. You can read it without living in Ads Manager. The data stays under Lending Arena.</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="label" style="margin-bottom:14px">Onboarding · about two weeks</div>
+    <div class="timeline">
+      <div class="t-step">
+        <b>You pick a path</b>
+        <p>One offer, or reverse and DSCR together. We lock the ad account, the brand, and who takes the handoff.</p>
+      </div>
+      <div class="t-step">
+        <b>Build</b>
+        <p>Ads, landers, and the call center script. You review the message before anything spends.</p>
+      </div>
+      <div class="t-step">
+        <b>Launch</b>
+        <p>Your card is on Meta. We manage it. The monthly service is the month the ads are live.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="block" id="pricing" style="background:var(--white)">
+  <div class="wrap">
+    <div class="label">Two ways to start</div>
+    <h2>One offer, or both at once.</h2>
+    <p class="lead">
+      The setup fee is $1,000 either way. It is already inside the number due at the start.
+      Ad spend is separate. Lending Arena’s card pays Meta.
+    </p>
+
+    <div class="split-note">
+      <b>What counts as a conversation</b>
+      <p>
+        We bill $20 only when we get you on the phone with someone.
+        If we do not get that conversation, you do not pay the fee.
+        A form fill does not count.
+      </p>
+    </div>
+
+    <div class="price-grid">
+      <div class="price-card">
+        <div class="opt">One offer</div>
+        <h3>Reverse or DSCR.</h3>
+        <p class="blurb">One product. Ads, landers, and the call center for that offer.</p>
+        <div class="price-lines">
+          <div class="price-line"><span>To start</span><strong>$3,000</strong></div>
+          <div class="price-line"><span>That is</span><strong>$1,000 setup + first month</strong></div>
+          <div class="price-line"><span>Then</span><strong>$2,000 / month</strong></div>
+          <div class="price-line"><span>Each conversation</span><strong>$20</strong></div>
+        </div>
+        <p class="price-note">Month one is the $2,000 service. The extra $1,000 is the setup. Month two on is $2,000 plus $20 for each conversation.</p>
+      </div>
+      <div class="price-card featured">
+        <div class="badge">Both products</div>
+        <div class="opt">Reverse and DSCR</div>
+        <h3>Both at the same time.</h3>
+        <p class="blurb">Two offers, one system. Separate ads and callers. One retainer.</p>
+        <div class="price-lines">
+          <div class="price-line"><span>To start</span><strong>$3,500</strong></div>
+          <div class="price-line"><span>That is</span><strong>$1,000 setup + first month</strong></div>
+          <div class="price-line"><span>Then</span><strong>$2,500 / month</strong></div>
+          <div class="price-line"><span>Each conversation</span><strong>$20</strong></div>
+        </div>
+        <p class="price-note">Month one is the $2,500 service. The extra $1,000 is the setup. Month two on is $2,500 plus $20 for each conversation.</p>
+      </div>
+    </div>
+
+    <div class="scenario" id="scenarios">
+      <div class="scenario-head">
+        <h4>The two options</h4>
+        <span class="tag">Ad spend is extra</span>
+      </div>
+      <table class="months">
+        <thead>
+          <tr>
+            <th>Path</th>
+            <th>To start</th>
+            <th>After that</th>
+            <th>Conversation</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>One offer</td>
+            <td class="num">$3,000</td>
+            <td>$2,000 / month</td>
+            <td>$20</td>
+          </tr>
+          <tr class="total">
+            <td>Reverse and DSCR</td>
+            <td class="num">$3,500</td>
+            <td>$2,500 / month</td>
+            <td>$20</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="scenario-foot">The start number is a $1,000 setup plus the first month. Meta is paid by your card, on top of this. No conversation, no $20.</div>
+    </div>
+  </div>
+</section>
+
+<section class="block scale" id="next">
+  <div class="wrap">
+    <div class="label">Ready when you are</div>
+    <h2>Pick one. Or run both.</h2>
+    <p class="lead">
+      Send this to Vic. The choice is which offer to launch, not whether the message stays hidden.
+    </p>
+    <div class="scale-steps">
+      <div class="scale-card">
+        <div class="phase">1 · One offer</div>
+        <h3>$3,000 to start</h3>
+        <p>Then $2,000 a month, plus $20 each time we get you on the phone. Reverse or DSCR.</p>
+      </div>
+      <div class="scale-card">
+        <div class="phase">2 · Both</div>
+        <h3>$3,500 to start</h3>
+        <p>Then $2,500 a month, plus the same $20. Reverse and DSCR running together.</p>
+      </div>
+      <div class="scale-card">
+        <div class="phase">3 · Later</div>
+        <h3>After it works</h3>
+        <p>A larger partnership. More of our time, a lower retainer, more of the budget in ads, more of our fee on the back end. Not this invoice.</p>
+      </div>
+    </div>
+
+    <div class="split-note" style="margin-top:28px">
+      <b>Reply with the path</b>
+      <p>
+        One offer, or both. Tell us which product if you start with one.
+        We will lock the first month of ad spend before anything goes live.
+      </p>
+    </div>
+
+    <div style="margin-top:36px;display:flex;flex-wrap:wrap;gap:12px">
+      <a class="btn btn-primary" href="mailto:gabriel@waizmedia.net?subject=Lending%20Arena%20%E2%80%94%20Romik%20offer">Reply to Gabe</a>
+      <a class="btn btn-ghost" href="#pricing" style="border-color:var(--divider);color:var(--navy)">Back to the prices</a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <strong>Waiz Media</strong> · Reverse and DSCR starter pack for Romik Yeghnazary / Lending Arena · October 11, 2026<br>
+  Prepared for Romik to forward.<br>
+  Questions on the two options? Reply to Gabe.
+</footer>
+
+</body>
+</html>

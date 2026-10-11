@@ -18,4 +18,8 @@ export const offerLetters: Record<string, OfferLetter> = {
     token: 'f392f8ef0dd59187ec4988afe6122911',
     file: 'trust-one/index.html',
   },
+  'lending-arena': {
+    token: '1a6d8b05df94514cd3e1310886c14653',
+    file: 'lending-arena/index.html',
+  },
 };
