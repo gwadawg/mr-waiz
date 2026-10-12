@@ -3,6 +3,7 @@ import { getAuthContext, isAuthError, requirePermission, type AuthContext } from
 import { getLiveClientIds, liveClientFilter } from '@/lib/db-helpers';
 import { buildContactKey, eventPhone } from '@/lib/contact-key';
 import { isClientLogFormRaw } from '@/lib/dq-reasons';
+import { extractLeadIntake, leadProductFor, pickRaw, type LeadIntake, type LeadProduct } from '@/lib/lead-intake';
 import {
   isActivityStage,
   isLeadQualityFilter,
@@ -17,6 +18,8 @@ const MAX_EVENTS_HEAVY = 8_000;
 const MAX_EVENTS_PAGE_HYDRATE = 2_500;
 /** Unscoped (all clients) Explorer windows wider than this are clamped. */
 const MAX_UNSCOPED_RANGE_DAYS = 90;
+
+type ClientEmbed = { name: string; ghl_location_id: string | null; reporting_type: string | null };
 
 type EventRow = {
   id: string;
@@ -47,17 +50,15 @@ type EventRow = {
   is_out_of_state: boolean | null;
   lead_source: string | null;
   ad_name: string | null;
+  utm_term: string | null;
   dq_reason: string | null;
   raw: unknown;
-  clients:
-    | { name: string; ghl_location_id: string | null }
-    | { name: string; ghl_location_id: string | null }[]
-    | null;
+  clients: ClientEmbed | ClientEmbed[] | null;
 };
 
 function clientRecord(
   clients: EventRow['clients'],
-): { name: string; ghl_location_id: string | null } | null {
+): ClientEmbed | null {
   if (!clients) return null;
   if (Array.isArray(clients)) return clients[0] ?? null;
   return clients;
@@ -121,6 +122,11 @@ type LeadProfile = {
   ltv: number | null;
   b1_age: string | null;
   b2_age: string | null;
+  state: string | null;
+  credit_score_range: string | null;
+  property_use: string | null;
+  utm_term: string | null;
+  product: LeadProduct | null;
   lead_source: string | null;
   ad_name: string | null;
   has_proposal_made: boolean;
@@ -259,133 +265,17 @@ const PROPOSAL_EVENT_TYPES = new Set(['proposal_made', 'proposal_sent']);
 const SUBMISSION_EVENT_TYPES = new Set(['submission_made', 'loan_processing']);
 const FUNDED_EVENT_TYPES = new Set(['loan_funded', 'closed']);
 
-/** Pull first matching key from webhook `raw` jsonb. */
-function pickRaw(raw: unknown, keys: string[]): unknown {
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
-  const o = raw as Record<string, unknown>;
-  for (const k of keys) {
-    if (!(k in o)) continue;
-    const v = o[k];
-    if (v == null || typeof v === 'boolean') continue;
-    if (typeof v === 'string' && v.trim() === '') continue;
-    return v;
-  }
-  return null;
-}
-
-function formatCurrencyCell(v: unknown): string | null {
-  if (v == null || v === '') return null;
-  if (typeof v === 'number' && !Number.isNaN(v)) {
-    return `$${v.toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
-  }
-  if (typeof v === 'string') {
-    const t = v.trim();
-    const n = Number(t.replace(/[^0-9.-]/g, ''));
-    if (!Number.isNaN(n) && t !== '') {
-      return `$${n.toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
-    }
-    return t;
-  }
-  return String(v);
-}
-
-function extractLoanAmount(raw: unknown): string | null {
-  return formatCurrencyCell(
-    pickRaw(raw, ['loan_amount', 'loanAmount', 'mortgage_amount', 'mortgageAmount', 'requested_loan_amount']),
-  );
-}
-
-function extractPropertyValue(raw: unknown): string | null {
-  return formatCurrencyCell(
-    pickRaw(raw, [
-      'property_value',
-      'propertyValue',
-      'home_value',
-      'homeValue',
-      'estimated_property_value',
-      'property_estimated_value',
-    ]),
-  );
-}
-
-/** Parse a raw value into a positive number, or null. */
-function toNumber(v: unknown): number | null {
-  if (v == null || typeof v === 'boolean') return null;
-  if (typeof v === 'number') return Number.isFinite(v) ? v : null;
-  if (typeof v === 'string') {
-    const t = v.trim();
-    if (t === '') return null;
-    const n = Number(t.replace(/[^0-9.-]/g, ''));
-    return Number.isFinite(n) ? n : null;
-  }
-  return null;
-}
-
-function loanAmountNumber(raw: unknown): number | null {
-  return toNumber(
-    pickRaw(raw, ['loan_amount', 'loanAmount', 'mortgage_amount', 'mortgageAmount', 'requested_loan_amount']),
-  );
-}
-
-function propertyValueNumber(raw: unknown): number | null {
-  return toNumber(
-    pickRaw(raw, [
-      'property_value',
-      'propertyValue',
-      'home_value',
-      'homeValue',
-      'estimated_property_value',
-      'property_estimated_value',
-    ]),
-  );
-}
-
-function extractLtv(raw: unknown): number | null {
-  const loan = loanAmountNumber(raw);
-  const property = propertyValueNumber(raw);
-  if (loan == null || property == null || property <= 0) return null;
-  return Math.round((loan / property) * 100);
-}
-
-/** Ages as whole numbers or short labels (e.g. co-borrower not yet collected). */
-function formatAgeCell(v: unknown): string | null {
-  if (v == null || v === '') return null;
-  if (typeof v === 'number' && !Number.isNaN(v)) return String(Math.trunc(v));
-  if (typeof v === 'string') {
-    const t = v.trim();
-    if (t === '') return null;
-    const n = Number(t.replace(/[^0-9.-]/g, ''));
-    if (!Number.isNaN(n) && /^-?\d/.test(t)) return String(Math.trunc(n));
-    return t;
-  }
-  return String(v);
-}
-
-function extractB1Age(raw: unknown): string | null {
-  const v = pickRaw(raw, [
-    'b1_age',
-    'b1Age',
-    'B1_age',
-    'borrower_1_age',
-    'borrower1_age',
-    'primary_borrower_age',
-    'lead_age',
-  ]);
-  return formatAgeCell(v);
-}
-
-function extractB2Age(raw: unknown): string | null {
-  const v = pickRaw(raw, [
-    'b2_age',
-    'b2Age',
-    'B2_age',
-    'borrower_2_age',
-    'borrower2_age',
-    'spouse_age',
-    'co_borrower_age',
-    'coborrower_age',
-  ]);
-  return formatAgeCell(v);
+/** Copy intake fields onto a profile; a missing value never clears one already set. */
+function applyIntake(profile: LeadProfile, intake: LeadIntake) {
+  if (intake.loan_amount != null) profile.loan_amount = intake.loan_amount;
+  if (intake.property_value != null) profile.property_value = intake.property_value;
+  if (intake.ltv != null) profile.ltv = intake.ltv;
+  if (intake.state != null) profile.state = intake.state;
+  if (intake.b1_age != null) profile.b1_age = intake.b1_age;
+  if (intake.b2_age != null) profile.b2_age = intake.b2_age;
+  if (intake.credit_score_range != null) profile.credit_score_range = intake.credit_score_range;
+  if (intake.property_use != null) profile.property_use = intake.property_use;
+  if (intake.utm_term != null) profile.utm_term = intake.utm_term;
 }
 
 function extractLeadSource(row: EventRow): string | null {
@@ -522,7 +412,7 @@ function clampUnscopedStart(
 }
 
 const EVENT_SELECT =
-  'id, client_id, event_type, occurred_at, scheduled_at, duration_seconds, is_pickup, is_conversation, speed_to_lead_seconds, lead_name, lead_phone, lead_email, agent_name, direction, call_status, recording_url, phone_number_used, calendar_name, external_id, calendar_id, stage_booked, ghl_contact_id, lead_id, is_qualified, is_hot, is_out_of_state, lead_source, ad_name, dq_reason, raw, clients(name, ghl_location_id)';
+  'id, client_id, event_type, occurred_at, scheduled_at, duration_seconds, is_pickup, is_conversation, speed_to_lead_seconds, lead_name, lead_phone, lead_email, agent_name, direction, call_status, recording_url, phone_number_used, calendar_name, external_id, calendar_id, stage_booked, ghl_contact_id, lead_id, is_qualified, is_hot, is_out_of_state, lead_source, ad_name, utm_term, dq_reason, raw, clients(name, ghl_location_id, reporting_type)';
 
 function applyClientScope<T extends { eq: Function; in: Function }>(
   q: T,
@@ -577,6 +467,11 @@ function ingestEventRows(
         ltv: null,
         b1_age: null,
         b2_age: null,
+        state: null,
+        credit_score_range: null,
+        property_use: null,
+        utm_term: null,
+        product: leadProductFor(clientRecord(row.clients)?.reporting_type),
         lead_source: null,
         ad_name: null,
         has_proposal_made: false,
@@ -621,18 +516,11 @@ function ingestEventRows(
       if (row.is_qualified === true) profile.is_qualified = true;
       if (row.is_hot === true) profile.is_hot = true;
       if (row.is_out_of_state === true) profile.is_out_of_state = true;
-      const la = extractLoanAmount(row.raw);
-      const pv = extractPropertyValue(row.raw);
-      const ltv = extractLtv(row.raw);
-      const b1 = extractB1Age(row.raw);
-      const b2 = extractB2Age(row.raw);
+      const intake = extractLeadIntake(row.raw, profile.product);
       const ls = extractLeadSource(row);
       const ad = extractAdName(row);
-      if (la != null) profile.loan_amount = la;
-      if (pv != null) profile.property_value = pv;
-      if (ltv != null) profile.ltv = ltv;
-      if (b1 != null) profile.b1_age = b1;
-      if (b2 != null) profile.b2_age = b2;
+      applyIntake(profile, intake);
+      if (row.utm_term?.trim()) profile.utm_term = row.utm_term.trim();
       if (ls != null && !profile.lead_source) profile.lead_source = ls;
       if (ad != null && !profile.ad_from_entity) profile.ad_name = ad;
       if (new Date(row.occurred_at).getTime() < new Date(profile.created_at).getTime()) {
@@ -670,6 +558,7 @@ type LeadEntityRow = {
   lead_created_at: string | null;
   first_seen_at: string;
   utm_content: string | null;
+  utm_term: string | null;
   ad_name: string | null;
   lead_source: string | null;
   conversation_at: string | null;
@@ -746,16 +635,8 @@ function applyLeadEntity(profile: ProfileBuilder, lead: LeadEntityRow, start: st
   profile.has_proposal_made = Boolean(lead.proposal_at);
   profile.has_submission_made = Boolean(lead.submission_at);
   profile.has_loan_funded = Boolean(lead.funded_at);
-  const loan = extractLoanAmount(first?.raw);
-  const property = extractPropertyValue(first?.raw);
-  const ltv = extractLtv(first?.raw);
-  const b1 = extractB1Age(first?.raw);
-  const b2 = extractB2Age(first?.raw);
-  if (loan != null) profile.loan_amount = loan;
-  if (property != null) profile.property_value = property;
-  if (ltv != null) profile.ltv = ltv;
-  if (b1 != null) profile.b1_age = b1;
-  if (b2 != null) profile.b2_age = b2;
+  applyIntake(profile, extractLeadIntake(first?.raw, profile.product));
+  if (lead.utm_term?.trim()) profile.utm_term = lead.utm_term.trim();
   if (lead.proposal_implied && lead.proposal_at) {
     profile.timeline.push(impliedTimelineItem(`implied-proposal-${lead.id}`, 'proposal_made', lead.proposal_at));
     if (eventInRange(lead.proposal_at, start, end) && profile.counts.proposals_made === 0) {
@@ -855,7 +736,7 @@ export async function GET(req: Request) {
     let leadQuery = ctx.service
       .from('leads')
       .select(
-        `id, client_id, lead_name, lead_phone, lead_email, ghl_contact_id, lead_created_at, first_seen_at, utm_content, ad_name, lead_source, conversation_at, conversation_source, proposal_at, proposal_implied, submission_at, submission_implied, funded_at, clients(name, ghl_location_id), ${firstLeadEmbed}`,
+        `id, client_id, lead_name, lead_phone, lead_email, ghl_contact_id, lead_created_at, first_seen_at, utm_content, utm_term, ad_name, lead_source, conversation_at, conversation_source, proposal_at, proposal_implied, submission_at, submission_implied, funded_at, clients(name, ghl_location_id, reporting_type), ${firstLeadEmbed}`,
         { count: 'exact' },
       )
       .is('merged_into_id', null)
@@ -902,6 +783,11 @@ export async function GET(req: Request) {
         ltv: null,
         b1_age: null,
         b2_age: null,
+        state: null,
+        credit_score_range: null,
+        property_use: null,
+        utm_term: null,
+        product: leadProductFor(clientRecord(lead.clients)?.reporting_type),
         lead_source: lead.lead_source,
         ad_name: null,
         has_proposal_made: false,

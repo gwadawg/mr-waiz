@@ -2,6 +2,7 @@
 
 import { Fragment, useEffect, useState } from "react";
 import { useUrlParams } from "@/lib/use-url-params";
+import type { LeadProduct } from "@/lib/lead-intake";
 
 type LeadCounts = {
   dials: number;
@@ -56,6 +57,11 @@ type LeadProfile = {
   ltv: number | null;
   b1_age: string | null;
   b2_age: string | null;
+  state?: string | null;
+  credit_score_range?: string | null;
+  property_use?: string | null;
+  utm_term?: string | null;
+  product?: LeadProduct | null;
   lead_source: string | null;
   ad_name: string | null;
   has_proposal_made: boolean;
@@ -223,10 +229,15 @@ function downloadLeadsPageCsv(rows: LeadProfile[], page: number) {
     "Loan amount",
     "Property value",
     "LTV",
+    "State",
+    "Product",
     "B1 age",
     "B2 age",
+    "Credit score range",
+    "Property use",
     "Lead source",
     "Ad",
+    "Site",
     "Lead created",
     "Qualified",
     "Hot",
@@ -258,10 +269,15 @@ function downloadLeadsPageCsv(rows: LeadProfile[], page: number) {
         row.loan_amount ?? "",
         row.property_value ?? "",
         row.ltv != null ? `${row.ltv}%` : "",
+        row.state ?? "",
+        row.product ? row.product.toUpperCase() : "",
         row.b1_age ?? "",
         row.b2_age ?? "",
+        row.credit_score_range ?? "",
+        row.property_use ?? "",
         row.lead_source ?? "",
         row.ad_name ?? "",
+        row.utm_term ?? "",
         new Date(row.created_at).toISOString().slice(0, 10),
         row.is_qualified ? "Y" : "",
         row.is_hot ? "Y" : "",
@@ -600,14 +616,14 @@ export default function LeadProfilesTable({ clientId, liveOnly, startDate, endDa
           ? "Contacts with dial, claim, or appointment activity in this range but no lead event on record anywhere. Expand a row to inspect the orphaned events — usually a missing GHL lead webhook or a legacy contact being power-dialed."
           : conversionFilter || qualityFilter
             ? "One row per lead whose stage date falls in the range. A missing earlier stage uses its filled-in date. Conversations include shows, live transfers, claims, and filled-in conversations. Search by name, phone, or email still ignores the date range. Expand a row for the full history."
-            : "One row per lead created in the selected date range. The ad is the lead's original ad. Activity counts stay in the range; expand a row for the full history, including filled-in stages marked Implied. Search by name, phone, or email ignores the date range."}
+            : "One row per lead created in the selected date range. The ad is the lead's original ad. Loan amount, property value, LTV, state, site, ages, credit score, and property use are what the lead form sent. A blank cell means that field came in empty. Activity counts stay in the range; expand a row for the full history, including filled-in stages marked Implied. Search by name, phone, or email ignores the date range."}
       </p>
 
       <div className="overflow-x-auto rounded-xl" style={{ border: "1px solid rgba(255,255,255,0.06)" }}>
-        <table className="w-full text-sm min-w-[1200px] tabular-nums">
+        <table className="w-full text-sm min-w-[1680px] tabular-nums">
           <thead>
             <tr style={{ background: "#050c18" }}>
-              {["", "Client", "Name", "Flags", "Source", "Ad", "Activity", "Loan amt", "Prop. value", "LTV", "B1 age", "B2 age", "Phone", "Email", isUnmappedView ? "Last activity" : "Created", "Contact"].map((h) => (
+              {["", "Client", "Name", "Flags", "Source", "Ad", "Site", "Activity", "Loan amt", "Prop. value", "LTV", "State", "B1 age", "B2 age", "Credit score", "Property use", "Phone", "Email", isUnmappedView ? "Last activity" : "Created", "Contact"].map((h) => (
                 <th
                   key={h || "expand"}
                   className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap"
@@ -621,13 +637,13 @@ export default function LeadProfilesTable({ clientId, liveOnly, startDate, endDa
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={16} className="px-4 py-12 text-center text-sm" style={{ color: "#1e3a5f" }}>
+                <td colSpan={20} className="px-4 py-12 text-center text-sm" style={{ color: "#1e3a5f" }}>
                   Loading…
                 </td>
               </tr>
             ) : rows.length === 0 ? (
               <tr>
-                <td colSpan={16} className="px-4 py-12 text-center text-sm" style={{ color: "#1e3a5f" }}>
+                <td colSpan={20} className="px-4 py-12 text-center text-sm" style={{ color: "#1e3a5f" }}>
                   {isUnmappedView
                     ? "No unmapped activity in this range"
                     : conversionFilter
@@ -655,6 +671,18 @@ export default function LeadProfilesTable({ clientId, liveOnly, startDate, endDa
                       </td>
                       <td className="px-4 py-2.5 whitespace-nowrap" style={{ color: "#94a3b8" }}>
                         {row.client_name}
+                        {row.product ? (
+                          <span
+                            className="ml-2 text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded align-middle"
+                            style={{
+                              background: row.product === "dscr" ? "#082f49" : "#1e1b4b",
+                              color: row.product === "dscr" ? "#7dd3fc" : "#c4b5fd",
+                              border: `1px solid ${row.product === "dscr" ? "rgba(125, 211, 252, 0.3)" : "rgba(196, 181, 253, 0.3)"}`,
+                            }}
+                          >
+                            {row.product}
+                          </span>
+                        ) : null}
                       </td>
                       <td className="px-4 py-2.5 whitespace-nowrap font-medium" style={{ color: "#e2e8f0" }}>
                         {row.lead_name ?? "—"}
@@ -700,6 +728,13 @@ export default function LeadProfilesTable({ clientId, liveOnly, startDate, endDa
                       >
                         {row.ad_name ?? "—"}
                       </td>
+                      <td
+                        className="px-4 py-2.5 text-xs max-w-[10rem] truncate"
+                        style={{ color: "#94a3b8" }}
+                        title={row.utm_term ?? undefined}
+                      >
+                        {row.utm_term ?? "—"}
+                      </td>
                       <td className="px-4 py-2.5">
                         <div className="flex flex-wrap gap-x-3 gap-y-1">
                           <CountPill label="dials" value={c.dials} />
@@ -725,10 +760,19 @@ export default function LeadProfilesTable({ clientId, liveOnly, startDate, endDa
                         {row.ltv != null ? `${row.ltv}%` : "—"}
                       </td>
                       <td className="px-4 py-2.5 whitespace-nowrap text-xs tabular-nums" style={{ color: "#94a3b8" }}>
+                        {row.state ?? "—"}
+                      </td>
+                      <td className="px-4 py-2.5 whitespace-nowrap text-xs tabular-nums" style={{ color: "#94a3b8" }}>
                         {row.b1_age ?? "—"}
                       </td>
                       <td className="px-4 py-2.5 whitespace-nowrap text-xs tabular-nums" style={{ color: "#94a3b8" }}>
                         {row.b2_age ?? "—"}
+                      </td>
+                      <td className="px-4 py-2.5 whitespace-nowrap text-xs tabular-nums" style={{ color: "#94a3b8" }}>
+                        {row.credit_score_range ?? "—"}
+                      </td>
+                      <td className="px-4 py-2.5 whitespace-nowrap text-xs" style={{ color: "#94a3b8" }}>
+                        {row.property_use ?? "—"}
                       </td>
                       <td className="px-4 py-2.5 whitespace-nowrap" style={{ color: "#94a3b8" }}>
                         {fmtPhone(row.lead_phone)}
@@ -766,7 +810,7 @@ export default function LeadProfilesTable({ clientId, liveOnly, startDate, endDa
                     </tr>
                     {open && (
                       <tr>
-                        <td colSpan={16} className="px-0 py-0" style={{ background: "#070f1a" }}>
+                        <td colSpan={20} className="px-0 py-0" style={{ background: "#070f1a" }}>
                           <table className="w-full">
                             <thead>
                               <tr>

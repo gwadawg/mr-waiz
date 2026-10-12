@@ -191,7 +191,21 @@ HE accounts have **no ad-cost grading** (CPL / CPQL / CPConv are omitted). **Out
 | Ad Set | `adset_name` / `ad_set_name` | `adset_name` |
 | Campaign | `campaign_name` or `utm_campaign` | `campaign_name` |
 | UTM source/campaign/content | `utm_source`, `utm_campaign`, `utm_content` | `utm_source`, `utm_campaign`, `utm_content` |
-| LTV, Age, State, etc. | — | `raw` |
+| UTM term (site) | `utm_term` | `events.utm_term`, copied onto `leads.utm_term`. Blank is stored as null. |
+| Loan amount, property value, State | `loan_amount`, `property_value`, `state` | `raw` |
+| B1 / B2 age (RM) | `b1_age`, `b2_age` | `raw` |
+| Credit score range, Property use (DSCR) | `credit_score_range`, `property_use` | `raw` |
+
+**Lead intake by product.** Intake is read from `events.raw` on the `lead` event by `src/lib/lead-intake.ts` and shown in the Leads table and CSV. The product comes from `clients.reporting_type`, not from which fields are filled in.
+
+| Field | RM | DSCR |
+|-------|----|------|
+| Loan amount, property value, LTV (loan ÷ value), state | Yes | Yes |
+| B1 age, B2 age | Yes | No |
+| Credit score range (text bucket such as `700-739`, never coerced to a number) | No | Yes |
+| Property use (`Primary` / `Investment`; other text kept as sent) | No | Yes |
+
+Make's `ccm-new-lead` scenario sends all keys for every client. Keys that do not apply to a product arrive blank and the app ignores them.
 
 **Ad attribution (Media Buyer view):** `ad_name` is the universal join key — the same Facebook ad names are reused across every client, so the Media Buyer leaderboard groups by `ad_name` globally. On lead ingest the webhook resolves `ad_name` from `ad_name` → `adName` → `utm_content` (Facebook commonly maps `{{ad.name}}` into `utm_content`). Send the ad name on the **lead** webhook so downstream appointments/shows/closes for that contact can be attributed back to the ad. Imported leads already carry `raw.ad_name`/`raw.ad_set_name`; run `node scripts/backfill-ad-attribution.mjs` once to copy those into the new columns.
 

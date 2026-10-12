@@ -470,6 +470,7 @@ alter table events add column if not exists campaign_name text;
 alter table events add column if not exists utm_source   text;
 alter table events add column if not exists utm_campaign text;
 alter table events add column if not exists utm_content  text;
+alter table events add column if not exists utm_term     text;
 
 -- Lead origin (HE dial-only lists, partner feeds, etc.). Meaningful on event_type = 'lead'.
 alter table events add column if not exists lead_source text;

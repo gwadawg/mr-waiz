@@ -304,8 +304,11 @@ export async function ingestWebhookEvent(
 
   const utm_source = jsonStringField(payload.utm_source);
   const utm_campaign = jsonStringField(payload.utm_campaign);
-  const utm_content = jsonStringField(payload.utm_content);
+  const utm_term = jsonStringField(payload.utm_term ?? payload.utmTerm);
   const ad_name = jsonStringField(payload.ad_name ?? payload.adName ?? payload.utm_content);
+  // Make only maps GHL "UTM Ad Name" → ad_name today. Stamp utm_content as the
+  // immutable original so later ad_name remaps cannot silently move attribution.
+  const utm_content = jsonStringField(payload.utm_content) ?? ad_name;
   const adset_name = jsonStringField(payload.adset_name ?? payload.ad_set_name ?? payload.adSetName);
   const campaign_name = jsonStringField(
     payload.campaign_name ?? payload.campaignName ?? payload.utm_campaign,
@@ -417,6 +420,7 @@ export async function ingestWebhookEvent(
     utm_source,
     utm_campaign,
     utm_content,
+    utm_term,
     lead_source: isLead ? lead_source : null,
     is_ai_booked,
     dq_reason: isManualDq ? dq_reason : null,
@@ -460,6 +464,7 @@ export async function ingestWebhookEvent(
           utm_source,
           utm_campaign,
           utm_content,
+          utm_term,
           raw: payload,
         })
         .eq('id', existingDq.id);

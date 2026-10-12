@@ -449,7 +449,11 @@ Every proposal-or-later lead has a conversation, and no implied date
 falls after its next stage. `clients.reporting_timezone` is not added.
 
 As built, versus the schema section above: intake columns and flag
-columns are not added yet (phase 5).
+columns are not added yet (phase 5). Until then, intake is read from
+`events.raw` by `src/lib/lead-intake.ts` (shared: loan amount, property
+value, LTV, state; RM: B1/B2 age; DSCR: credit score range, property
+use, chosen by `clients.reporting_type`). These are the first typed
+column candidates when phase 5 starts.
 First-touch ad is recomputed by `refresh_lead` from the lead's events:
 the earliest `lead` event with an ad wins, else the earliest event with
 an ad. Integrity check: `node scripts/assert-lead-integrity.mjs`.
