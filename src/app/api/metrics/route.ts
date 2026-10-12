@@ -36,6 +36,7 @@ export async function GET(req: Request) {
     return NextResponse.json(
       {
         ...data.metrics,
+        dial_pool: data.dial_pool,
         trends: data.trends,
         ...(data.warnings?.length ? { warnings: data.warnings } : {}),
       },
@@ -46,6 +47,7 @@ export async function GET(req: Request) {
   return NextResponse.json(
     {
       ...data.metrics,
+      dial_pool: data.dial_pool,
       ...(data.warnings?.length ? { warnings: data.warnings } : {}),
     },
     { headers: metricsCacheHeaders() },

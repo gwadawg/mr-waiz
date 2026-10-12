@@ -13,6 +13,7 @@ import {
   type KpiKey,
 } from '@/lib/client-health';
 import { worstTier } from '@/lib/dept-health';
+import { dialPoolForClient, withDialPoolRates, type DialPool } from '@/lib/dial-pool';
 import { usesCallCenterKpiLayout, type ReportingType } from '@/lib/kpi-layouts';
 import {
   buildDailyCostSeries,
@@ -68,6 +69,8 @@ export type ClientCompareRow = {
   north_star_grade: HealthTier;
   has_custom_cpl_benchmark: boolean;
   is_call_center: boolean;
+  /** Paid-ads dial pool for the two rates. Null on call center. */
+  dial_pool: DialPool | null;
 };
 
 export type CompareMapPoint = {
@@ -123,9 +126,12 @@ export function compareRowFromMetrics(input: {
   metrics: MetricsResult;
   /** Per-client Client Success overrides — used only to flag the tooltip. */
   benchmarks?: ClientKpiBenchmarks | null;
+  qualifies_leads?: boolean | null;
 }): ClientCompareRow {
   const isCc = usesCallCenterKpiLayout(input.reporting_type);
   const m = input.metrics;
+  const pool = dialPoolForClient(input.reporting_type, input.qualifies_leads);
+  const reported = withDialPoolRates(m, pool);
   const snap = isCc
     ? heClientHealthSnapshotFromMetrics(m, null)
     : clientHealthSnapshotFromMetrics(m, null);
@@ -137,8 +143,12 @@ export function compareRowFromMetrics(input: {
   const cpconv = isCc ? null : nullIfEmptyDenom(m.cp_conversation, m.unique_conversations);
   const handRaise = isCc
     ? nullIfEmptyDenom(m.lead_hand_raise_rate, m.new_leads)
-    : nullIfEmptyDenom(m.hand_raise_rate, m.qualified_leads);
-  const conversationRate = nullIfEmptyDenom(m.conversation_rate, m.qualified_leads);
+    : nullIfEmptyDenom(reported.hand_raise_rate, pool === 'all' ? m.new_leads : m.qualified_leads);
+  const conversationDenom = isCc || pool !== 'all' ? m.qualified_leads : m.new_leads;
+  const conversationRate = nullIfEmptyDenom(
+    isCc ? m.conversation_rate : reported.conversation_rate,
+    conversationDenom,
+  );
   const showRate = nullIfEmptyDenom(m.booked_to_conversation_rate, m.unique_booked_appointments);
   const dials = m.outbound_dials;
   const dialsPerQualified = m.qualified_leads > 0 ? dials / m.qualified_leads : null;
@@ -182,6 +192,7 @@ export function compareRowFromMetrics(input: {
     north_star_grade: northStar,
     has_custom_cpl_benchmark: Boolean(input.benchmarks?.cpl),
     is_call_center: isCc,
+    dial_pool: pool,
   };
 }
 
@@ -255,7 +266,7 @@ function denomFor(row: ClientCompareRow, key: CompareKpiKey): number {
     case 'cpconv':
       return row.unique_conversations;
     case 'hand_raise':
-      return row.is_call_center ? row.leads : row.qualified;
+      return handRaiseDenom(row);
     case 'show_rate':
       return row.unique_booked;
     case 'leads':
@@ -325,10 +336,14 @@ export function medianForBars(bars: CompareBar[]): number | null {
   return medianOf(bars.filter(b => !b.hollow).map(b => b.value));
 }
 
+function handRaiseDenom(row: ClientCompareRow): number {
+  return row.is_call_center || row.dial_pool === 'all' ? row.leads : row.qualified;
+}
+
 function costMapHollow(row: ClientCompareRow): boolean {
   return (
     row.unique_conversations < KPI_MIN_DENOMINATOR.cps
-    || (row.is_call_center ? row.leads : row.qualified) < KPI_MIN_DENOMINATOR.hand_raise_rate
+    || handRaiseDenom(row) < KPI_MIN_DENOMINATOR.hand_raise_rate
   );
 }
 
@@ -336,8 +351,7 @@ function rateMapHollow(row: ClientCompareRow): boolean {
   const hrMin = row.is_call_center
     ? KPI_MIN_DENOMINATOR.lead_booking_rate
     : KPI_MIN_DENOMINATOR.hand_raise_rate;
-  const hrDenom = row.is_call_center ? row.leads : row.qualified;
-  return hrDenom < hrMin || row.unique_booked < KPI_MIN_DENOMINATOR.show_rate;
+  return handRaiseDenom(row) < hrMin || row.unique_booked < KPI_MIN_DENOMINATOR.show_rate;
 }
 
 export function costMapPoints(rows: ClientCompareRow[]): CompareMapPoint[] {

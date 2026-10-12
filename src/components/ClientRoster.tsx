@@ -27,6 +27,7 @@ import { isKickoffIncomplete, isKickoffLifecycle } from "@/lib/kickoff";
 import { syncIsLiveWithLifecycle } from "@/lib/lifecycle-sync";
 import { clientNeedsGhlMapping } from "@/lib/client-ghl-mapping";
 import { DEFAULT_REPORTING_TYPE, normalizeReportingType, usesCallCenterKpiLayout, type ReportingType } from "@/lib/kpi-layouts";
+import { dialPoolForClient } from "@/lib/dial-pool";
 import ClientLeadSourceSelect from "@/components/ClientLeadSourceSelect";
 import { REPORTING_TYPE_META, REPORTING_TYPES } from "@/lib/reporting-types";
 import { normalizeSalesPackage } from "@/lib/offer-catalog";
@@ -69,6 +70,7 @@ type Client = {
   mrr?: number | null;
   daily_adspend?: number | null;
   appointment_watch?: boolean | null;
+  qualifies_leads?: boolean | null;
   ads_paused?: boolean | null;
   ads_paused_at?: string | null;
   ads_paused_note?: string | null;
@@ -170,6 +172,7 @@ type ColumnKey =
   | "tenure"
   | "adspend"
   | "watch"
+  | "qualify"
   | "ads"
   | "launch"
   | "cs_call"
@@ -191,9 +194,9 @@ const ROSTER_VIEWS: { key: RosterView; label: string }[] = [
 ];
 
 const VIEW_COLUMNS: Record<RosterView, ColumnKey[]> = {
-  full: ["stage", "tenure", "cs_call", "adspend", "watch"],
-  cs: ["stage", "tenure", "cs_call", "watch"],
-  media: ["drive", "states", "page", "instagram", "ad_account", "sites", "tz", "product", "adspend", "ads"],
+  full: ["stage", "tenure", "cs_call", "adspend", "qualify", "watch"],
+  cs: ["stage", "tenure", "cs_call", "qualify", "watch"],
+  media: ["drive", "states", "page", "instagram", "ad_account", "sites", "tz", "product", "qualify", "adspend", "ads"],
 };
 
 function moneyShort(n: number | null | undefined): string {
@@ -239,6 +242,10 @@ const COLUMN_DEFS: Record<ColumnKey, { header: string; revenueOnly?: boolean; re
         </span>
       );
     },
+  },
+  qualify: {
+    header: "Qualify",
+    render: () => null,
   },
   watch: {
     header: "Appt watch",
@@ -1511,6 +1518,45 @@ export default function ClientRoster({ canViewRevenue: initialCanViewRevenue = f
   );
 }
 
+function QualifyToggle({
+  client,
+  disabled,
+  onPatch,
+}: {
+  client: Client;
+  disabled: boolean;
+  onPatch: (id: string, body: Record<string, unknown>) => void;
+}) {
+  if (usesCallCenterKpiLayout(client.reporting_type)) {
+    return (
+      <span className="text-xs" style={{ color: "#334155" }} title="Call center rates stay on their own formulas">
+        —
+      </span>
+    );
+  }
+  const on = dialPoolForClient(client.reporting_type, client.qualifies_leads) === "qualified";
+  return (
+    <label
+      className="inline-flex items-center gap-1.5 text-xs whitespace-nowrap cursor-pointer"
+      style={{ color: on ? "#4ade80" : "#94a3b8" }}
+      title={
+        on
+          ? "On: we only dial and book qualified leads. Hand-raise % and conversation % use qualified leads."
+          : "Off: we book every lead. Hand-raise % and conversation % use total leads."
+      }
+    >
+      <input
+        type="checkbox"
+        checked={on}
+        disabled={disabled}
+        onChange={() => onPatch(client.id, { qualifies_leads: !on })}
+        className="accent-emerald-400"
+      />
+      {on ? "On" : "Off"}
+    </label>
+  );
+}
+
 function AccountGroupHeaderRow({
   group,
   expanded,
@@ -1719,7 +1765,9 @@ function ClientRow({
       </td>
       {columns.map(key => (
         <td key={key} className={cell}>
-          {key === "ads" ? (
+          {key === "qualify" ? (
+            <QualifyToggle client={c} disabled={busy} onPatch={onPatch} />
+          ) : key === "ads" ? (
             <AdsPausedControl
               clientId={c.id}
               adsPaused={!!c.ads_paused}

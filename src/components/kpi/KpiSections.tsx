@@ -9,6 +9,7 @@ import {
   type KpiCardDefinition,
   type ReportingType,
 } from "@/lib/kpi-layouts";
+import { hintForDialPool, type DialPool } from "@/lib/dial-pool";
 import KpiCard, { type KpiDelta } from "./KpiCard";
 import KpiHeadlineStrip, { type HeadlineMetric } from "./KpiHeadlineStrip";
 import KpiSection from "./KpiSection";
@@ -34,6 +35,8 @@ type Props = {
   reportingType: ReportingType;
   previous?: MetricsResult | null;
   spark?: SparkMap | null;
+  /** Single-client dial pool. All-leads rewrites the two rate hints. */
+  dialPool?: DialPool | null;
 };
 
 function computeDelta(
@@ -74,7 +77,7 @@ function formatRefLine(card: KpiCardDefinition, metrics: MetricsResult): string 
   return `${card.refMetric.label} ${formatKpiValue(metrics[card.refMetric.metric], card.refMetric.format)}`;
 }
 
-export default function KpiSections({ metrics, reportingType, previous, spark }: Props) {
+export default function KpiSections({ metrics, reportingType, previous, spark, dialPool = null }: Props) {
   const sections = getKpiSections(reportingType);
   const [collapsed, setCollapsed] = useState<Set<string>>(readCollapsed);
 
@@ -98,7 +101,7 @@ export default function KpiSections({ metrics, reportingType, previous, spark }:
       value: formatCardValue(card, metrics),
       caption: card.valueCaption,
       accent: card.accent,
-      hint: card.hint,
+      hint: hintForDialPool(card.metric, card.hint, dialPool),
       refLine: formatRefLine(card, metrics),
       delta: previous
         ? computeDelta(card, metrics[card.metric], previous[card.metric])
@@ -107,7 +110,7 @@ export default function KpiSections({ metrics, reportingType, previous, spark }:
         spark?.[card.metric] ??
         (card.secondaryMetric ? spark?.[card.secondaryMetric] : undefined),
     }),
-    [metrics, previous, spark],
+    [metrics, previous, spark, dialPool],
   );
 
   const headlineMetrics = useMemo(

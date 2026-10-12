@@ -341,6 +341,44 @@ function dial(id = 'a'): EventRow {
 }
 
 describe('client-compare table metrics', () => {
+  it('divides unchecked DSCR rates by every lead and keeps Peter on qualified leads', () => {
+    const events = [
+      lead('a', true),
+      lead('b', false),
+      evt('appointment_booked', 'a'),
+      evt('show', 'a'),
+    ];
+    const metrics = calculateMetrics(events, []);
+    const peter = compareRowFromMetrics({
+      id: 'peter',
+      name: 'Peter',
+      reporting_type: 'DSCR',
+      qualifies_leads: true,
+      metrics,
+    });
+    const open = compareRowFromMetrics({
+      id: 'dscr',
+      name: 'Other DSCR',
+      reporting_type: 'DSCR',
+      qualifies_leads: false,
+      metrics,
+    });
+    const callCenter = compareRowFromMetrics({
+      id: 'cc',
+      name: 'Call Center',
+      reporting_type: 'CALL_CENTER',
+      qualifies_leads: true,
+      metrics,
+    });
+    assert.equal(peter.hand_raise, 100);
+    assert.equal(peter.conversation_rate, 100);
+    assert.equal(peter.qualified, 1);
+    assert.equal(open.hand_raise, 50);
+    assert.equal(open.conversation_rate, 50);
+    assert.equal(open.dial_pool, 'all');
+    assert.equal(callCenter.dial_pool, null);
+    assert.equal(callCenter.hand_raise, 50);
+  });
   it('keeps Call Center dials while omitting cost', () => {
     const cc = row(
       'CALL_CENTER',

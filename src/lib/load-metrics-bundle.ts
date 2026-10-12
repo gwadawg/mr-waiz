@@ -26,6 +26,7 @@ import {
   speedResultFromSqlSummary,
   trendsFromSqlTimeline,
 } from '@/lib/metrics-from-sql';
+import { dialPoolForClient, withDialPoolRates, type DialPool } from '@/lib/dial-pool';
 import { fetchCombinedSpendForMetrics, fetchCombinedTrendSpend } from '@/lib/spend';
 import {
   getClientIdsByReportingType,
@@ -85,6 +86,8 @@ export type MetricsBundleFilters = {
 export type MetricsBundleResult = {
   metrics: MetricsResult;
   trends: TrendsPayload | null;
+  /** Paid-ads single-client pool. Null on blends and call center. */
+  dial_pool: DialPool | null;
   /** Present when a capped row pull hit its limit (dev / override only). */
   warnings?: string[];
 };
@@ -100,7 +103,12 @@ export function metricsCacheHeaders(): Record<string, string> {
   return { ...CACHE_HEADERS };
 }
 
-function filterKey(filters: MetricsBundleFilters, includeTrends: boolean, granularity: string): string {
+function filterKey(
+  filters: MetricsBundleFilters,
+  includeTrends: boolean,
+  granularity: string,
+  dialPool: DialPool | null,
+): string {
   return [
     filters.client_id ?? '',
     filters.live_only ? '1' : '0',
@@ -109,7 +117,22 @@ function filterKey(filters: MetricsBundleFilters, includeTrends: boolean, granul
     filters.end_date ?? '',
     includeTrends ? '1' : '0',
     granularity,
+    dialPool ?? '',
   ].join('|');
+}
+
+async function lookupClientDialPool(
+  service: ServiceClient,
+  clientId: string | null | undefined,
+): Promise<DialPool | null> {
+  if (!clientId) return null;
+  const { data, error } = await service
+    .from('clients')
+    .select('reporting_type, qualifies_leads')
+    .eq('id', clientId)
+    .maybeSingle();
+  if (error || !data) return null;
+  return dialPoolForClient(data.reporting_type, data.qualifies_leads);
 }
 
 async function resolveScopedClientIds(
@@ -329,7 +352,7 @@ async function loadViaSql(
   service: ServiceClient,
   filters: MetricsBundleFilters,
   scopedClientIds: ScopedIds,
-  opts: { includeTrends: boolean; granularity: 'day' | 'week' },
+  opts: { includeTrends: boolean; granularity: 'day' | 'week'; dialPool: DialPool | null },
 ): Promise<MetricsBundleResult | null> {
   const clientIds = rpcClientIds(filters, scopedClientIds);
   const { startIso, endIso } = rangeBounds(filters);
@@ -403,9 +426,12 @@ async function loadViaSql(
     throw new Error(countsResolved.error);
   }
 
-  const metrics = attachLoanDealMetrics(
-    metricsFromSqlCounts(countsResolved.counts, spendRows, speed),
-    dealTotals,
+  const metrics = withDialPoolRates(
+    attachLoanDealMetrics(
+      metricsFromSqlCounts(countsResolved.counts, spendRows, speed),
+      dealTotals,
+    ),
+    opts.dialPool,
   );
   metrics.manual_dqs = await countFormManualDqs(service, clientIds, startIso, endIso);
 
@@ -418,7 +444,7 @@ async function loadViaSql(
       throw new Error(timelineRes.error.message);
     }
     const rows = parseSqlTimelineRows(timelineRes.data);
-    const built = trendsFromSqlTimeline(rows, trendSpend, opts.granularity);
+    const built = trendsFromSqlTimeline(rows, trendSpend, opts.granularity, opts.dialPool);
     trends = {
       granularity: opts.granularity,
       series: built.series,
@@ -426,14 +452,14 @@ async function loadViaSql(
     };
   }
 
-  return { metrics, trends };
+  return { metrics, trends, dial_pool: opts.dialPool };
 }
 
 async function loadViaEventsFallback(
   service: ServiceClient,
   filters: MetricsBundleFilters,
   scopedClientIds: ScopedIds,
-  opts: { includeTrends: boolean; granularity: 'day' | 'week' },
+  opts: { includeTrends: boolean; granularity: 'day' | 'week'; dialPool: DialPool | null },
 ): Promise<MetricsBundleResult> {
   let eventsQuery = service.from('events').select(METRICS_EVENT_SELECT);
   if (filters.client_id) eventsQuery = eventsQuery.eq('client_id', filters.client_id);
@@ -475,9 +501,12 @@ async function loadViaEventsFallback(
     METRICS_EVENTS_ROW_LIMIT,
     'metrics events fallback',
   );
-  const metrics = attachLoanDealMetrics(
-    calculateMetrics(eventRows, spendRows, availability.data),
-    dealTotals,
+  const metrics = withDialPoolRates(
+    attachLoanDealMetrics(
+      calculateMetrics(eventRows, spendRows, availability.data),
+      dealTotals,
+    ),
+    opts.dialPool,
   );
   const { startIso, endIso } = rangeBounds(filters);
   metrics.manual_dqs = await countFormManualDqs(
@@ -509,6 +538,7 @@ async function loadViaEventsFallback(
         filters.start_date,
         filters.end_date,
         opts.granularity,
+        opts.dialPool,
       ),
     };
   }
@@ -516,6 +546,7 @@ async function loadViaEventsFallback(
   return {
     metrics,
     trends,
+    dial_pool: opts.dialPool,
     ...(truncWarn ? { warnings: [truncWarn] } : {}),
   };
 }
@@ -535,16 +566,17 @@ export async function loadMetricsBundle(
     includeTrends && filters.start_date && filters.end_date
       ? resolveGranularity(filters.start_date, filters.end_date, opts.granularity)
       : 'day';
+  const dialPool = await lookupClientDialPool(service, filters.client_id);
 
-  const cacheKey = filterKey(filters, includeTrends, granularity);
+  const cacheKey = filterKey(filters, includeTrends, granularity, dialPool);
   const cached = bundleCache.get(cacheKey);
   if (cached) return { data: cached, error: null };
 
   if (!includeTrends && filters.start_date && filters.end_date) {
     const g = resolveGranularity(filters.start_date, filters.end_date, opts.granularity);
-    const hit = bundleCache.get(filterKey(filters, true, g));
+    const hit = bundleCache.get(filterKey(filters, true, g, dialPool));
     if (hit) {
-      const slim: MetricsBundleResult = { metrics: hit.metrics, trends: null };
+      const slim: MetricsBundleResult = { metrics: hit.metrics, trends: null, dial_pool: hit.dial_pool };
       bundleCache.set(cacheKey, slim);
       return { data: slim, error: null };
     }
@@ -552,7 +584,7 @@ export async function loadMetricsBundle(
 
   try {
     const scopedClientIds = await resolveScopedClientIds(service, filters);
-    const loadOpts = { includeTrends, granularity };
+    const loadOpts = { includeTrends, granularity, dialPool };
 
     let result = await loadViaSql(service, filters, scopedClientIds, loadOpts);
     if (!result) {

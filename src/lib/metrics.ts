@@ -3,6 +3,7 @@ import {
   type AvailabilityWindow,
   type SpeedToLeadEventRow,
 } from '@/lib/speed-to-lead';
+import { dialPoolRate, type DialPool } from '@/lib/dial-pool';
 import { CALL_CENTER_TIMEZONE } from '@/lib/time';
 
 export type EventRow = {
@@ -715,7 +716,7 @@ function addLeadKey(set: Set<string>, event: KpiTimelineEventRow): void {
   if (key) set.add(key);
 }
 
-function finalizeBucket(c: RawCounts): KpiTimelineBucket {
+function finalizeBucket(c: RawCounts, pool: DialPool | null = null): KpiTimelineBucket {
   const uniqueConversations = c.unique_conversation_leads.size;
   const dispositioned = c.shows + c.no_shows + c.lo_bailed;
   const uniqueBooked = c.unique_booked_leads.size;
@@ -740,8 +741,8 @@ function finalizeBucket(c: RawCounts): KpiTimelineBucket {
     net_show_rate: c.shows + c.no_shows > 0 ? (c.shows / (c.shows + c.no_shows)) * 100 : null,
     booking_rate: c.qualified_leads > 0 ? (uniqueBooked / c.qualified_leads) * 100 : null,
     lead_booking_rate: c.leads > 0 ? (uniqueBooked / c.leads) * 100 : null,
-    conversation_rate: c.qualified_leads > 0 ? (uniqueConversations / c.qualified_leads) * 100 : null,
-    hand_raise_rate: c.qualified_leads > 0 ? (uniqueHandRaise / c.qualified_leads) * 100 : null,
+    conversation_rate: dialPoolRate(uniqueConversations, c.qualified_leads, c.leads, pool),
+    hand_raise_rate: dialPoolRate(uniqueHandRaise, c.qualified_leads, c.leads, pool),
     booked_to_conversation_rate:
       uniqueBooked > 0 ? (uniqueBookedConverted / uniqueBooked) * 100 : null,
     lead_to_qual: c.leads > 0 ? (c.qualified_leads / c.leads) * 100 : null,
@@ -759,6 +760,7 @@ export function buildClientKpiTimeline(
   rangeStart: string,
   rangeEnd: string,
   granularity: 'day' | 'week' = 'week',
+  pool: DialPool | null = null,
 ): KpiTimelineBucket[] {
   const byDate = new Map<string, RawCounts>();
   for (const date of eachDateInRange(rangeStart, rangeEnd)) {
@@ -804,7 +806,7 @@ export function buildClientKpiTimeline(
   const daily = eachDateInRange(rangeStart, rangeEnd).map(date => byDate.get(date)!);
 
   if (granularity === 'day') {
-    return daily.map(finalizeBucket);
+    return daily.map(row => finalizeBucket(row, pool));
   }
 
   const byWeek = new Map<string, RawCounts>();
@@ -832,7 +834,7 @@ export function buildClientKpiTimeline(
 
   return [...byWeek.values()]
     .sort((a, b) => a.date.localeCompare(b.date))
-    .map(finalizeBucket);
+    .map(row => finalizeBucket(row, pool));
 }
 
 /** Parse GHL/sheet Y/N or boolean flags on webhook payloads. */

@@ -23,6 +23,7 @@ import type {
   MetricsResult,
 } from "@/lib/metrics";
 import type { ClientReportItemized } from "@/lib/client-report-itemized";
+import type { DialPool } from "@/lib/dial-pool";
 
 type Client = ClientOption & { reporting_type?: ReportingType };
 
@@ -47,6 +48,7 @@ export default function ClientReportBuilder({ clients }: Props) {
   });
 
   const [metrics, setMetrics] = useState<MetricsResult | null>(null);
+  const [dialPool, setDialPool] = useState<DialPool | null>(null);
   const [kpiSeries, setKpiSeries] = useState<KpiTimelineBucket[]>([]);
   const [costSeries, setCostSeries] = useState<CostTrendPoint[]>([]);
   const [trendsGranularity, setTrendsGranularity] = useState<"day" | "week">("day");
@@ -113,6 +115,7 @@ export default function ClientReportBuilder({ clients }: Props) {
   useEffect(() => {
     if (!clientId) {
       setMetrics(null);
+      setDialPool(null);
       setKpiSeries([]);
       setCostSeries([]);
       setError("");
@@ -142,6 +145,7 @@ export default function ClientReportBuilder({ clients }: Props) {
         return r.json();
       })
       .then((d: MetricsResult & {
+        dial_pool?: DialPool | null;
         trends?: {
           granularity?: "day" | "week";
           kpiSeries?: KpiTimelineBucket[];
@@ -152,16 +156,18 @@ export default function ClientReportBuilder({ clients }: Props) {
         granularity?: "day" | "week";
       }) => {
         if (cancelled) return;
-        setMetrics(d);
-        const trends = d.trends;
-        setKpiSeries(trends?.kpiSeries ?? d.kpiSeries ?? []);
-        setCostSeries(trends?.series ?? d.series ?? []);
-        setTrendsGranularity(trends?.granularity ?? d.granularity ?? "day");
+        const { trends, dial_pool, kpiSeries: flatSeries, series: flatSeriesCost, granularity: flatGranularity, ...metricFields } = d;
+        setMetrics(metricFields);
+        setDialPool(dial_pool ?? null);
+        setKpiSeries(trends?.kpiSeries ?? flatSeries ?? []);
+        setCostSeries(trends?.series ?? flatSeriesCost ?? []);
+        setTrendsGranularity(trends?.granularity ?? flatGranularity ?? "day");
         setLoading(false);
       })
       .catch((err: unknown) => {
         if (cancelled) return;
         setMetrics(null);
+        setDialPool(null);
         setKpiSeries([]);
         setCostSeries([]);
         setError(err instanceof Error ? err.message : "Failed to load metrics");
@@ -550,6 +556,7 @@ export default function ClientReportBuilder({ clients }: Props) {
                   sections={filteredSections}
                   charts={charts}
                   reportingType={reportingType}
+                  dialPool={dialPool}
                   showCostCharts={showCostCharts}
                   kpiSeries={kpiSeries}
                   costSeries={costSeries}

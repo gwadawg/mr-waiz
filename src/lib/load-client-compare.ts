@@ -43,6 +43,7 @@ type ClientRow = {
   lifecycle_status: string | null;
   billing_paused: boolean | null;
   kpi_benchmarks: unknown;
+  qualifies_leads: boolean | null;
 };
 
 type DatedSpend = { client_id: string; spend_date: string; amount: number; platform?: string };
@@ -172,7 +173,7 @@ export async function loadClientCompareBundle(
 
   const { data: clients, error: clientsError } = await service
     .from('clients')
-    .select('id, name, reporting_type, lifecycle_status, billing_paused, kpi_benchmarks')
+    .select('id, name, reporting_type, lifecycle_status, billing_paused, kpi_benchmarks, qualifies_leads')
     .order('name');
   if (clientsError) throw new Error(clientsError.message);
 
@@ -201,6 +202,7 @@ export async function loadClientCompareBundle(
         billing_paused: c.billing_paused,
         metrics,
         benchmarks: (c.kpi_benchmarks ?? null) as ClientKpiBenchmarks | null,
+        qualifies_leads: c.qualifies_leads,
       });
     });
   } else {
@@ -226,6 +228,7 @@ export async function loadClientCompareBundle(
         billing_paused: c.billing_paused,
         metrics: calculateMetrics(clientEvents, spend),
         benchmarks: (c.kpi_benchmarks ?? null) as ClientKpiBenchmarks | null,
+        qualifies_leads: c.qualifies_leads,
       });
     });
   }

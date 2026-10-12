@@ -8,6 +8,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import ClientSelect from "./ClientSelect";
 import { type SparkMap } from "./kpi/KpiSections";
 import type { CostTrendPoint, KpiTimelineBucket, MetricsResult } from "@/lib/metrics";
+import type { DialPool } from "@/lib/dial-pool";
 import {
   DEFAULT_REPORTING_TYPE,
   normalizeReportingType,
@@ -427,6 +428,7 @@ export default function DashboardView({
     sinceLaunchAvailable,
   } = filters;
   const [metrics, setMetrics] = useState<MetricsResult | null>(null);
+  const [dialPool, setDialPool] = useState<DialPool | null>(null);
   const [prevMetrics, setPrevMetrics] = useState<MetricsResult | null>(null);
   const [sparkMap, setSparkMap] = useState<SparkMap | null>(null);
   const [trends, setTrends] = useState<TrendsPayload | null>(null);
@@ -660,6 +662,7 @@ export default function DashboardView({
     const url = `/api/metrics?${params}`;
     type Bundle = MetricsResult & {
       trends?: TrendsPayload | null;
+      dial_pool?: DialPool | null;
       error?: string;
     };
 
@@ -667,10 +670,12 @@ export default function DashboardView({
       if (d.error) {
         setTrendsError(d.error);
         setMetrics(null);
+        setDialPool(null);
         return;
       }
       setTrendsError("");
-      const { trends: bundledTrends, error: _ignored, ...rest } = d;
+      const { trends: bundledTrends, dial_pool: nextPool, error: _ignored, ...rest } = d;
+      setDialPool(nextPool ?? null);
       setMetrics(rest as MetricsResult);
       if (wantTrends) {
         applyTrendsPayload(bundledTrends ?? null);
@@ -707,6 +712,7 @@ export default function DashboardView({
         if (ac.signal.aborted) return;
         setTrendsError("Failed to load metrics");
         setMetrics(null);
+        setDialPool(null);
         if (wantTrends) {
           setTrends(null);
           setSparkMap(null);
@@ -1069,6 +1075,7 @@ export default function DashboardView({
               onToggleRail={toggleRail}
               kpi={{
                 metrics,
+                dialPool,
                 prevMetrics,
                 metricsLoading,
                 sparkMap,

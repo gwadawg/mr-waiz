@@ -28,9 +28,14 @@ import {
   reasonLabel,
 } from "@/lib/client-feedback";
 import ReportingTypeBadge, { ServiceProgramBadge } from "@/components/ReportingTypeBadge";
-import { getReportingTypeLabel } from "@/lib/reporting-types";
+import { getReportingTypeLabel, usesCallCenterKpiLayout } from "@/lib/reporting-types";
 import { getServiceProgramLabel } from "@/lib/service-program";
 import { clientLeadSourceLabel } from "@/lib/client-lead-source";
+import {
+  accountShapeLabel,
+  brandSubjectLabel,
+  qualifiesLeadsLabel,
+} from "@/lib/client-launch-setup";
 import { formatStatesLicensed } from "@/lib/us-states";
 import { timezoneLabel } from "@/lib/us-timezones";
 import ClientContactsSection from "@/components/ClientContactsSection";
@@ -59,10 +64,10 @@ import AccountWeekPlansClientHistory from "@/components/AccountWeekPlansClientHi
 import ClientAccountOffersPanel from "@/components/ClientAccountOffersPanel";
 import { requiresLifecycleFeedback } from "@/lib/client-feedback";
 import { isKickoffIncomplete, isKickoffLifecycle } from "@/lib/kickoff";
-import { isQaLifecycle, type QaLane } from "@/lib/qa-form";
 import { isLaunchKitLifecycle } from "@/lib/launch-kit/intake";
 import type { ClientContact } from "@/lib/client-contacts";
 import { csCallTypeLabel, type CsCallType } from "@/lib/cs-appointments";
+import { isQaLifecycle, type QaLane } from "@/lib/qa-form";
 
 // The client "file": a single place to oversee everything about one client.
 // Profile, billing history, lifecycle transitions, and ongoing notes.
@@ -139,6 +144,11 @@ type FileClient = {
   phone_live_transfer: string | null;
   live_transfer_approved: boolean | null;
   appointment_watch: boolean | null;
+  brand_subject?: string | null;
+  account_shape?: string | null;
+  team_routing_notes?: string | null;
+  qualifies_leads?: boolean | null;
+  qualification_notes?: string | null;
   offer_summary: string | null;
   facebook_page_name: string | null;
   instagram_handle: string | null;
@@ -1742,6 +1752,53 @@ export default function ClientFile({
                     </a>
                   ) : null}
                 />
+              </div>
+            </Section>
+
+            <Section title="Account setup">
+              <p className="text-xs mb-3" style={{ color: "#64748b" }}>
+                Whose name the ads use, and whether this is a team.
+                {!usesCallCenterKpiLayout(client?.reporting_type) &&
+                  " Qualify checked: hand-raise % and conversation % use qualified leads. Unchecked: those rates use every lead."}
+              </p>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-4">
+                <Detail
+                  label="Brand"
+                  value={brandSubjectLabel(client?.brand_subject)}
+                  missing={!brandSubjectLabel(client?.brand_subject)}
+                />
+                <Detail
+                  label="Team"
+                  value={accountShapeLabel(client?.account_shape)}
+                  missing={!accountShapeLabel(client?.account_shape)}
+                />
+                {!usesCallCenterKpiLayout(client?.reporting_type) && (
+                  <Detail
+                    label="We qualify leads"
+                    value={qualifiesLeadsLabel(client?.qualifies_leads)}
+                    missing={qualifiesLeadsLabel(client?.qualifies_leads) == null}
+                  />
+                )}
+                {client?.account_shape === "team" && (
+                  <Detail
+                    label="Lead routing"
+                    value={client.team_routing_notes ? (
+                      <span className="whitespace-pre-wrap">{client.team_routing_notes}</span>
+                    ) : null}
+                    missing={!client.team_routing_notes?.trim()}
+                    wide
+                  />
+                )}
+                {client?.qualifies_leads === true && !usesCallCenterKpiLayout(client?.reporting_type) && (
+                  <Detail
+                    label="How we qualify"
+                    value={client.qualification_notes ? (
+                      <span className="whitespace-pre-wrap">{client.qualification_notes}</span>
+                    ) : null}
+                    missing={!client.qualification_notes?.trim()}
+                    wide
+                  />
+                )}
               </div>
             </Section>
 

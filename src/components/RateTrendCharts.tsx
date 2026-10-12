@@ -11,6 +11,7 @@ import {
 } from "recharts";
 import type { KpiTimelineBucket } from "@/lib/metrics";
 import { usesCallCenterKpiLayout, type ReportingType } from "@/lib/kpi-layouts";
+import type { DialPool } from "@/lib/dial-pool";
 
 type Props = {
   kpiSeries: KpiTimelineBucket[];
@@ -19,6 +20,7 @@ type Props = {
   error?: string;
   hasDateRange: boolean;
   reportingType?: ReportingType;
+  dialPool?: DialPool | null;
 };
 
 type RateKey =
@@ -156,6 +158,7 @@ export default function RateTrendCharts({
   error = "",
   hasDateRange,
   reportingType = "RM",
+  dialPool = null,
 }: Props) {
   if (!hasDateRange) {
     return <p className="text-xs" style={{ color: "#475569" }}>Select a date range to view rate trends.</p>;
@@ -191,7 +194,13 @@ export default function RateTrendCharts({
         <ChartPanel
           key={chart.key}
           title={chart.title}
-          subtitle={chart.subtitle}
+          subtitle={
+            dialPool === "all" && chart.key === "hand_raise_rate"
+              ? "Unique (Booked ∪ Claimed ∪ LT) ÷ Total Leads"
+              : dialPool === "all" && chart.key === "conversation_rate"
+                ? "Unique (Show ∪ Claimed ∪ LT) ÷ Total Leads"
+                : chart.subtitle
+          }
           dataKey={chart.key}
           color={chart.color}
           format={chart.format}

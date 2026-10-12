@@ -3,6 +3,7 @@
  * (speed-to-lead summary via dashboard_speed_to_lead_summary when available).
  */
 
+import { dialPoolRate, type DialPool } from '@/lib/dial-pool';
 import {
   daysInRange,
   toCostTrendPoints,
@@ -286,6 +287,7 @@ export function metricsFromSqlCounts(
 function finalizeTimelineBucket(
   row: SqlTimelineRow,
   spend: number,
+  pool: DialPool | null = null,
 ): KpiTimelineBucket {
   const uniqueConversations = row.unique_conversation_leads;
   const dispositioned = row.shows + row.no_shows + row.lo_bailed;
@@ -310,10 +312,8 @@ function finalizeTimelineBucket(
     booking_rate:
       row.qualified_leads > 0 ? (uniqueBooked / row.qualified_leads) * 100 : null,
     lead_booking_rate: row.leads > 0 ? (uniqueBooked / row.leads) * 100 : null,
-    conversation_rate:
-      row.qualified_leads > 0 ? (uniqueConversations / row.qualified_leads) * 100 : null,
-    hand_raise_rate:
-      row.qualified_leads > 0 ? (uniqueHandRaise / row.qualified_leads) * 100 : null,
+    conversation_rate: dialPoolRate(uniqueConversations, row.qualified_leads, row.leads, pool),
+    hand_raise_rate: dialPoolRate(uniqueHandRaise, row.qualified_leads, row.leads, pool),
     booked_to_conversation_rate:
       uniqueBooked > 0 ? (uniqueBookedConverted / uniqueBooked) * 100 : null,
     lead_to_qual: row.leads > 0 ? (row.qualified_leads / row.leads) * 100 : null,
@@ -366,11 +366,12 @@ export function trendsFromSqlTimeline(
   rows: SqlTimelineRow[],
   spendRows: TrendSpendRow[],
   granularity: 'day' | 'week',
+  pool: DialPool | null = null,
 ): { series: CostTrendPoint[]; kpiSeries: KpiTimelineBucket[] } {
   const spendMap = spendByBucket(spendRows, granularity);
 
   const kpiSeries = rows.map(row =>
-    finalizeTimelineBucket(row, spendMap.get(row.bucket_date) ?? 0),
+    finalizeTimelineBucket(row, spendMap.get(row.bucket_date) ?? 0, pool),
   );
 
   const dailyCost: DailyCostBucket[] = rows.map(row => ({

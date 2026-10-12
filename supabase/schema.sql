@@ -102,6 +102,11 @@ create table if not exists clients (
   phone_notifications    text,
   live_transfer_approved boolean default false,
   appointment_watch      boolean,  -- dial appointments + live transfer (New Client Form)
+  brand_subject          text,     -- client | company — whose name ads and the funnel use
+  account_shape          text,     -- solo | team
+  team_routing_notes     text,     -- how leads are split; only when account_shape = team
+  qualifies_leads        boolean,  -- null on call center; true = dial qualified only; false = book every lead
+  qualification_notes    text,
   contact_role           text,
   appointment_settings   text,
   facebook_page_name     text,
@@ -301,6 +306,14 @@ begin
   if not exists (select 1 from pg_constraint where conname = 'clients_engagement_kind_check') then
     alter table clients add constraint clients_engagement_kind_check
       check (engagement_kind in ('initial', 'upsell', 'cross_sell'));
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'clients_brand_subject_check') then
+    alter table clients add constraint clients_brand_subject_check
+      check (brand_subject is null or brand_subject in ('client', 'company'));
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'clients_account_shape_check') then
+    alter table clients add constraint clients_account_shape_check
+      check (account_shape is null or account_shape in ('solo', 'team'));
   end if;
 end $$;
 

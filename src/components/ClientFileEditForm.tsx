@@ -5,7 +5,7 @@ import StatesLicensedSelect from "@/components/StatesLicensedSelect";
 import TimezoneSelect from "@/components/TimezoneSelect";
 import ReportingTypeBadge, { ReportingTypeSelectOptions } from "@/components/ReportingTypeBadge";
 import { normalizeReportingType, type ReportingType } from "@/lib/kpi-layouts";
-import { getReportingTypeLabel } from "@/lib/reporting-types";
+import { getReportingTypeLabel, usesCallCenterKpiLayout } from "@/lib/reporting-types";
 import {
   normalizeServiceProgram,
   serviceProgramApplies,
@@ -15,6 +15,14 @@ import {
 import { toDateInputValue } from "@/lib/client-dates";
 import ClientLeadSourceSelect from "@/components/ClientLeadSourceSelect";
 import { normalizeClientLeadSource } from "@/lib/client-lead-source";
+import {
+  ACCOUNT_SHAPE_LABELS,
+  ACCOUNT_SHAPES,
+  BRAND_SUBJECT_LABELS,
+  BRAND_SUBJECTS,
+  type AccountShape,
+  type BrandSubject,
+} from "@/lib/client-launch-setup";
 
 export type EditableClient = {
   name: string;
@@ -58,6 +66,11 @@ export type EditableClient = {
   phone_live_transfer: string | null;
   live_transfer_approved: boolean | null;
   appointment_watch: boolean | null;
+  brand_subject?: string | null;
+  account_shape?: string | null;
+  team_routing_notes?: string | null;
+  qualifies_leads?: boolean | null;
+  qualification_notes?: string | null;
   offer_summary: string | null;
   facebook_page_name: string | null;
   instagram_handle: string | null;
@@ -107,6 +120,11 @@ type Draft = {
   phone_live_transfer: string;
   live_transfer_approved: boolean;
   appointment_watch: boolean;
+  brand_subject: BrandSubject | "";
+  account_shape: AccountShape | "";
+  team_routing_notes: string;
+  qualifies_leads: "" | "yes" | "no";
+  qualification_notes: string;
   offer_summary: string;
   facebook_page_name: string;
   instagram_handle: string;
@@ -165,6 +183,11 @@ export function clientToDraft(c: EditableClient): Draft {
     phone_live_transfer: c.phone_live_transfer ?? "",
     live_transfer_approved: c.live_transfer_approved === true,
     appointment_watch: c.appointment_watch === true,
+    brand_subject: c.brand_subject === "client" || c.brand_subject === "company" ? c.brand_subject : "",
+    account_shape: c.account_shape === "solo" || c.account_shape === "team" ? c.account_shape : "",
+    team_routing_notes: c.team_routing_notes ?? "",
+    qualifies_leads: c.qualifies_leads === true ? "yes" : c.qualifies_leads === false ? "no" : "",
+    qualification_notes: c.qualification_notes ?? "",
     offer_summary: c.offer_summary ?? "",
     facebook_page_name: c.facebook_page_name ?? "",
     instagram_handle: c.instagram_handle ?? "",
@@ -213,6 +236,11 @@ export function draftToPatchBody(draft: Draft, canViewRevenue: boolean): Record<
     phone_live_transfer: draft.phone_live_transfer.trim() || null,
     live_transfer_approved: draft.live_transfer_approved,
     appointment_watch: draft.appointment_watch,
+    brand_subject: draft.brand_subject || null,
+    account_shape: draft.account_shape || null,
+    team_routing_notes: draft.account_shape === "team" ? draft.team_routing_notes.trim() || null : null,
+    qualifies_leads: draft.qualifies_leads === "yes" ? true : draft.qualifies_leads === "no" ? false : null,
+    qualification_notes: draft.qualifies_leads === "yes" ? draft.qualification_notes.trim() || null : null,
     offer_summary: draft.offer_summary.trim() || null,
     facebook_page_name: draft.facebook_page_name.trim() || null,
     instagram_handle: draft.instagram_handle.trim() || null,
@@ -461,6 +489,72 @@ export default function ClientFileEditForm({
               {draft.lifecycle_status === "active" ? "Live in dashboards" : "Offline — not in reporting views"}
             </span>
           </label>
+        </div>
+      </Section>
+
+      <Section title="Account setup">
+        <p className="text-xs mb-3" style={{ color: "#64748b" }}>
+          Whose name the ads use, and whether this is a team.
+          {!usesCallCenterKpiLayout(draft.reporting_type) &&
+            " Qualify checked: hand-raise % and conversation % use qualified leads. Unchecked: those rates use every lead."}
+        </p>
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-3">
+          <SelectField
+            label="Brand"
+            value={draft.brand_subject}
+            onChange={v => patch("brand_subject", (v === "client" || v === "company" ? v : "") as BrandSubject | "")}
+            highlightEmpty
+          >
+            <option value="">Unset</option>
+            {BRAND_SUBJECTS.map(value => (
+              <option key={value} value={value}>{BRAND_SUBJECT_LABELS[value]}</option>
+            ))}
+          </SelectField>
+          <SelectField
+            label="Team"
+            value={draft.account_shape}
+            onChange={v => patch("account_shape", (v === "solo" || v === "team" ? v : "") as AccountShape | "")}
+            highlightEmpty
+          >
+            <option value="">Unset</option>
+            {ACCOUNT_SHAPES.map(value => (
+              <option key={value} value={value}>{ACCOUNT_SHAPE_LABELS[value]}</option>
+            ))}
+          </SelectField>
+          {!usesCallCenterKpiLayout(draft.reporting_type) && (
+            <SelectField
+              label="We qualify leads"
+              value={draft.qualifies_leads}
+              onChange={v => patch("qualifies_leads", v === "yes" || v === "no" ? v : "")}
+              highlightEmpty
+            >
+              <option value="">Unset</option>
+              <option value="yes">Yes — dial qualified only</option>
+              <option value="no">No — book every lead</option>
+            </SelectField>
+          )}
+          {draft.account_shape === "team" && (
+            <Field
+              label="Lead routing"
+              value={draft.team_routing_notes}
+              onChange={v => patch("team_routing_notes", v)}
+              placeholder="Who receives each lead, and how it is split."
+              highlightEmpty
+              wide
+              multiline
+            />
+          )}
+          {draft.qualifies_leads === "yes" && !usesCallCenterKpiLayout(draft.reporting_type) && (
+            <Field
+              label="How we qualify"
+              value={draft.qualification_notes}
+              onChange={v => patch("qualification_notes", v)}
+              placeholder="What counts as a qualified lead for this client."
+              highlightEmpty
+              wide
+              multiline
+            />
+          )}
         </div>
       </Section>
 

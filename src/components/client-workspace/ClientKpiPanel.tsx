@@ -14,6 +14,7 @@ import {
   type ExplorerConv,
 } from "@/lib/conversion-explorer";
 import type { CostTrendPoint, KpiTimelineBucket, MetricsResult } from "@/lib/metrics";
+import type { DialPool } from "@/lib/dial-pool";
 import type { DashboardClient, DashboardFilters } from "@/lib/use-dashboard-filters";
 import type { CostTrendMarker } from "../CostTrendCharts";
 
@@ -44,6 +45,7 @@ export type ClientKpiPanelData = {
   trendsError: string;
   reportingType: ReportingType;
   hasMixedReportingTypes: boolean;
+  dialPool?: DialPool | null;
   clientLabel?: string;
   overduePending: number | null;
 };
@@ -84,6 +86,7 @@ export default function ClientKpiPanel({
     trendsError,
     reportingType,
     hasMixedReportingTypes,
+    dialPool = null,
     clientLabel,
     overduePending,
   } = data;
@@ -249,11 +252,23 @@ export default function ClientKpiPanel({
               </p>
             )}
 
+            {dialPool && (
+              <p
+                className="text-xs rounded-lg px-3 py-2"
+                style={{ color: "#94a3b8", background: "#0a1628", border: "1px solid rgba(255,255,255,0.06)" }}
+              >
+                {dialPool === "all"
+                  ? "Qualify is unchecked. Hand-raise % and conversation % use every lead."
+                  : "Qualify is checked. Hand-raise % and conversation % use qualified leads."}
+              </p>
+            )}
+
             <KpiSections
               metrics={metrics}
               reportingType={reportingType}
               previous={filters.compare ? prevMetrics : null}
               spark={sparkMap}
+              dialPool={dialPool}
             />
 
             <KpiSection title="Appointment Breakdown">
@@ -346,6 +361,7 @@ export default function ClientKpiPanel({
                 error={trendsError}
                 hasDateRange={hasDateRange}
                 reportingType={reportingType}
+                dialPool={dialPool}
               />
             </KpiSection>
 

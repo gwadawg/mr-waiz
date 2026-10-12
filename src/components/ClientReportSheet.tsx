@@ -8,6 +8,7 @@ import type {
   ClientReportWorkRow,
 } from "@/lib/client-report-itemized";
 import type { MetricsResult, KpiTimelineBucket, CostTrendPoint } from "@/lib/metrics";
+import type { DialPool } from "@/lib/dial-pool";
 import {
   formatKpiValue,
   type KpiSectionDefinition,
@@ -31,6 +32,7 @@ type Props = {
   sections: KpiSectionDefinition[];
   charts: ClientReportChartFlags;
   reportingType: ReportingType;
+  dialPool?: DialPool | null;
   showCostCharts: boolean;
   kpiSeries?: KpiTimelineBucket[];
   costSeries?: CostTrendPoint[];
@@ -498,6 +500,7 @@ export default function ClientReportSheet({
   sections,
   charts,
   reportingType,
+  dialPool = null,
   showCostCharts,
   kpiSeries = [],
   costSeries = [],
@@ -667,6 +670,7 @@ export default function ClientReportSheet({
                 error={trendsError}
                 hasDateRange={hasDateRange}
                 reportingType={reportingType}
+                dialPool={dialPool}
               />
             </div>
           </section>
