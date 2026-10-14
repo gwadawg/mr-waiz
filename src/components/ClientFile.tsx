@@ -155,6 +155,7 @@ type FileClient = {
   instagram_handle: string | null;
   ad_account_name: string | null;
   ad_account_url: string | null;
+  meta_pixel_id?: string | null;
   thank_you_page_url: string | null;
   second_landing_page_url: string | null;
   onboarding_clickup_task_id?: string | null;
@@ -361,6 +362,7 @@ export default function ClientFile({
   initialTab?: LegacyTabKey;
 }) {
   const [client, setClient] = useState<FileClient | null>(null);
+  const [pixelOptions, setPixelOptions] = useState<{ id: string; name: string }[]>([]);
   const [welcomeBackUrl, setWelcomeBackUrl] = useState<string | null>(null);
   const [welcomeBackCopied, setWelcomeBackCopied] = useState(false);
   const [billings, setBillings] = useState<FileBilling[]>([]);
@@ -450,12 +452,14 @@ export default function ClientFile({
       .then(async ([d, activityRes, relationshipRes]) => {
         if (d.error) {
           setError(d.error);
+          setPixelOptions([]);
           setWelcomeBackUrl(null);
           setCsAppointments([]);
           setTouchpointsOpen([]);
           setTouchpointsHistory([]);
         } else {
           setClient(d.client ?? null);
+          setPixelOptions(Array.isArray(d.pixel_options) ? d.pixel_options : []);
           setWelcomeBackUrl(
             typeof d.welcome_back_url === "string" && d.welcome_back_url.trim()
               ? d.welcome_back_url.trim()
@@ -1144,8 +1148,9 @@ export default function ClientFile({
         ) : editing && client ? (
           <div className="px-6 py-5">
             <ClientFileEditForm
-              key={`${client.id}-${client.churned_at ?? ""}-${client.launch_date ?? ""}-${client.date_signed ?? ""}-${client.onboarding_clickup_task_id ?? client.clickup_task_id ?? ""}-${client.billing_email ?? ""}-${client.offer ?? ""}-${client.ghl_location_id ?? ""}`}
+              key={`${client.id}-${client.churned_at ?? ""}-${client.launch_date ?? ""}-${client.date_signed ?? ""}-${client.onboarding_clickup_task_id ?? client.clickup_task_id ?? ""}-${client.billing_email ?? ""}-${client.offer ?? ""}-${client.ghl_location_id ?? ""}-${client.meta_pixel_id ?? ""}`}
               client={client}
+              pixelOptions={pixelOptions}
               canViewRevenue={canViewRevenue}
               saving={savingProfile}
               saveError={saveError}
@@ -1807,9 +1812,13 @@ export default function ClientFile({
 
             <Section title="Media buying">
               <p className="text-xs mb-3" style={{ color: "#64748b" }}>
-                Meta page and ad account for this offer / subaccount.
+                Meta page, ad account, and the pixel this client’s conversions are sent to.
               </p>
               <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-4">
+                <Detail
+                  label="Meta pixel"
+                  value={pixelOptions.find(pixel => pixel.id === client?.meta_pixel_id)?.name ?? "Not set"}
+                />
                 <Detail label="Facebook page" value={client?.facebook_page_name} missing={!client?.facebook_page_name} />
                 <Detail label="Instagram" value={client?.instagram_handle} missing={!client?.instagram_handle} />
                 <Detail label="Ad account name" value={client?.ad_account_name} missing={!client?.ad_account_name} />

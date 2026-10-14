@@ -12,6 +12,7 @@ import {
 } from '@/lib/time';
 import { onEventTouchpointHooks } from '@/lib/cs-touchpoint-rules';
 import { ensureDealFromConversionEvent } from '@/lib/loan-deals';
+import { sendMetaStages, stagesForEvent, stagesForFlagChange } from '@/lib/meta-capi';
 import {
   OUTCOME_EVENT_TYPES,
   propagateBookingAgentToOutcomes,
@@ -152,7 +153,7 @@ export async function ingestWebhookEvent(
 
     const { data: rows, error: selErr } = await service
       .from('events')
-      .select('id, raw, is_qualified, is_hot, is_out_of_state')
+      .select('id, lead_id, fbclid, raw, is_qualified, is_hot, is_out_of_state')
       .eq('client_id', client_id)
       .eq('event_type', 'lead')
       .eq('ghl_contact_id', ghlContactId)
@@ -190,6 +191,11 @@ export async function ingestWebhookEvent(
       };
     }
 
+    const incomingFbclid = jsonStringField(payload.fbclid);
+    if (incomingFbclid && !jsonStringField(existing.fbclid)) {
+      updates.fbclid = incomingFbclid;
+    }
+
     const prevRaw =
       typeof existing.raw === 'object' && existing.raw !== null && !Array.isArray(existing.raw)
         ? (existing.raw as Record<string, unknown>)
@@ -202,6 +208,28 @@ export async function ingestWebhookEvent(
 
     const { error: updErr } = await service.from('events').update(updates).eq('id', existing.id);
     if (updErr) return { error: updErr.message, status: 500 };
+
+    const flagStages = stagesForFlagChange(
+      { is_qualified: existing.is_qualified, is_hot: existing.is_hot },
+      {
+        is_qualified: updates.is_qualified === true ? true : undefined,
+        is_hot: updates.is_hot === true ? true : undefined,
+      },
+    );
+    if (flagStages.length > 0 && client_id) {
+      await sendMetaStages(service, {
+        clientId: client_id,
+        stages: flagStages,
+        eventId: existing.id,
+        leadId: jsonStringField(existing.lead_id),
+        occurredAt: new Date().toISOString(),
+        ghlContactId,
+        email: jsonStringField(payload.lead_email),
+        phone: jsonStringField(payload.lead_phone),
+        fbclid: incomingFbclid,
+        raw: payload,
+      });
+    }
 
     return {
       ok: true,
@@ -305,6 +333,7 @@ export async function ingestWebhookEvent(
   const utm_source = jsonStringField(payload.utm_source);
   const utm_campaign = jsonStringField(payload.utm_campaign);
   const utm_term = jsonStringField(payload.utm_term ?? payload.utmTerm);
+  const fbclid = jsonStringField(payload.fbclid);
   const ad_name = jsonStringField(payload.ad_name ?? payload.adName ?? payload.utm_content);
   // Make only maps GHL "UTM Ad Name" → ad_name today. Stamp utm_content as the
   // immutable original so later ad_name remaps cannot silently move attribution.
@@ -421,6 +450,7 @@ export async function ingestWebhookEvent(
     utm_campaign,
     utm_content,
     utm_term,
+    fbclid,
     lead_source: isLead ? lead_source : null,
     is_ai_booked,
     dq_reason: isManualDq ? dq_reason : null,
@@ -542,7 +572,7 @@ export async function ingestWebhookEvent(
   const { data: inserted, error } = await service
     .from('events')
     .insert(eventRow)
-    .select('id')
+    .select('id, lead_id')
     .single();
 
   if (error) {
@@ -619,6 +649,26 @@ export async function ingestWebhookEvent(
       });
     } catch (err) {
       console.error('[loan_deals] conversion event hook failed', err);
+    }
+
+    const metaStages = stagesForEvent({
+      eventType: normalizedEventType,
+      isQualified: eventRow.is_qualified === true,
+      isHot: eventRow.is_hot === true,
+    });
+    if (metaStages.length > 0) {
+      await sendMetaStages(service, {
+        clientId: client_id,
+        stages: metaStages,
+        eventId: inserted.id,
+        leadId: jsonStringField(inserted.lead_id),
+        occurredAt: occurredAtIso,
+        ghlContactId: ghl_contact_id,
+        email: lead_email,
+        phone: lead_phone,
+        fbclid,
+        raw: payload,
+      });
     }
   }
 

@@ -9,6 +9,7 @@ import {
   type SlackChannelRow,
 } from "@/lib/slack-channels";
 import { BUILT_IN_AUTOMATIONS } from "@/lib/built-in-automations";
+import MetaPixelLibrary from "@/components/MetaPixelLibrary";
 
 type TeamChannelDraft = {
   slug: string;
@@ -273,6 +274,8 @@ export default function AutomationsManager() {
           {error}
         </div>
       )}
+
+      <MetaPixelLibrary />
 
       <SectionCard
         title="Team channels"

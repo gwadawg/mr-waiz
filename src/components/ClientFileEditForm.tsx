@@ -76,6 +76,7 @@ export type EditableClient = {
   instagram_handle: string | null;
   ad_account_name: string | null;
   ad_account_url: string | null;
+  meta_pixel_id?: string | null;
   thank_you_page_url: string | null;
   second_landing_page_url: string | null;
 };
@@ -130,6 +131,7 @@ type Draft = {
   instagram_handle: string;
   ad_account_name: string;
   ad_account_url: string;
+  meta_pixel_id: string;
   thank_you_page_url: string;
   second_landing_page_url: string;
 };
@@ -193,6 +195,7 @@ export function clientToDraft(c: EditableClient): Draft {
     instagram_handle: c.instagram_handle ?? "",
     ad_account_name: c.ad_account_name ?? "",
     ad_account_url: c.ad_account_url ?? "",
+    meta_pixel_id: c.meta_pixel_id ?? "",
     thank_you_page_url: c.thank_you_page_url ?? "",
     second_landing_page_url: c.second_landing_page_url ?? "",
   };
@@ -246,6 +249,7 @@ export function draftToPatchBody(draft: Draft, canViewRevenue: boolean): Record<
     instagram_handle: draft.instagram_handle.trim() || null,
     ad_account_name: draft.ad_account_name.trim() || null,
     ad_account_url: draft.ad_account_url.trim() || null,
+    meta_pixel_id: draft.meta_pixel_id || null,
     thank_you_page_url: draft.thank_you_page_url.trim() || null,
     second_landing_page_url: draft.second_landing_page_url.trim() || null,
   };
@@ -283,6 +287,7 @@ export function countMissingFields(c: EditableClient | null): number {
 
 export default function ClientFileEditForm({
   client,
+  pixelOptions,
   canViewRevenue,
   saving,
   saveError,
@@ -290,6 +295,7 @@ export default function ClientFileEditForm({
   onRequestOffboard,
 }: {
   client: EditableClient;
+  pixelOptions: { id: string; name: string }[];
   canViewRevenue: boolean;
   saving: boolean;
   saveError: string | null;
@@ -590,7 +596,16 @@ export default function ClientFileEditForm({
       </Section>
 
       <Section title="Media buying">
+        <p className="text-xs mb-3" style={{ color: "#64748b" }}>
+          Qualified, hot, proposal, submitted, and funded events for this client go to the pixel you pick. Reverse clients share the reverse pixel. DSCR clients share the DSCR pixel.
+        </p>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-3">
+          <SelectField label="Meta pixel" value={draft.meta_pixel_id} onChange={v => patch("meta_pixel_id", v)}>
+            <option value="">No pixel</option>
+            {pixelOptions.map(pixel => (
+              <option key={pixel.id} value={pixel.id}>{pixel.name}</option>
+            ))}
+          </SelectField>
           <Field label="Facebook page" value={draft.facebook_page_name} onChange={v => patch("facebook_page_name", v)} />
           <Field label="Instagram" value={draft.instagram_handle} onChange={v => patch("instagram_handle", v)} placeholder="@handle" />
           <Field label="Ad account name" value={draft.ad_account_name} onChange={v => patch("ad_account_name", v)} />
