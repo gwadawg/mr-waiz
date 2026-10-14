@@ -1474,6 +1474,237 @@
     line-height: 1.55;
   }
 
+  /* ── Cost of a conversation ── */
+  .cost-card {
+    border: 1px solid var(--divider);
+    border-radius: 12px;
+    background: var(--white);
+    box-shadow: var(--shadow);
+    padding: 32px;
+    margin-bottom: 20px;
+  }
+  .cost-card-head {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 18px;
+    align-items: start;
+    margin-bottom: 24px;
+  }
+  .cost-step {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 15px;
+    font-weight: 800;
+    color: var(--white);
+    background: var(--navy);
+    border-radius: 6px;
+    padding: 4px 9px;
+    letter-spacing: 0.06em;
+  }
+  .cost-card h3 {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 28px;
+    font-weight: 800;
+    text-transform: uppercase;
+    color: var(--navy);
+    line-height: 1.05;
+    margin-bottom: 8px;
+  }
+  .cost-card-head p {
+    font-size: 15px;
+    color: var(--mid);
+    line-height: 1.6;
+    max-width: 46em;
+  }
+
+  .cost-chart {
+    background: var(--light);
+    border-radius: 10px;
+    padding: 20px 12px 8px;
+  }
+  .cost-chart svg { display: block; width: 100%; height: auto; max-width: 760px; margin: 0 auto; }
+  .cc-grid line { stroke: var(--divider); stroke-width: 1; stroke-dasharray: 3 5; }
+  .cc-axis line { stroke: var(--navy); stroke-width: 1.5; opacity: 0.35; }
+  .cc-head {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    fill: var(--navy);
+  }
+  .cc-mid { font-size: 13px; fill: var(--mid); font-style: italic; }
+  .cc-band { fill: var(--accent); opacity: 0.18; }
+  .cc-band-old { fill: var(--soft); opacity: 0.14; }
+  .cc-new { stroke: var(--navy); stroke-width: 4; stroke-linecap: round; }
+  .cc-old { stroke: var(--soft); stroke-width: 3; stroke-dasharray: 8 7; stroke-linecap: round; }
+  .cc-dot-old { fill: var(--white); stroke: var(--soft); stroke-width: 3; }
+  .cc-dot-new { fill: var(--gold); stroke: var(--navy); stroke-width: 3; }
+  .cc-val-old, .cc-val-new {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 22px;
+    font-weight: 800;
+  }
+  .cc-val-old { fill: var(--soft); }
+  .cc-val-new { fill: var(--navy); }
+  .cc-tag-old, .cc-tag-new {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .cc-tag-old { fill: var(--soft); }
+  .cc-tag-new { fill: var(--accent-deep); }
+  .cc-cross { fill: none; stroke: #c99a10; stroke-width: 2.5; }
+  .cc-callout { stroke: #c99a10; stroke-width: 1.5; stroke-dasharray: 2 4; }
+  .cc-cross-text {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 18px;
+    font-weight: 800;
+    text-transform: uppercase;
+    fill: #8a6a00;
+  }
+  .cc-cross-sub { font-size: 12px; fill: #8a6a00; }
+
+  .cost-reads {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-top: 20px;
+  }
+  .cost-read {
+    border-radius: 10px;
+    padding: 20px;
+  }
+  .cost-read.old { background: #f8f9fc; border: 1px solid var(--divider); }
+  .cost-read.new { background: var(--navy); color: var(--white); }
+  .cost-read-name {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 20px;
+    font-weight: 800;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+  .cost-read.old .cost-read-name { color: var(--soft); }
+  .cost-read.new .cost-read-name { color: var(--gold); }
+  .cost-dots {
+    display: grid;
+    grid-template-columns: repeat(10, 14px);
+    gap: 6px;
+    margin-bottom: 14px;
+  }
+  .cost-dots i {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    display: block;
+  }
+  .cost-read.old .cost-dots i { background: #e3e8f4; }
+  .cost-read.old .cost-dots i.on { background: var(--soft); }
+  .cost-read.old .cost-dots i.half { background: linear-gradient(90deg, var(--soft) 50%, #e3e8f4 50%); }
+  .cost-read.new .cost-dots i { background: rgba(255, 255, 255, 0.12); }
+  .cost-read.new .cost-dots i.on { background: var(--green); box-shadow: 0 0 10px rgba(124, 255, 122, 0.45); }
+  .cost-read p { font-size: 14px; line-height: 1.6; }
+  .cost-read.old p { color: var(--mid); }
+  .cost-read.old p strong { color: var(--dark); }
+  .cost-read.new p { color: rgba(255, 255, 255, 0.8); }
+  .cost-read.new p strong { color: var(--white); }
+  .cost-foot { font-size: 12px; color: var(--soft); margin-top: 12px; }
+
+  .vehicle-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+  .vehicle-card {
+    border-radius: 10px;
+    padding: 22px 22px 20px;
+    display: flex;
+    flex-direction: column;
+  }
+  .vehicle-card.old { background: #f8f9fc; border: 1px solid var(--divider); }
+  .vehicle-card.new { background: var(--navy); }
+  .vehicle-name {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 20px;
+    font-weight: 800;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+  .vehicle-card.old .vehicle-name { color: var(--soft); }
+  .vehicle-card.new .vehicle-name { color: var(--gold); }
+  .vehicle-figure {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: clamp(40px, 5vw, 54px);
+    font-weight: 800;
+    line-height: 1;
+  }
+  .vehicle-card.old .vehicle-figure { color: var(--soft); }
+  .vehicle-card.new .vehicle-figure { color: var(--white); }
+  .vehicle-unit {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin: 6px 0 14px;
+  }
+  .vehicle-card.old .vehicle-unit { color: var(--soft); }
+  .vehicle-card.new .vehicle-unit { color: var(--accent); }
+  .vehicle-scale {
+    position: relative;
+    height: 10px;
+    border-radius: 5px;
+    margin-bottom: 16px;
+  }
+  .vehicle-card.old .vehicle-scale { background: #e3e8f4; }
+  .vehicle-card.new .vehicle-scale { background: rgba(255, 255, 255, 0.1); }
+  .vehicle-fill {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    border-radius: 5px;
+  }
+  .vehicle-card.old .vehicle-fill { background: var(--soft); }
+  .vehicle-card.new .vehicle-fill { background: var(--gold); }
+  .vehicle-card p { font-size: 14px; line-height: 1.6; }
+  .vehicle-card.old p { color: var(--mid); }
+  .vehicle-card.new p { color: rgba(255, 255, 255, 0.82); }
+  .vehicle-repeat {
+    margin-top: auto;
+    padding-top: 16px;
+  }
+  .vehicle-card.old .vehicle-repeat { border-top: 1px solid var(--divider); margin-top: 16px; }
+  .vehicle-card.new .vehicle-repeat { border-top: 1px solid var(--line); margin-top: 16px; }
+  .vehicle-repeat-label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+  .vehicle-card.old .vehicle-repeat-label { color: var(--soft); }
+  .vehicle-card.new .vehicle-repeat-label { color: var(--accent); }
+  .vehicle-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+  .vehicle-chips span {
+    font-size: 12px;
+    font-weight: 600;
+    border-radius: 999px;
+    padding: 4px 10px;
+  }
+  .vehicle-card.old .vehicle-chips span { background: #e3e8f4; color: var(--mid); }
+  .vehicle-card.new .vehicle-chips span { border: 1px dashed rgba(245, 200, 66, 0.55); color: var(--gold); }
+  .vehicle-card.new .vehicle-chips span.on { background: var(--gold); border-color: var(--gold); color: var(--navy); }
+  .vehicle-repeat p { font-size: 13px; }
+
+  @media (max-width: 760px) {
+    .cost-card { padding: 22px 18px; }
+    .cost-chart { overflow-x: auto; padding: 16px 8px 4px; }
+    .cost-chart svg { min-width: 540px; }
+    .cost-reads { grid-template-columns: 1fr; }
+    .vehicle-grid { grid-template-columns: 1fr; }
+    .cost-dots { grid-template-columns: repeat(10, 12px); gap: 5px; }
+    .cost-dots i { width: 12px; height: 12px; }
+  }
+
   @media (max-width: 960px) {
     .price-grid { grid-template-columns: 1fr; }
     table.months { font-size: 13px; }
@@ -1562,41 +1793,139 @@
 <section class="block contrast" id="plan">
   <div class="wrap">
     <div class="label">What we aligned on</div>
-    <h2>DSCR first. One shared line.</h2>
+    <h2>What a conversation really costs.</h2>
     <p class="lead">
-      You want a source your loan officers can work, and a system the brokerage owns —
-      useful now, and a reason people join later. We start with exclusive DSCR inbound under
-      <strong>Trust One</strong>. One phone number. Whoever picks up takes the borrower.
+      You want a source your loan officers can work, and a system the brokerage owns.
+      We start with exclusive DSCR inbound under <strong>Trust One</strong>. One phone number.
+      Whoever picks up takes the borrower. Two numbers decide whether that pays: what it costs
+      to get a borrower on the phone, and what that borrower's loan is worth.
     </p>
-    <div class="contrast-grid">
-      <div class="contrast-card old">
-        <h3>Lead store today</h3>
-        <p>A cheap opt-in can still be an expensive conversation. The name is already in other hands.</p>
-        <ul>
-          <li>Sold onward so the store can widen its margin</li>
-          <li>On DSCR files we have prospected, about 10% become a verbal conversation</li>
-          <li>A $15 lead at that contact rate is about $150 before anyone can sell</li>
-          <li>The brokerage does not own the ad account or the data</li>
-        </ul>
+
+    <div class="cost-card">
+      <div class="cost-card-head">
+        <span class="cost-step">01</span>
+        <div>
+          <h3>The price tag is the lead. The cost is the conversation.</h3>
+          <p>A lead is worth nothing until someone talks to the borrower. Divide the lead price by the share of leads you actually reach. A shared lead looks cheap on the invoice and turns out to be the most expensive conversation you buy.</p>
+        </div>
       </div>
-      <div class="contrast-card new">
-        <h3>Trust One DSCR system</h3>
-        <p>Direct to the investor. Your brand. Your ad account. Our team on the dials.</p>
-        <ul>
-          <li>Meta ads + branded landers. TCPA opt-in. Every name is yours</li>
-          <li>In a 20–30 state footprint, opt-ins usually land around $35–$55</li>
-          <li>Verbal contact holds at a 35% floor. Some accounts are at 49%</li>
-          <li>Plan on $80–$110 in ad spend per live conversation, after the test month</li>
-        </ul>
+
+      <div class="cost-chart">
+        <svg viewBox="0 0 680 340" role="img" aria-labelledby="cost-chart-title cost-chart-desc">
+          <title id="cost-chart-title">Price per lead versus price per conversation</title>
+          <desc id="cost-chart-desc">Shared leads from aggregators average $25 and reach 10 to 15 percent of borrowers, so a conversation costs $167 to $250. Owned leads cost $35 to $55 and a conversation costs $80 to $110. The two lines cross.</desc>
+          <g class="cc-grid">
+            <line x1="120" y1="300" x2="520" y2="300" />
+            <line x1="120" y1="248.1" x2="520" y2="248.1" />
+            <line x1="120" y1="196.2" x2="520" y2="196.2" />
+            <line x1="120" y1="144.2" x2="520" y2="144.2" />
+            <line x1="120" y1="92.3" x2="520" y2="92.3" />
+            <line x1="120" y1="40.4" x2="520" y2="40.4" />
+          </g>
+          <g class="cc-axis">
+            <line x1="120" y1="30" x2="120" y2="300" />
+            <line x1="520" y1="30" x2="520" y2="300" />
+          </g>
+          <text class="cc-head" x="120" y="18" text-anchor="middle">Price per lead</text>
+          <text class="cc-head" x="520" y="18" text-anchor="middle">Price per conversation</text>
+          <text class="cc-mid" x="320" y="326" text-anchor="middle">÷ share of leads you reach</text>
+
+          <polygon class="cc-band-old" points="120,274 520,40.4 520,126.6" />
+          <polygon class="cc-band" points="120,242.9 520,185.8 520,216.9 120,263.7" />
+          <line class="cc-new" x1="120" y1="253.3" x2="520" y2="201.3" />
+          <line class="cc-old" x1="120" y1="274" x2="520" y2="84" />
+
+          <circle class="cc-dot-old" cx="120" cy="274" r="5" />
+          <circle class="cc-dot-old" cx="520" cy="84" r="5" />
+          <circle class="cc-dot-new" cx="120" cy="253.3" r="6" />
+          <circle class="cc-dot-new" cx="520" cy="201.3" r="6" />
+
+          <text class="cc-val-old" x="108" y="283" text-anchor="end">$25</text>
+          <text class="cc-val-new" x="108" y="255" text-anchor="end">$35–55</text>
+          <text class="cc-val-old" x="532" y="89">$167–250</text>
+          <text class="cc-val-new" x="532" y="206">$80–110</text>
+
+          <text class="cc-tag-old" x="532" y="106">Lead aggregators</text>
+          <text class="cc-tag-new" x="532" y="223">Owned leads</text>
+
+          <circle class="cc-cross" cx="180" cy="245.5" r="9" />
+          <line class="cc-callout" x1="180" y1="236" x2="180" y2="138" />
+          <text class="cc-cross-text" x="168" y="112">The lines cross early.</text>
+          <text class="cc-cross-sub" x="168" y="128">The cheap lead costs more to talk to.</text>
+        </svg>
       </div>
+
+      <div class="cost-reads">
+        <div class="cost-read old">
+          <div class="cost-read-name">Lead aggregators</div>
+          <div class="cost-dots" aria-hidden="true">
+            <i class="on"></i><i class="on"></i><i class="half"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+            <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+          </div>
+          <p><strong>10–15% pick up.</strong> The same name is sold to several lenders, and you never own it. The borrower's phone fills with calls, so they stop answering numbers they don't know.</p>
+        </div>
+        <div class="cost-read new">
+          <div class="cost-read-name">Owned leads</div>
+          <div class="cost-dots" aria-hidden="true">
+            <i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i>
+            <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+          </div>
+          <p><strong>35% floor, some accounts at 49%.</strong> Nobody else has the name. The ads and pages screen before the opt-in: the borrower reads through, answers the qualifying questions, and expects the call.</p>
+        </div>
+      </div>
+      <p class="cost-foot">Each dot is 5 of every 100 leads. Lit dots are the borrowers you actually talk to.</p>
     </div>
+
+    <div class="cost-card vehicle">
+      <div class="cost-card-head">
+        <span class="cost-step">02</span>
+        <div>
+          <h3>Then look at what the conversation is about.</h3>
+          <p>Reaching people is half of it. The other half is the loan they want. The ads decide which loan shows up on the phone, and that decides the check.</p>
+        </div>
+      </div>
+      <div class="vehicle-grid">
+        <div class="vehicle-card old">
+          <div class="vehicle-name">Lead aggregators</div>
+          <div class="vehicle-figure">~$2,500</div>
+          <div class="vehicle-unit">per closing · mostly HELOCs</div>
+          <div class="vehicle-scale" aria-hidden="true">
+            <span class="vehicle-fill" style="left:0;width:31%"></span>
+          </div>
+          <p>Whatever the aggregator has to sell, mostly HELOCs and small balances. A lot of work for a thin check on each file.</p>
+          <div class="vehicle-repeat">
+            <div class="vehicle-repeat-label">After the closing</div>
+            <div class="vehicle-chips" aria-hidden="true"><span class="on">HELOC</span><span>Refi later</span></div>
+            <p>To be fair, a homeowner can come back to refinance. But it is one home, so that is usually where it ends.</p>
+          </div>
+        </div>
+        <div class="vehicle-card new">
+          <div class="vehicle-name">Owned leads</div>
+          <div class="vehicle-figure">$4,000–$8,000</div>
+          <div class="vehicle-unit">per closing · DSCR</div>
+          <div class="vehicle-scale" aria-hidden="true">
+            <span class="vehicle-fill" style="left:50%;width:50%"></span>
+          </div>
+          <p>We aim the ads at DSCR and reverse borrowers on purpose. Bigger loans, and more you can charge on each one.</p>
+          <div class="vehicle-repeat">
+            <div class="vehicle-repeat-label">After the closing</div>
+            <div class="vehicle-chips" aria-hidden="true">
+              <span class="on">Property 1</span><span>Refi later</span><span>Property 2</span><span>Property 3</span><span>Next buy</span>
+            </div>
+            <p>Investors refinance too, so on that point it is a wash. The difference is everything after: they own more than one property and keep buying, and each one is another file.</p>
+          </div>
+        </div>
+      </div>
+      <p class="cost-foot">Bars run from $0 to $8,000 per closing. What you make depends on what you charge on each loan. These are typical ranges, not a promise.</p>
+    </div>
+
     <div class="split-note" style="margin-top:28px">
-      <b>Why the conversation is the number</b>
+      <b>How to read your numbers</b>
       <p>
-        A sale happens on a phone call, not a text reply. We plan the account around what it costs
-        to have that conversation with someone who opted in to Trust One. Tighter qualification
-        means fewer handoffs and a higher cost per conversation. You sign off on the questions.
-        For DSCR that starts with credit score and confirming it is an investment property.
+        Judge your loan officers on the borrowers they spoke with and the proposals they sent,
+        not on every lead bought. Measured against raw leads, a good closer looks bad. Tighter
+        qualification means fewer handoffs and a higher cost per conversation. You sign off on
+        the questions. For DSCR that starts with credit score and confirming it is an investment property.
       </p>
     </div>
   </div>
