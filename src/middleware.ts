@@ -1,6 +1,7 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { BRAND_FAVICON_PATH, showsBrandFavicon, withBrandFavicon } from './lib/brand-favicon';
 import {
   decideOfferLetterRequest,
   isOfferLetterHost,
@@ -106,11 +107,31 @@ function handleOfferLetterHost(request: NextRequest): NextResponse {
     rewriteUrl.pathname = `/offer-letters/${decision.slug}/${decision.token}`;
     return NextResponse.rewrite(rewriteUrl);
   }
-  return new NextResponse(PRIVATE_LINK_HTML, { status: 404, headers: PRIVATE_HEADERS });
+  const html = withBrandFavicon(
+    PRIVATE_LINK_HTML,
+    request.headers.get('x-forwarded-host'),
+    request.headers.get('host'),
+  );
+  return new NextResponse(html, { status: 404, headers: PRIVATE_HEADERS });
+}
+
+function brandedFavicon(request: NextRequest): NextResponse {
+  const branded = showsBrandFavicon(
+    request.headers.get('x-forwarded-host'),
+    request.headers.get('host'),
+  );
+  if (!branded) return new NextResponse(null, { status: 404 });
+  const url = request.nextUrl.clone();
+  url.pathname = BRAND_FAVICON_PATH;
+  return NextResponse.rewrite(url);
 }
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  if (pathname === '/favicon.ico') {
+    return brandedFavicon(request);
+  }
 
   if (isOfferLetterHost(request.headers.get('host'))) {
     return handleOfferLetterHost(request);
@@ -164,6 +185,6 @@ export const config = {
   // Skip /api/onboard entirely so multipart headshot uploads are not body-cloned
   // through middleware (avoids the default 10MB truncate → FormData parse errors).
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|api/onboard|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)).*)',
+    '/((?!_next/static|_next/image|api/onboard|.*\\.(?:svg|png|jpg|jpeg|gif|webp)).*)',
   ],
 };

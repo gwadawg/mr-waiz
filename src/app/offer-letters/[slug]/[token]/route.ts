@@ -1,12 +1,18 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
+import { withBrandFavicon } from '@/lib/brand-favicon';
 import { letterIsOpen, PRIVATE_HEADERS, PRIVATE_LINK_HTML } from '../../../../../offer-letters/gate';
 import { offerLetters } from '../../../../../offer-letters/registry';
 
 export const dynamic = 'force-dynamic';
 
-function wall() {
-  return new Response(PRIVATE_LINK_HTML, { status: 404, headers: PRIVATE_HEADERS });
+function wall(request: Request) {
+  const html = withBrandFavicon(
+    PRIVATE_LINK_HTML,
+    request.headers.get('x-forwarded-host'),
+    request.headers.get('host'),
+  );
+  return new Response(html, { status: 404, headers: PRIVATE_HEADERS });
 }
 
 function withPrivacyHead(html: string): string {
@@ -17,24 +23,30 @@ function withPrivacyHead(html: string): string {
 }
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ slug: string; token: string }> },
 ) {
   const { slug, token } = await params;
   const letter = offerLetters[slug];
-  if (!letter || !letterIsOpen(slug, token)) return wall();
+  if (!letter || !letterIsOpen(slug, token)) return wall(request);
   const sheetsDir = path.join(process.cwd(), 'offer-letters', 'sheets');
   const filePath = path.resolve(sheetsDir, letter.file);
-  if (!filePath.startsWith(sheetsDir + path.sep)) return wall();
+  if (!filePath.startsWith(sheetsDir + path.sep)) return wall(request);
 
   let html: string;
   try {
     html = await readFile(filePath, 'utf8');
   } catch {
-    return wall();
+    return wall(request);
   }
 
-  return new Response(withPrivacyHead(html), {
+  html = withBrandFavicon(
+    withPrivacyHead(html),
+    request.headers.get('x-forwarded-host'),
+    request.headers.get('host'),
+  );
+
+  return new Response(html, {
     status: 200,
     headers: PRIVATE_HEADERS,
   });
