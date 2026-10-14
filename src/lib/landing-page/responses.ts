@@ -1,4 +1,4 @@
-import { DSCR_GITHUB_REPO, LANDING_SCHEMA_VERSION } from "./products";
+import { landingRepo, LANDING_SCHEMA_VERSION, type LandingProduct } from "./products";
 import { parseLandingDraft } from "./intake";
 import type { LandingDraft, LandingPublishMeta } from "./types";
 
@@ -6,12 +6,30 @@ export function emptyPublish(): LandingPublishMeta {
   return { pr_url: null, pr_number: null, head_sha: null, merged: false, error: null };
 }
 
-export function toLandingResponses(draft: LandingDraft, publish: LandingPublishMeta = emptyPublish()) {
+export function productFromResponses(
+  responses: Record<string, unknown> | null | undefined,
+): LandingProduct {
+  return responses?.product === "RM" ? "RM" : "DSCR";
+}
+
+export function templateRepoFromResponses(
+  responses: Record<string, unknown> | null | undefined,
+): string {
+  const stored = responses?.template_repo;
+  if (typeof stored === "string" && stored.trim()) return stored.trim();
+  return landingRepo(productFromResponses(responses));
+}
+
+export function toLandingResponses(
+  draft: LandingDraft,
+  publish: LandingPublishMeta = emptyPublish(),
+  product: LandingProduct = "DSCR",
+) {
   return {
     schema_version: LANDING_SCHEMA_VERSION,
-    product: "DSCR" as const,
-    template_repo: DSCR_GITHUB_REPO,
-    template_id: draft.theme,
+    product,
+    template_repo: landingRepo(product),
+    template_id: product === "RM" ? "theme-1" : draft.theme,
     fields: draft,
     publish,
   };

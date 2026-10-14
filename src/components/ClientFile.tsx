@@ -27,6 +27,7 @@ import {
   noteTypeLabel,
   reasonLabel,
 } from "@/lib/client-feedback";
+import { landingProductFor, landingSiteLabel } from "@/lib/landing-page/products";
 import ReportingTypeBadge, { ServiceProgramBadge } from "@/components/ReportingTypeBadge";
 import { getReportingTypeLabel, usesCallCenterKpiLayout } from "@/lib/reporting-types";
 import { getServiceProgramLabel } from "@/lib/service-program";
@@ -779,6 +780,8 @@ export default function ClientFile({
   }
 
   const offerName = client?.name ?? fallbackName;
+  const landingProduct = landingProductFor(client?.reporting_type);
+  const landingSite = landingProduct ? landingSiteLabel(landingProduct) : null;
   const accountName =
     accountDisplayName ||
     client?.primary_contact_name ||
@@ -1059,7 +1062,7 @@ export default function ClientFile({
                 >
                   Card{client.virtual_business_card_url ? " ✓" : ""}
                 </button>
-                {client.reporting_type === "DSCR" && (
+                {landingSite && (
                   <button
                     type="button"
                     onClick={() => setShowLanding(true)}
@@ -1072,7 +1075,7 @@ export default function ClientFile({
                     title={
                       client.landing_page_url
                         ? `Landing page: ${client.landing_page_url}`
-                        : "Publish a dscrexperts.com landing page"
+                        : `Publish a ${landingSite} landing page`
                     }
                   >
                     Landing{client.landing_page_url ? " ✓" : ""}
@@ -1633,7 +1636,7 @@ export default function ClientFile({
               </button>
             </div>
 
-            {client?.reporting_type === "DSCR" && (
+            {client && landingSite && (
             <div
               className="rounded-lg px-4 py-3 flex items-start justify-between gap-4 flex-wrap"
               style={{
@@ -1648,7 +1651,7 @@ export default function ClientFile({
                 <p className="text-xs mt-1" style={{ color: "#94a3b8" }}>
                   {client.landing_page_url
                     ? `Live at ${client.landing_page_url}`
-                    : "Publish a dscrexperts.com page from a template. A pull request opens for review."}
+                    : `Publish a ${landingSite} page from a template. A pull request opens for review.`}
                 </p>
               </div>
               <button

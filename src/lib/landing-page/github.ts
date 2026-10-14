@@ -1,19 +1,20 @@
-import { landingRepo, yamlPath } from "./products";
+import { landingRepo, yamlPath, type LandingProduct } from "./products";
 
 type GhResult<T> = { status: number; data: T };
 
-function token(): string {
-  const value = process.env.LANDING_GITHUB_TOKEN?.trim();
-  if (!value) throw new Error("LANDING_GITHUB_TOKEN is not set");
+function token(product: LandingProduct): string {
+  const name = product === "RM" ? "LANDING_RM_GITHUB_TOKEN" : "LANDING_GITHUB_TOKEN";
+  const value = process.env[name]?.trim();
+  if (!value) throw new Error(`${name} is not set`);
   return value;
 }
 
-async function gh<T>(path: string, init?: RequestInit): Promise<GhResult<T>> {
-  const res = await fetch(`https://api.github.com/repos/${landingRepo()}${path}`, {
+async function gh<T>(product: LandingProduct, path: string, init?: RequestInit): Promise<GhResult<T>> {
+  const res = await fetch(`https://api.github.com/repos/${landingRepo(product)}${path}`, {
     ...init,
     headers: {
       Accept: "application/vnd.github+json",
-      Authorization: `Bearer ${token()}`,
+      Authorization: `Bearer ${token(product)}`,
       "X-GitHub-Api-Version": "2022-11-28",
       ...(init?.headers ?? {}),
     },
@@ -30,13 +31,14 @@ async function gh<T>(path: string, init?: RequestInit): Promise<GhResult<T>> {
   return { status: res.status, data };
 }
 
-function repoOwner(): string {
-  return landingRepo().split("/")[0] || "gwadawg";
+function repoOwner(product: LandingProduct): string {
+  return landingRepo(product).split("/")[0] || "gwadawg";
 }
 
-export async function yamlExistsOnMain(slug: string): Promise<boolean> {
+export async function yamlExistsOnMain(product: LandingProduct, slug: string): Promise<boolean> {
   const path = yamlPath(slug);
   const { status, data } = await gh<{ message?: string }>(
+    product,
     `/contents/${path}?ref=main`,
   );
   if (status === 200) return true;
@@ -60,8 +62,8 @@ export type OpenedPull = {
   headSha: string;
 };
 
-async function branchSha(branch: string): Promise<string | null> {
-  const { status, data } = await gh<RefData>(`/git/ref/heads/${branch}`);
+async function branchSha(product: LandingProduct, branch: string): Promise<string | null> {
+  const { status, data } = await gh<RefData>(product, `/git/ref/heads/${branch}`);
   if (status === 404) return null;
   if (status !== 200 || !data.object?.sha) {
     throw new Error(data.message || `Could not read branch ${branch}`);
@@ -69,10 +71,10 @@ async function branchSha(branch: string): Promise<string | null> {
   return data.object.sha;
 }
 
-async function ensureBranch(branch: string, mainSha: string): Promise<void> {
-  const existing = await branchSha(branch);
+async function ensureBranch(product: LandingProduct, branch: string, mainSha: string): Promise<void> {
+  const existing = await branchSha(product, branch);
   if (existing) return;
-  const { status, data } = await gh<RefData>("/git/refs", {
+  const { status, data } = await gh<RefData>(product, "/git/refs", {
     method: "POST",
     body: JSON.stringify({ ref: `refs/heads/${branch}`, sha: mainSha }),
   });
@@ -80,15 +82,21 @@ async function ensureBranch(branch: string, mainSha: string): Promise<void> {
   throw new Error(data.message || `Could not create branch ${branch}`);
 }
 
-async function putFile(branch: string, path: string, bytes: Buffer, message: string): Promise<void> {
-  const current = await gh<ContentData>(`/contents/${path}?ref=${encodeURIComponent(branch)}`);
+async function putFile(
+  product: LandingProduct,
+  branch: string,
+  path: string,
+  bytes: Buffer,
+  message: string,
+): Promise<void> {
+  const current = await gh<ContentData>(product, `/contents/${path}?ref=${encodeURIComponent(branch)}`);
   const body: Record<string, string> = {
     message,
     content: bytes.toString("base64"),
     branch,
   };
   if (current.status === 200 && current.data.sha) body.sha = current.data.sha;
-  const put = await gh<ContentData>(`/contents/${path}`, {
+  const put = await gh<ContentData>(product, `/contents/${path}`, {
     method: "PUT",
     body: JSON.stringify(body),
   });
@@ -98,24 +106,26 @@ async function putFile(branch: string, path: string, bytes: Buffer, message: str
 }
 
 export async function openLandingPull(input: {
+  product: LandingProduct;
   slug: string;
   files: { path: string; bytes: Buffer }[];
   title: string;
   body: string;
 }): Promise<OpenedPull> {
-  const main = await branchSha("main");
+  const main = await branchSha(input.product, "main");
   if (!main) throw new Error("Could not read main");
   const branch = `landing/${input.slug}`;
-  await ensureBranch(branch, main);
+  await ensureBranch(input.product, branch, main);
   const message = input.title;
   for (const file of input.files) {
-    await putFile(branch, file.path, file.bytes, message);
+    await putFile(input.product, branch, file.path, file.bytes, message);
   }
-  const headSha = await branchSha(branch);
+  const headSha = await branchSha(input.product, branch);
   if (!headSha) throw new Error("Branch disappeared after commit");
 
-  const head = `${repoOwner()}:${branch}`;
+  const head = `${repoOwner(input.product)}:${branch}`;
   const existing = await gh<PullData[]>(
+    input.product,
     `/pulls?head=${encodeURIComponent(head)}&state=open`,
   );
   const open = Array.isArray(existing.data) ? existing.data[0] : undefined;
@@ -123,7 +133,7 @@ export async function openLandingPull(input: {
     return { prUrl: open.html_url, prNumber: open.number, headSha };
   }
 
-  const created = await gh<PullData>("/pulls", {
+  const created = await gh<PullData>(input.product, "/pulls", {
     method: "POST",
     body: JSON.stringify({
       title: input.title,

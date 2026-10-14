@@ -2,6 +2,8 @@ import type { LandingTheme } from "./products";
 
 export type SmsStatus = "ready" | "pending";
 export type StateNotice = "texas" | "illinois";
+export type BrandType = "individual" | "company";
+export type Colorway = "stock" | "custom";
 
 export type LandingDraft = {
   slug: string;
@@ -26,6 +28,14 @@ export type LandingDraft = {
   stateNotices: StateNotice[];
   applyUrl: string;
   bookingUrl: string;
+  brandType: BrandType;
+  colorway: Colorway;
+  ink: string;
+  action: string;
+  mark: string;
+  cream: string;
+  legalName: string;
+  heroHeadline: string;
 };
 
 export type LandingPublishMeta = {

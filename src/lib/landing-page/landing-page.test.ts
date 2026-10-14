@@ -11,6 +11,7 @@ import {
   validateForPublish,
   type SlugContext,
 } from "./intake";
+import { RM_STOCK_HERO } from "./products";
 import { verifyGithubSignature } from "./signature";
 import type { LandingClient, LandingDraft } from "./types";
 import { draftToYaml } from "./yaml";
@@ -45,6 +46,14 @@ function filled(overrides: Partial<LandingDraft> = {}): LandingDraft {
     stateNotices: ["texas"],
     applyUrl: "https://example.com/jane-quiz",
     bookingUrl: "",
+    brandType: "individual",
+    colorway: "stock",
+    ink: "",
+    action: "",
+    mark: "",
+    cream: "",
+    legalName: "",
+    heroHeadline: "",
     ...overrides,
   };
 }
@@ -142,12 +151,129 @@ describe("landing page yaml", () => {
     assert.equal(parsed.applyUrl, "https://example.com/jane-quiz");
     assert.equal(assets.headshot, "");
     assert.equal(products.primaryResidence, false);
+    assert.equal(parsed.colorway, undefined);
+    assert.equal(parsed.brandType, undefined);
+    assert.equal(parsed.copy, undefined);
     assert.equal((parsed.contacts as { phoneE164: string }).phoneE164, "15555550100");
+    assert.equal((sms as { programName: string }).programName, "Jane Doe / Acme Lending");
 
     const later = YAML.parse(draftToYaml(draftForPublish(filled({ preview: false }), true))) as {
       preview: boolean;
     };
     assert.equal(later.preview, false);
+  });
+
+  it("writes a reverse page the factory can build", () => {
+    const ready = draftForPublish(filled({ heroHeadline: "" }), false, "RM");
+    assert.equal(ready.heroHeadline, RM_STOCK_HERO);
+    assert.equal(ready.preview, false);
+    const parsed = YAML.parse(draftToYaml(ready, "RM")) as Record<string, unknown>;
+    const compliance = parsed.compliance as { sms: Record<string, string>; stateNotices: string[] };
+    const assets = parsed.assets as Record<string, string>;
+    const identity = parsed.identity as Record<string, string>;
+    assert.equal(parsed.draft, false);
+    assert.equal(parsed.preview, undefined);
+    assert.equal(parsed.theme, "theme-1");
+    assert.equal(parsed.colorway, "stock");
+    assert.equal(parsed.brandColors, undefined);
+    assert.equal(parsed.brandType, "individual");
+    assert.equal(parsed.products, undefined);
+    assert.equal(parsed.bookingUrl, undefined);
+    assert.equal(identity.bio, undefined);
+    assert.equal(identity.name, "Jane Doe");
+    assert.equal(assets.headshot, "");
+    assert.equal(assets.logo, "");
+    assert.equal(compliance.sms.status, "ready");
+    assert.equal(compliance.sms.programName, "Jane Doe");
+    assert.equal(compliance.sms.frequency, "Message frequency varies.");
+    assert.equal((parsed.copy as { heroHeadline: string }).heroHeadline, RM_STOCK_HERO);
+    assert.deepEqual(compliance.stateNotices, ["texas"]);
+  });
+
+  it("writes custom colors and a blank first name for a company brand", () => {
+    const parsed = YAML.parse(
+      draftToYaml(
+        filled({
+          brandType: "company",
+          colorway: "custom",
+          ink: "#1B3A2F",
+          action: "#2F6B4F",
+          mark: "#C4A35A",
+          legalName: "Acme Lending LLC",
+          heroHeadline: RM_STOCK_HERO,
+        }),
+        "RM",
+      ),
+    ) as {
+      brandColors: Record<string, string>;
+      identity: Record<string, string>;
+    };
+    assert.equal(parsed.brandColors.ink, "#1B3A2F");
+    assert.equal(parsed.brandColors.action, "#2F6B4F");
+    assert.equal(parsed.brandColors.mark, "#C4A35A");
+    assert.equal(parsed.brandColors.cream, undefined);
+    assert.equal(parsed.identity.firstName, "");
+    assert.equal(parsed.identity.legalName, "Acme Lending LLC");
+  });
+});
+
+describe("reverse landing validation", () => {
+  const rmClient: LandingClient = { ...client, reporting_type: "RM" };
+
+  it("prefills the stock hero and leaves texting pending", () => {
+    const draft = draftFromClient(rmClient, "Jane");
+    assert.equal(draft.heroHeadline, RM_STOCK_HERO);
+    assert.equal(draft.smsStatus, "pending");
+    assert.equal(draft.tagline, "");
+    assert.equal(draft.brandType, "individual");
+    assert.equal(draft.colorway, "stock");
+    assert.equal(draft.theme, "theme-1");
+  });
+
+  it("requires ink and action only on a custom colorway", () => {
+    assert.ok(
+      validateForPublish(filled({ colorway: "custom" }), openSlug, "RM").some(e => /Ink is required/i.test(e)),
+    );
+    assert.ok(
+      validateForPublish(filled({ colorway: "stock", ink: "#1B3A2F" }), openSlug, "RM").some(e => /colorway/i.test(e)),
+    );
+    assert.equal(
+      validateForPublish(
+        filled({ colorway: "custom", ink: "#1B3A2F", action: "#2F6B4F" }),
+        openSlug,
+        "RM",
+      ).length,
+      0,
+    );
+  });
+
+  it("does not require an individual NMLS for a company brand", () => {
+    const company = filled({ brandType: "company", nmlsIndividual: "", company: "" });
+    assert.equal(validateForPublish(company, openSlug, "RM").length, 0);
+    assert.ok(
+      validateForPublish(filled({ nmlsIndividual: "" }), openSlug, "RM").some(e => /Individual NMLS/i.test(e)),
+    );
+  });
+
+  it("refuses host paths, demos, tracking params, and a long hero", () => {
+    assert.ok(validateForPublish(filled({ slug: "guides" }), openSlug, "RM").some(e => /reserved/i.test(e)));
+    assert.ok(
+      validateForPublish(filled({ slug: "demo-specialist" }), openSlug, "RM").some(e => /demo/i.test(e)),
+    );
+    assert.ok(
+      validateForPublish(
+        filled({ applyUrl: "https://example.com/quiz?utm_source=facebook" }),
+        openSlug,
+        "RM",
+      ).some(e => /plain link/i.test(e)),
+    );
+    assert.ok(
+      validateForPublish(filled({ heroHeadline: "a".repeat(81) }), openSlug, "RM").some(e => /80/.test(e)),
+    );
+    assert.equal(
+      validateForPublish(filled({ heroHeadline: `*${"a".repeat(80)}*` }), openSlug, "RM").length,
+      0,
+    );
   });
 });
 

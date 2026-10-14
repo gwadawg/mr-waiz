@@ -1,7 +1,11 @@
-import { landingPageUrl } from "./products";
+import { landingPageUrl, type LandingProduct } from "./products";
 
-export async function productionPageIsLive(slug: string, attempts = 1): Promise<boolean> {
-  const url = landingPageUrl(slug);
+export async function productionPageIsLive(
+  product: LandingProduct,
+  slug: string,
+  attempts = 1,
+): Promise<boolean> {
+  const url = landingPageUrl(product, slug);
   const tries = Math.max(1, attempts);
   for (let i = 0; i < tries; i++) {
     try {

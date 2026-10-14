@@ -4,8 +4,14 @@ import {
   insertFormSubmission,
   type FormSubmissionRow,
 } from "@/lib/form-submissions";
-import { landingPageUrl, thankYouPageUrl } from "./products";
-import { fieldsFromResponses, publishMetaFromResponses, toLandingResponses } from "./responses";
+import { landingPageUrl, thankYouPageUrl, type LandingProduct } from "./products";
+import {
+  emptyPublish,
+  fieldsFromResponses,
+  productFromResponses,
+  publishMetaFromResponses,
+  toLandingResponses,
+} from "./responses";
 import type { LandingDraft, LandingPublishMeta } from "./types";
 import { productionPageIsLive } from "./live";
 
@@ -63,12 +69,14 @@ export async function getOpenLandingSubmission(
 export async function getSubmittedByPrNumber(
   service: SupabaseClient,
   prNumber: number,
+  repo: string,
 ): Promise<FormSubmissionRow | null> {
   const { data, error } = await service
     .from("client_form_submissions")
     .select(FORM_SUBMISSION_FIELDS)
     .eq("form_type", "landing_page")
     .eq("status", "submitted")
+    .filter("responses->>template_repo", "eq", repo)
     .filter("responses->publish->>pr_number", "eq", String(prNumber))
     .order("submitted_at", { ascending: false })
     .limit(1)
@@ -81,6 +89,7 @@ export async function slugTakenByOtherClient(
   service: SupabaseClient,
   slug: string,
   clientId: string,
+  product: LandingProduct,
 ): Promise<boolean> {
   const key = slug.trim().toLowerCase();
   if (!key) return false;
@@ -89,6 +98,7 @@ export async function slugTakenByOtherClient(
     .select("client_id")
     .eq("form_type", "landing_page")
     .in("status", ["draft", "submitted", "applied"])
+    .filter("responses->>product", "eq", product)
     .filter("responses->fields->>slug", "eq", key)
     .neq("client_id", clientId)
     .limit(1);
@@ -101,8 +111,9 @@ export async function saveLandingDraft(
   clientId: string,
   draft: LandingDraft,
   submittedBy: string | null,
+  product: LandingProduct,
 ): Promise<FormSubmissionRow> {
-  const responses = toLandingResponses(draft);
+  const responses = toLandingResponses(draft, emptyPublish(), product);
   const existing = await getLatestLandingDraft(service, clientId);
   if (existing) {
     const { data, error } = await service
@@ -132,13 +143,14 @@ export async function insertLandingPublish(
   draft: LandingDraft,
   publish: LandingPublishMeta,
   submittedBy: string | null,
+  product: LandingProduct,
 ): Promise<FormSubmissionRow> {
   return insertFormSubmission(service, {
     client_id: clientId,
     form_type: "landing_page",
     status: "submitted",
     submitted_by: submittedBy,
-    responses: toLandingResponses(draft, publish),
+    responses: toLandingResponses(draft, publish, product),
   });
 }
 
@@ -151,14 +163,15 @@ export async function settleMergedLanding(
 ): Promise<SettleResult> {
   const fields = fieldsFromResponses(row.responses);
   const publish = publishMetaFromResponses(row.responses);
+  const product = productFromResponses(row.responses);
   if (!fields?.slug || !row.client_id) return "missing";
-  const live = await productionPageIsLive(fields.slug, attempts);
+  const live = await productionPageIsLive(product, fields.slug, attempts);
   const nextPublish: LandingPublishMeta = {
     ...publish,
     merged: true,
     error: live ? null : "Production page is not live yet",
   };
-  const responses = toLandingResponses(fields, nextPublish);
+  const responses = toLandingResponses(fields, nextPublish, product);
   if (!live) {
     const { error } = await service
       .from("client_form_submissions")
@@ -167,8 +180,8 @@ export async function settleMergedLanding(
     if (error) throw new Error(error.message);
     return "waiting";
   }
-  const landing = landingPageUrl(fields.slug);
-  const thankYou = thankYouPageUrl(fields.slug);
+  const landing = landingPageUrl(product, fields.slug);
+  const thankYou = thankYouPageUrl(product, fields.slug);
   const { error: rowError } = await service
     .from("client_form_submissions")
     .update({

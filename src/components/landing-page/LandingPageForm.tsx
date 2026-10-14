@@ -2,13 +2,16 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { reviewHeroHeadline } from "@/lib/landing-page/intake";
 import {
   LANDING_THEME_LABELS,
   LANDING_THEMES,
+  landingSiteLabel,
+  type LandingProduct,
   type LandingTheme,
 } from "@/lib/landing-page/products";
 import { assetFileId } from "@/lib/landing-page/assets";
-import type { LandingDraft, LandingPublishMeta } from "@/lib/landing-page/types";
+import type { BrandType, Colorway, LandingDraft, LandingPublishMeta } from "@/lib/landing-page/types";
 
 type Props = {
   clientId: string;
@@ -18,6 +21,7 @@ type Props = {
 };
 
 type LoadResponse = {
+  product: LandingProduct;
   draft: LandingDraft;
   locked: boolean;
   hasApplied: boolean;
@@ -127,6 +131,7 @@ export default function LandingPageForm({ clientId, fallbackName, onClose, onPub
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [product, setProduct] = useState<LandingProduct>("DSCR");
   const [draft, setDraft] = useState<LandingDraft | null>(null);
   const [locked, setLocked] = useState(false);
   const [hasApplied, setHasApplied] = useState(false);
@@ -146,6 +151,7 @@ export default function LandingPageForm({ clientId, fallbackName, onClose, onPub
         const json = (await res.json()) as LoadResponse & { error?: string };
         if (!res.ok) throw new Error(json.error || "Could not load the landing form");
         if (cancelled) return;
+        setProduct(json.product === "RM" ? "RM" : "DSCR");
         setDraft(json.draft);
         setLocked(json.locked);
         setHasApplied(json.hasApplied);
@@ -275,7 +281,10 @@ export default function LandingPageForm({ clientId, fallbackName, onClose, onPub
 
   const inputClass = "w-full rounded-md px-3 py-2 text-sm outline-none";
   const disabled = locked || busy;
-  const showAccent = draft.theme === "theme-custom" || draft.theme === "theme-light";
+  const reverse = product === "RM";
+  const showAccent = !reverse && (draft.theme === "theme-custom" || draft.theme === "theme-light");
+  const hero = reverse ? reviewHeroHeadline(draft.heroHeadline) : null;
+  const site = landingSiteLabel(product);
 
   return portal(
     <div className="fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto bg-black/70 p-3 sm:p-6">
@@ -283,7 +292,7 @@ export default function LandingPageForm({ clientId, fallbackName, onClose, onPub
         <header className="flex items-start justify-between gap-3 border-b border-white/10 px-5 py-4">
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-              Landing page
+              {reverse ? "Reverse landing page" : "Landing page"}
             </p>
             <h2 className="mt-1 text-lg font-semibold text-slate-100">{fallbackName}</h2>
           </div>
@@ -327,30 +336,70 @@ export default function LandingPageForm({ clientId, fallbackName, onClose, onPub
               </a>
               {thankYouPageUrl ? ` · ${thankYouPageUrl}` : ""}
             </p>
-          ) : null}
+          ) : (
+            <p className="text-xs text-slate-500">
+              Publishes to {site}. A pull request opens for review.
+            </p>
+          )}
 
           {error ? <p className="text-sm text-rose-300">{error}</p> : null}
           {notice ? <p className="text-sm text-emerald-300">{notice}</p> : null}
 
           <section className="grid gap-4 sm:grid-cols-2">
-            <Field label="Template">
-              <select
-                className={inputClass}
-                style={fieldStyle}
-                disabled={disabled}
-                value={draft.theme}
-                onChange={e => {
-                  const theme = e.target.value as LandingTheme;
-                  patch(theme === "theme-1" ? { theme, accent: "" } : { theme });
-                }}
-              >
-                {LANDING_THEMES.map(theme => (
-                  <option key={theme} value={theme}>
-                    {LANDING_THEME_LABELS[theme]}
-                  </option>
-                ))}
-              </select>
-            </Field>
+            {reverse ? (
+              <>
+                <Field label="Brand">
+                  <select
+                    className={inputClass}
+                    style={fieldStyle}
+                    disabled={disabled}
+                    value={draft.brandType}
+                    onChange={e => patch({ brandType: e.target.value as BrandType })}
+                  >
+                    <option value="individual">Loan officer</option>
+                    <option value="company">Company</option>
+                  </select>
+                </Field>
+                <Field label="Colorway">
+                  <select
+                    className={inputClass}
+                    style={fieldStyle}
+                    disabled={disabled}
+                    value={draft.colorway}
+                    onChange={e => {
+                      const colorway = e.target.value as Colorway;
+                      patch(
+                        colorway === "stock"
+                          ? { colorway, ink: "", action: "", mark: "", cream: "" }
+                          : { colorway },
+                      );
+                    }}
+                  >
+                    <option value="stock">Stock navy and cream</option>
+                    <option value="custom">Your colors</option>
+                  </select>
+                </Field>
+              </>
+            ) : (
+              <Field label="Template">
+                <select
+                  className={inputClass}
+                  style={fieldStyle}
+                  disabled={disabled}
+                  value={draft.theme}
+                  onChange={e => {
+                    const theme = e.target.value as LandingTheme;
+                    patch(theme === "theme-1" ? { theme, accent: "" } : { theme });
+                  }}
+                >
+                  {LANDING_THEMES.map(theme => (
+                    <option key={theme} value={theme}>
+                      {LANDING_THEME_LABELS[theme]}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            )}
             {showAccent ? (
               <Field label={draft.theme === "theme-custom" ? "Color (required)" : "Color (optional)"}>
                 <input
@@ -362,6 +411,22 @@ export default function LandingPageForm({ clientId, fallbackName, onClose, onPub
                   onChange={e => patch({ accent: e.target.value })}
                 />
               </Field>
+            ) : null}
+            {reverse && draft.colorway === "custom" ? (
+              <>
+                <Field label="Ink (required)">
+                  <input className={inputClass} style={fieldStyle} disabled={disabled} value={draft.ink} placeholder="#1B3A2F" onChange={e => patch({ ink: e.target.value })} />
+                </Field>
+                <Field label="Action (required)">
+                  <input className={inputClass} style={fieldStyle} disabled={disabled} value={draft.action} placeholder="#2F6B4F" onChange={e => patch({ action: e.target.value })} />
+                </Field>
+                <Field label="Mark (optional)">
+                  <input className={inputClass} style={fieldStyle} disabled={disabled} value={draft.mark} placeholder="#C4A35A" onChange={e => patch({ mark: e.target.value })} />
+                </Field>
+                <Field label="Cream (optional)">
+                  <input className={inputClass} style={fieldStyle} disabled={disabled} value={draft.cream} placeholder="#F4F1EA" onChange={e => patch({ cream: e.target.value })} />
+                </Field>
+              </>
             ) : null}
             <Field label="Slug">
               <input
@@ -388,15 +453,22 @@ export default function LandingPageForm({ clientId, fallbackName, onClose, onPub
             <Field label="Public name">
               <input className={inputClass} style={fieldStyle} disabled={disabled} value={draft.name} onChange={e => patch({ name: e.target.value })} />
             </Field>
-            <Field label="First name">
-              <input className={inputClass} style={fieldStyle} disabled={disabled} value={draft.firstName} onChange={e => patch({ firstName: e.target.value })} />
-            </Field>
+            {reverse && draft.brandType === "company" ? null : (
+              <Field label="First name">
+                <input className={inputClass} style={fieldStyle} disabled={disabled} value={draft.firstName} onChange={e => patch({ firstName: e.target.value })} />
+              </Field>
+            )}
             <Field label="Title">
               <input className={inputClass} style={fieldStyle} disabled={disabled} value={draft.title} onChange={e => patch({ title: e.target.value })} />
             </Field>
-            <Field label="Company">
+            <Field label={reverse && draft.brandType === "company" ? "Parent company (optional)" : "Company"}>
               <input className={inputClass} style={fieldStyle} disabled={disabled} value={draft.company} onChange={e => patch({ company: e.target.value })} />
             </Field>
+            {reverse && draft.brandType === "company" ? (
+              <Field label="Legal name (optional)">
+                <input className={inputClass} style={fieldStyle} disabled={disabled} value={draft.legalName} onChange={e => patch({ legalName: e.target.value })} />
+              </Field>
+            ) : null}
             <Field label="Tagline">
               <input className={inputClass} style={fieldStyle} disabled={disabled} value={draft.tagline} onChange={e => patch({ tagline: e.target.value })} />
             </Field>
@@ -406,9 +478,11 @@ export default function LandingPageForm({ clientId, fallbackName, onClose, onPub
             <Field label="Email">
               <input className={inputClass} style={fieldStyle} disabled={disabled} value={draft.email} onChange={e => patch({ email: e.target.value })} />
             </Field>
-            <Field label="Booking URL">
-              <input className={inputClass} style={fieldStyle} disabled={disabled} value={draft.bookingUrl} placeholder="Optional" onChange={e => patch({ bookingUrl: e.target.value })} />
-            </Field>
+            {reverse ? null : (
+              <Field label="Booking URL">
+                <input className={inputClass} style={fieldStyle} disabled={disabled} value={draft.bookingUrl} placeholder="Optional" onChange={e => patch({ bookingUrl: e.target.value })} />
+              </Field>
+            )}
           </section>
 
           <section className="grid gap-4 sm:grid-cols-2">
@@ -424,9 +498,11 @@ export default function LandingPageForm({ clientId, fallbackName, onClose, onPub
             <Field label="ZIP">
               <input className={inputClass} style={fieldStyle} disabled={disabled} value={draft.postalCode} onChange={e => patch({ postalCode: e.target.value })} />
             </Field>
-            <Field label="Individual NMLS">
-              <input className={inputClass} style={fieldStyle} disabled={disabled} value={draft.nmlsIndividual} onChange={e => patch({ nmlsIndividual: e.target.value })} />
-            </Field>
+            {reverse && draft.brandType === "company" ? null : (
+              <Field label="Individual NMLS">
+                <input className={inputClass} style={fieldStyle} disabled={disabled} value={draft.nmlsIndividual} onChange={e => patch({ nmlsIndividual: e.target.value })} />
+              </Field>
+            )}
             <Field label="Company NMLS">
               <input className={inputClass} style={fieldStyle} disabled={disabled} value={draft.nmlsCompany} onChange={e => patch({ nmlsCompany: e.target.value })} />
             </Field>
@@ -452,15 +528,30 @@ export default function LandingPageForm({ clientId, fallbackName, onClose, onPub
             />
           </section>
 
-          <Field label="Bio">
-            <textarea
-              className={`${inputClass} min-h-20`}
-              style={fieldStyle}
-              disabled={disabled}
-              value={draft.bio}
-              onChange={e => patch({ bio: e.target.value })}
-            />
-          </Field>
+          {reverse ? (
+            <Field label={`Hero line${hero ? ` (${hero.length}/80)` : ""}`}>
+              <textarea
+                className={`${inputClass} min-h-20`}
+                style={fieldStyle}
+                disabled={disabled}
+                value={draft.heroHeadline}
+                onChange={e => patch({ heroHeadline: e.target.value })}
+              />
+              {hero?.error ? <p className="mt-1 text-xs text-rose-300">{hero.error}</p> : (
+                <p className="mt-1 text-[11px] text-slate-500">Asterisks are not counted. One *phrase* is the italic accent.</p>
+              )}
+            </Field>
+          ) : (
+            <Field label="Bio">
+              <textarea
+                className={`${inputClass} min-h-20`}
+                style={fieldStyle}
+                disabled={disabled}
+                value={draft.bio}
+                onChange={e => patch({ bio: e.target.value })}
+              />
+            </Field>
+          )}
 
           <section className="flex flex-wrap gap-4 text-sm text-slate-300">
             <label className="flex items-center gap-2">
@@ -472,15 +563,17 @@ export default function LandingPageForm({ clientId, fallbackName, onClose, onPub
               />
               Texting approved
             </label>
-            <label className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                disabled={disabled || !hasApplied}
-                checked={draft.preview || !hasApplied}
-                onChange={e => patch({ preview: e.target.checked })}
-              />
-              Hide from search
-            </label>
+            {reverse ? null : (
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  disabled={disabled || !hasApplied}
+                  checked={draft.preview || !hasApplied}
+                  onChange={e => patch({ preview: e.target.checked })}
+                />
+                Hide from search
+              </label>
+            )}
             <label className="flex items-center gap-2">
               <input
                 type="checkbox"
@@ -490,17 +583,19 @@ export default function LandingPageForm({ clientId, fallbackName, onClose, onPub
               />
               Texas notice
             </label>
-            <label className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                disabled={disabled}
-                checked={draft.stateNotices.includes("illinois")}
-                onChange={e => toggleNotice("illinois", e.target.checked)}
-              />
-              Illinois notice
-            </label>
+            {reverse ? null : (
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  disabled={disabled}
+                  checked={draft.stateNotices.includes("illinois")}
+                  onChange={e => toggleNotice("illinois", e.target.checked)}
+                />
+                Illinois notice
+              </label>
+            )}
           </section>
-          {!hasApplied ? (
+          {!reverse && !hasApplied ? (
             <p className="text-xs text-slate-500">The first publish stays out of search. Turn indexing on with a later publish.</p>
           ) : null}
         </div>

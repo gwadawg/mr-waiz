@@ -10,7 +10,14 @@ import {
   prefillLandingDraft,
   validateForPublish,
 } from "@/lib/landing-page/intake";
-import { landingPageUrl, SLUG_PATTERN, thankYouPageUrl, yamlPath } from "@/lib/landing-page/products";
+import {
+  landingPageUrl,
+  landingProductFor,
+  SLUG_PATTERN,
+  thankYouPageUrl,
+  yamlPath,
+  type LandingProduct,
+} from "@/lib/landing-page/products";
 import { fieldsFromResponses, publishMetaFromResponses } from "@/lib/landing-page/responses";
 import {
   getLatestAppliedLanding,
@@ -55,6 +62,7 @@ async function loadOnboardingFirstName(
 }
 
 function payload(
+  product: LandingProduct,
   draft: LandingDraft,
   extras: {
     locked: boolean;
@@ -65,7 +73,14 @@ function payload(
     submissionId: string | null;
   },
 ) {
-  return { draft, ...extras };
+  return { product, draft, ...extras };
+}
+
+function landingDenied() {
+  return NextResponse.json(
+    { error: "Landing pages are for DSCR and reverse mortgage clients" },
+    { status: 400 },
+  );
 }
 
 async function attachBrandFile(
@@ -92,9 +107,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const { id: clientId } = await params;
   const client = await loadClient(ctx.service, clientId);
   if (!client) return NextResponse.json({ error: "Client not found" }, { status: 404 });
-  if (client.reporting_type !== "DSCR") {
-    return NextResponse.json({ error: "Landing pages are for DSCR clients" }, { status: 400 });
-  }
+  const product = landingProductFor(client.reporting_type);
+  if (!product) return landingDenied();
 
   const [draftRow, appliedRow, submittedRow, firstName] = await Promise.all([
     getLatestLandingDraft(ctx.service, clientId),
@@ -110,7 +124,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const publish = publishMetaFromResponses((submittedRow ?? appliedRow)?.responses ?? null);
 
   return NextResponse.json({
-    ...payload(draft, {
+    ...payload(product, draft, {
       locked,
       hasApplied: !!appliedRow,
       publish,
@@ -169,9 +183,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const { id: clientId } = await params;
   const client = await loadClient(ctx.service, clientId);
   if (!client) return NextResponse.json({ error: "Client not found" }, { status: 404 });
-  if (client.reporting_type !== "DSCR") {
-    return NextResponse.json({ error: "Landing pages are for DSCR clients" }, { status: 400 });
-  }
+  const product = landingProductFor(client.reporting_type);
+  if (!product) return landingDenied();
 
   const contentType = req.headers.get("content-type") ?? "";
   if (contentType.includes("multipart/form-data")) {
@@ -220,7 +233,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const parsed = parseLandingDraft(body?.draft);
 
   if (action === "save") {
-    const row = await saveLandingDraft(ctx.service, clientId, parsed, ctx.userId);
+    const row = await saveLandingDraft(ctx.service, clientId, parsed, ctx.userId, product);
     return NextResponse.json({
       draft: fieldsFromResponses(row.responses),
       submissionId: row.id,
@@ -228,50 +241,54 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   }
 
   const applied = await getLatestAppliedLanding(ctx.service, clientId);
-  const ready = draftForPublish(parsed, !!applied);
+  const ready = draftForPublish(parsed, !!applied, product);
   const fieldErrors = validateForPublish(ready, {
     slugTaken: false,
     repoYamlExists: false,
     clientOwnsSlug: false,
-  });
+  }, product);
   if (fieldErrors.length || !SLUG_PATTERN.test(ready.slug)) {
     return NextResponse.json({ error: fieldErrors[0] || "Slug is required", errors: fieldErrors }, { status: 400 });
   }
 
   try {
     const [slugTaken, repoYamlExists] = await Promise.all([
-      slugTakenByOtherClient(ctx.service, ready.slug, clientId),
-      yamlExistsOnMain(ready.slug),
+      slugTakenByOtherClient(ctx.service, ready.slug, clientId, product),
+      yamlExistsOnMain(product, ready.slug),
     ]);
     const ownedSlug = fieldsFromResponses(applied?.responses ?? null)?.slug === ready.slug;
     const errors = validateForPublish(ready, {
       slugTaken,
       repoYamlExists,
       clientOwnsSlug: ownedSlug,
-    });
+    }, product);
     if (errors.length) {
       return NextResponse.json({ error: errors[0], errors }, { status: 400 });
     }
 
     const files: { path: string; bytes: Buffer }[] = [
-      { path: yamlPath(ready.slug), bytes: Buffer.from(draftToYaml(ready), "utf8") },
+      { path: yamlPath(ready.slug), bytes: Buffer.from(draftToYaml(ready, product), "utf8") },
     ];
     await attachBrandFile(files, ready.slug, client.headshot_url, "headshot");
     await attachBrandFile(files, ready.slug, client.logo_url, "logo");
 
+    const bodyLines = [
+      "Published from Mr. Waiz.",
+      "",
+      `Live URL after merge: ${landingPageUrl(product, ready.slug)}`,
+      `Thank-you: ${thankYouPageUrl(product, ready.slug)}`,
+    ];
+    if (product === "DSCR") {
+      bodyLines.push(`Search indexing: ${ready.preview ? "hidden (preview)" : "on"}`);
+    }
+    bodyLines.push("", "Vercel builds the HTML. Do not hand-edit generated pages.");
+
     const opened = await openLandingPull({
+      product,
       slug: ready.slug,
       files,
       title: `Landing page: ${ready.slug}`,
-      body: [
-        "Published from Mr. Waiz.",
-        "",
-        `Live URL after merge: ${landingPageUrl(ready.slug)}`,
-        `Thank-you: ${thankYouPageUrl(ready.slug)}`,
-        `Search indexing: ${ready.preview ? "hidden (preview)" : "on"}`,
-        "",
-        "Vercel builds the HTML. Do not hand-edit generated pages.",
-      ].join("\n"),
+      body: bodyLines.join("\n"),
     });
 
     const publish = {
@@ -281,7 +298,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       merged: false,
       error: null,
     };
-    const row = await insertLandingPublish(ctx.service, clientId, ready, publish, ctx.userId);
+    const row = await insertLandingPublish(ctx.service, clientId, ready, publish, ctx.userId, product);
     return NextResponse.json({
       draft: ready,
       submissionId: row.id,

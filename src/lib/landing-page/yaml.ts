@@ -1,4 +1,5 @@
 import YAML from "yaml";
+import { RM_STOCK_HERO, type LandingProduct } from "./products";
 import type { LandingDraft } from "./types";
 
 function phoneDigits(phone: string): string {
@@ -20,7 +21,83 @@ export function formatPhoneDisplay(phone: string): string {
   return `(${ten.slice(0, 3)}) ${ten.slice(3, 6)}-${ten.slice(6)}`;
 }
 
-export function draftToYaml(draft: LandingDraft): string {
+function smsBlock(draft: LandingDraft, programName: string) {
+  return {
+    status: draft.smsStatus,
+    programName,
+    programDescription: "",
+    frequency: "Message frequency varies.",
+    consentLanguage: "",
+  };
+}
+
+function contactBlock(draft: LandingDraft) {
+  return {
+    phone: formatPhoneDisplay(draft.phone),
+    phoneE164: phoneE164Digits(draft.phone),
+    email: draft.email.trim(),
+    address: {
+      streetAddress: draft.street.trim(),
+      addressLocality: draft.city.trim(),
+      addressRegion: draft.region.trim(),
+      postalCode: draft.postalCode.trim(),
+      addressCountry: "US",
+    },
+  };
+}
+
+function reverseYaml(draft: LandingDraft): string {
+  const first = draft.firstName.trim() || draft.name.trim().split(/\s+/)[0] || "";
+  const identity: Record<string, string> = {
+    name: draft.name.trim(),
+    firstName: draft.brandType === "company" ? "" : first,
+    title: draft.title.trim(),
+    company: draft.company.trim(),
+    tagline: draft.tagline.trim(),
+  };
+  if (draft.legalName.trim()) identity.legalName = draft.legalName.trim();
+  const doc: Record<string, unknown> = {
+    slug: draft.slug,
+    theme: "theme-1",
+    colorway: draft.colorway,
+    brandType: draft.brandType,
+    draft: false,
+    identity,
+    contacts: contactBlock(draft),
+    compliance: {
+      nmlsIndividual: draft.nmlsIndividual.trim(),
+      nmlsCompany: draft.nmlsCompany.trim(),
+      licenseSecondary: "",
+      equalHousing: true,
+      fdicMember: false,
+      stateNotices: draft.stateNotices,
+      sms: smsBlock(draft, draft.name.trim()),
+    },
+    applyUrl: draft.applyUrl.trim(),
+    copy: {
+      heroHeadline: draft.heroHeadline.trim() || RM_STOCK_HERO,
+    },
+    assets: {
+      logo: "",
+      headshot: "",
+      vcf: "",
+      ogImage: "",
+    },
+  };
+  if (draft.colorway === "custom") {
+    const brandColors: Record<string, string> = {
+      ink: draft.ink.trim(),
+      action: draft.action.trim(),
+    };
+    if (draft.mark.trim()) brandColors.mark = draft.mark.trim();
+    if (draft.cream.trim()) brandColors.cream = draft.cream.trim();
+    doc.brandColors = brandColors;
+  }
+  return YAML.stringify(doc);
+}
+
+export function draftToYaml(draft: LandingDraft, product: LandingProduct = "DSCR"): string {
+  if (product === "RM") return reverseYaml(draft);
   const first = draft.firstName.trim() || draft.name.trim().split(/\s+/)[0] || "";
   const doc: Record<string, unknown> = {
     slug: draft.slug,
@@ -39,31 +116,14 @@ export function draftToYaml(draft: LandingDraft): string {
     tagline: draft.tagline.trim(),
     bio: draft.bio.trim(),
   };
-  doc.contacts = {
-    phone: formatPhoneDisplay(draft.phone),
-    phoneE164: phoneE164Digits(draft.phone),
-    email: draft.email.trim(),
-    address: {
-      streetAddress: draft.street.trim(),
-      addressLocality: draft.city.trim(),
-      addressRegion: draft.region.trim(),
-      postalCode: draft.postalCode.trim(),
-      addressCountry: "US",
-    },
-  };
+  doc.contacts = contactBlock(draft);
   doc.compliance = {
     nmlsIndividual: draft.nmlsIndividual.trim(),
     nmlsCompany: draft.nmlsCompany.trim(),
     licenseSecondary: "",
     equalHousing: true,
     stateNotices: draft.stateNotices,
-    sms: {
-      status: draft.smsStatus,
-      programName: `${draft.name.trim()} / ${draft.company.trim()}`,
-      programDescription: "",
-      frequency: "Message frequency varies.",
-      consentLanguage: "",
-    },
+    sms: smsBlock(draft, `${draft.name.trim()} / ${draft.company.trim()}`),
   };
   doc.products = {
     dscrRefinance: true,

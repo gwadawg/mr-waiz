@@ -1,7 +1,7 @@
 ---
 title: Client landing builder — Design
 status: ready
-last_updated: 2026-10-07
+last_updated: 2026-10-14
 compatibility_reviewed: 2026-10-07
 artifact_type: design
 related_docs:
@@ -15,17 +15,21 @@ related_docs:
 
 # Client landing builder — Design
 
-The team publishes a DSCR loan-officer landing page from Client File.
-The page is built from YAML in `gwadawg/dscr-experts` and served at
-`https://dscrexperts.com/{slug}/`. Mr. Waiz keeps the form and the
-publish record. The template repo keeps layout, copy, themes, and the
-compliance build.
+The team publishes a loan-officer landing page from Client File.
+DSCR pages are built from YAML in `gwadawg/dscr-experts` and served at
+`https://dscrexperts.com/{slug}/`. Reverse pages are built from YAML in
+`gwadawg/rm-website-template` and served at
+`https://retirementmortgagexperts.com/{slug}/`. Mr. Waiz keeps the form
+and the publish record. Each template repo keeps layout, copy, themes,
+and the compliance build.
 
-v1 is DSCR only. Reverse mortgage and Team Westside are later work.
+The client's product chooses the form. DSCR and reverse mortgage
+clients can publish. Call center clients cannot. Team Westside is
+later work.
 
 ## Purpose
 
-A teammate opens a DSCR client, fills the form, and publishes.
+A teammate opens a DSCR or reverse client, fills the form, and publishes.
 The same form edits a page later. Each publish is a new row.
 The live page is rebuilt by the template repo from that save.
 
@@ -35,12 +39,11 @@ The live page is rebuilt by the template repo from that save.
 - New columns or actions on Client Roster
 - A history browser. Rows are kept. A screen to browse them comes later
 - Virtual cards, or merging this with the card wizard
-- Reverse-mortgage pages. That factory repo is not in this build
 - Team Westside pages on `teamwestside.dscrexperts.com`.
   Those stay hand-edited in the sibling repo
 - Letting the team change layout, CSS, or stock copy.
   A new theme is a change in `dscr-experts`, then a new option here
-- Auto-merge. A person with write access on `gwadawg/dscr-experts` merges
+- Auto-merge. A person with write access on the template repo merges
 - Choosing which CRM the phone comes from. That process stores one number
   before this form is opened
 
@@ -49,7 +52,7 @@ The live page is rebuilt by the template repo from that save.
 | Topic | Decision |
 |-------|----------|
 | Where the form lives | Mr. Waiz. Own folder, own API route, lazy-loaded from Client File |
-| Who sees it | `clients.reporting_type = DSCR` only. RM and call center hide the control |
+| Who sees it | `clients.reporting_type` of `DSCR` or `RM`. Call center hides the control |
 | Which repo | `gwadawg/dscr-experts` (`LANDING_DSCR_GITHUB_REPO`) |
 | Public site | `https://dscrexperts.com/{slug}/` |
 | Where the design lives | The template repo. Mr. Waiz does not store HTML or CSS |
@@ -71,7 +74,7 @@ The live page is rebuilt by the template repo from that save.
 ## Flow
 
 ```text
-Client File → Landing   (DSCR clients only)
+Client File → Landing   (DSCR and RM clients)
   → GET  /api/clients/{id}/landing-page
        latest draft, else latest applied, else clients row
   → teammate edits fields
@@ -195,11 +198,49 @@ Launch is a second publish with preview turned off.
 The launch checklist in `docs/CLIENT_ONBOARDING.md` reminds the team.
 It does not block go-live.
 
+## Reverse mortgage
+
+`reporting_type = RM` uses the same form, route, and webhook.
+The product on the client picks the fields, the repo, and the site.
+There is no picker inside the form.
+
+A publish writes `clients/{slug}.yaml` with `draft: false` and
+`theme: theme-1`, plus a headshot or logo when the client has one.
+It does not commit generated HTML or `vercel.json`. Vercel runs
+`npm run build`.
+
+Reverse fields that DSCR does not have:
+
+- Brand `individual` (default) or `company`. A company brand does not
+  require an individual NMLS or a parent company. It can take a legal
+  name.
+- Colorway `stock`, or `custom` with `brandColors.ink` and
+  `brandColors.action`. Mark and cream are optional.
+- Hero line. The stock line is prefilled. Eighty visible characters,
+  and one `*italic*` pair. Asterisks are not counted.
+- SMS program name is the public brand. The texting checkbox sets
+  `compliance.sms.status`.
+
+Leave off booking URL, bio, DSCR product flags, accent themes, and
+themes 2–5. Also leave off hide-from-search. This factory has no
+preview flag. A `draft: true` file is skipped, so a publish stays
+`draft: false`. The first publish is live and can be indexed.
+
+Quiz URLs stay plain. The factory copies the visit query and forces
+`utm_term=WM` on the quiz hop.
+
+Refuse a host path, a demo slug (`demo-specialist`, `demo-brand`,
+`demo-company`, `demo-evergreen`), or a yaml already on `main` that
+this client does not own. The same slug may exist on the DSCR site.
+Slug checks are per product. A merged pull request is matched by
+number and `template_repo`, because the two repos number pulls
+separately.
+
 ## Code layout
 
 Do not add the form body to `ClientFile.tsx` or `ClientRoster.tsx`.
-`ClientFile` gets one control, shown for DSCR clients, that mounts the
-lazy component. Client Roster gets no new action.
+`ClientFile` gets one control, shown for DSCR and RM clients, that
+mounts the lazy component. Client Roster gets no new action.
 
 ```text
 src/lib/landing-page/
@@ -307,8 +348,14 @@ Set on Railway before the first real publish:
 | Variable | Use |
 |----------|-----|
 | `LANDING_GITHUB_TOKEN` | Fine-grained token. Contents and pull requests on `gwadawg/dscr-experts` |
+| `LANDING_RM_GITHUB_TOKEN` | Fine-grained token. Contents and pull requests on `gwadawg/rm-website-template` |
 | `LANDING_DSCR_GITHUB_REPO` | `gwadawg/dscr-experts` |
+| `LANDING_RM_GITHUB_REPO` | `gwadawg/rm-website-template` |
 | `LANDING_GITHUB_WEBHOOK_SECRET` | Verifies `X-Hub-Signature-256` |
+
+Reverse uses the same webhook URL and the same secret.
+The `pull_request` hook on `gwadawg/rm-website-template` is already installed.
+The handler matches the repository name to the saved `template_repo`.
 
 Branch name: `landing/{slug}`. One open branch per client.
 The commit touches only the YAML and the headshot file.

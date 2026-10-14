@@ -24,6 +24,7 @@ export async function POST(req: Request) {
 
   let body: {
     action?: string;
+    repository?: { full_name?: string };
     pull_request?: { number?: number; merged?: boolean };
   };
   try {
@@ -37,12 +38,13 @@ export async function POST(req: Request) {
   }
 
   const prNumber = body.pull_request?.number;
-  if (typeof prNumber !== "number") {
-    return NextResponse.json({ error: "Missing pull request number" }, { status: 400 });
+  const repo = body.repository?.full_name?.trim();
+  if (typeof prNumber !== "number" || !repo) {
+    return NextResponse.json({ error: "Missing pull request number or repository" }, { status: 400 });
   }
 
   const service = createServiceClient();
-  const row = await getSubmittedByPrNumber(service, prNumber);
+  const row = await getSubmittedByPrNumber(service, prNumber, repo);
   if (!row) return NextResponse.json({ ok: true, matched: false });
 
   if (body.pull_request?.merged) {
