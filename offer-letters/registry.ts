@@ -22,4 +22,8 @@ export const offerLetters: Record<string, OfferLetter> = {
     token: '1a6d8b05df94514cd3e1310886c14653',
     file: 'lending-arena/index.html',
   },
+  'west-capital': {
+    token: '17fc5e7d15306df07a9cb97f8890a844',
+    file: 'west-capital/index.html',
+  },
 };
