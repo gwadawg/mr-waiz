@@ -4,12 +4,16 @@ import { useEffect, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { reviewHeroHeadline } from "@/lib/landing-page/intake";
 import {
+  LANDING_PRODUCT_LABELS,
+  LANDING_PRODUCTS,
   LANDING_THEME_LABELS,
   LANDING_THEMES,
+  landingPageUrl as publicPageUrl,
   landingSiteLabel,
   type LandingProduct,
   type LandingTheme,
 } from "@/lib/landing-page/products";
+import type { LandingSiteSummary } from "@/lib/landing-page/sites";
 import { assetFileId } from "@/lib/landing-page/assets";
 import type { BrandType, Colorway, LandingDraft, LandingPublishMeta } from "@/lib/landing-page/types";
 
@@ -21,16 +25,32 @@ type Props = {
 };
 
 type LoadResponse = {
+  siteId: string;
   product: LandingProduct;
   draft: LandingDraft;
   locked: boolean;
   hasApplied: boolean;
+  slugLocked: boolean;
   publish: LandingPublishMeta;
   landingPageUrl: string | null;
   thankYouPageUrl: string | null;
   headshotUrl: string | null;
   logoUrl: string | null;
 };
+
+type Screen = "list" | "offer" | "edit";
+
+async function fetchLandingList(clientId: string) {
+  const res = await fetch(`/api/clients/${clientId}/landing-page`);
+  const json = (await res.json()) as {
+    sites?: LandingSiteSummary[];
+    error?: string;
+    headshotUrl?: string | null;
+    logoUrl?: string | null;
+  };
+  if (!res.ok) throw new Error(json.error || "Could not load landing pages");
+  return json;
+}
 
 function AssetSlot({
   label,
@@ -131,10 +151,14 @@ export default function LandingPageForm({ clientId, fallbackName, onClose, onPub
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [screen, setScreen] = useState<Screen>("list");
+  const [sites, setSites] = useState<LandingSiteSummary[]>([]);
+  const [siteId, setSiteId] = useState<string | null>(null);
   const [product, setProduct] = useState<LandingProduct>("DSCR");
   const [draft, setDraft] = useState<LandingDraft | null>(null);
   const [locked, setLocked] = useState(false);
   const [hasApplied, setHasApplied] = useState(false);
+  const [slugLocked, setSlugLocked] = useState(false);
   const [publish, setPublish] = useState<LandingPublishMeta | null>(null);
   const [landingPageUrl, setLandingPageUrl] = useState<string | null>(null);
   const [thankYouPageUrl, setThankYouPageUrl] = useState<string | null>(null);
@@ -143,23 +167,40 @@ export default function LandingPageForm({ clientId, fallbackName, onClose, onPub
 
   useEffect(() => setMounted(true), []);
 
+  function applyPayload(json: LoadResponse) {
+    setSiteId(json.siteId);
+    setProduct(json.product === "RM" ? "RM" : "DSCR");
+    setDraft(json.draft);
+    setLocked(json.locked);
+    setHasApplied(json.hasApplied);
+    setSlugLocked(json.slugLocked);
+    setPublish(json.publish);
+    setLandingPageUrl(json.landingPageUrl);
+    setThankYouPageUrl(json.thankYouPageUrl);
+    setHeadshotUrl(json.headshotUrl ?? null);
+    setLogoUrl(json.logoUrl ?? null);
+    setScreen("edit");
+  }
+
+  function rememberList(json: Awaited<ReturnType<typeof fetchLandingList>>) {
+    const next = json.sites ?? [];
+    setSites(next);
+    if (json.headshotUrl !== undefined) setHeadshotUrl(json.headshotUrl ?? null);
+    if (json.logoUrl !== undefined) setLogoUrl(json.logoUrl ?? null);
+    return next;
+  }
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch(`/api/clients/${clientId}/landing-page`);
-        const json = (await res.json()) as LoadResponse & { error?: string };
-        if (!res.ok) throw new Error(json.error || "Could not load the landing form");
+        const json = await fetchLandingList(clientId);
         if (cancelled) return;
-        setProduct(json.product === "RM" ? "RM" : "DSCR");
-        setDraft(json.draft);
-        setLocked(json.locked);
-        setHasApplied(json.hasApplied);
-        setPublish(json.publish);
-        setLandingPageUrl(json.landingPageUrl);
-        setThankYouPageUrl(json.thankYouPageUrl);
-        setHeadshotUrl(json.headshotUrl ?? null);
-        setLogoUrl(json.logoUrl ?? null);
+        const next = json.sites ?? [];
+        setSites(next);
+        if (json.headshotUrl !== undefined) setHeadshotUrl(json.headshotUrl ?? null);
+        if (json.logoUrl !== undefined) setLogoUrl(json.logoUrl ?? null);
+        if (next.length === 0) setScreen("offer");
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : "Could not load");
       } finally {
@@ -196,6 +237,7 @@ export default function LandingPageForm({ clientId, fallbackName, onClose, onPub
       const body = new FormData();
       body.set("kind", kind);
       body.set("file", file);
+      if (siteId) body.set("siteId", siteId);
       const res = await fetch(`/api/clients/${clientId}/landing-page`, {
         method: "POST",
         body,
@@ -213,7 +255,7 @@ export default function LandingPageForm({ clientId, fallbackName, onClose, onPub
   }
 
   async function post(action: "save" | "publish" | "check") {
-    if (!draft && action !== "check") return;
+    if ((!draft || !siteId) && action !== "check") return;
     setBusy(true);
     setNotice(null);
     setError(null);
@@ -221,7 +263,7 @@ export default function LandingPageForm({ clientId, fallbackName, onClose, onPub
       const res = await fetch(`/api/clients/${clientId}/landing-page`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action, draft }),
+        body: JSON.stringify({ action, draft, siteId }),
       });
       const json = (await res.json()) as {
         error?: string;
@@ -230,10 +272,13 @@ export default function LandingPageForm({ clientId, fallbackName, onClose, onPub
         publish?: LandingPublishMeta;
         pr_url?: string;
         result?: string;
+        siteId?: string;
+        primary?: boolean;
         landingPageUrl?: string | null;
         thankYouPageUrl?: string | null;
       };
       if (!res.ok) throw new Error(json.error || "Request failed");
+      if (json.siteId) setSiteId(json.siteId);
       if (json.draft) setDraft(json.draft);
       if (json.publish) setPublish(json.publish);
       if (json.locked) setLocked(true);
@@ -248,7 +293,12 @@ export default function LandingPageForm({ clientId, fallbackName, onClose, onPub
         if (json.result === "applied") {
           setLocked(false);
           setHasApplied(true);
-          setNotice("Live page saved on the client");
+          setSlugLocked(true);
+          setNotice(
+            json.primary
+              ? "Live page saved on the client."
+              : "This page is live. The other landing page was left as it is.",
+          );
           onPublished?.();
         } else {
           setNotice("The page is not live yet. Check again after the Vercel build finishes.");
@@ -261,19 +311,171 @@ export default function LandingPageForm({ clientId, fallbackName, onClose, onPub
     }
   }
 
+  async function startPage(nextProduct: LandingProduct) {
+    setBusy(true);
+    setNotice(null);
+    setError(null);
+    try {
+      const res = await fetch(`/api/clients/${clientId}/landing-page`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "create", product: nextProduct }),
+      });
+      const json = (await res.json()) as LoadResponse & { error?: string };
+      if (!res.ok) throw new Error(json.error || "Could not start the landing page");
+      applyPayload(json);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not start the landing page");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function openSite(nextSiteId: string) {
+    setBusy(true);
+    setNotice(null);
+    setError(null);
+    try {
+      const res = await fetch(`/api/clients/${clientId}/landing-page?site=${encodeURIComponent(nextSiteId)}`);
+      const json = (await res.json()) as LoadResponse & { error?: string };
+      if (!res.ok) throw new Error(json.error || "Could not open that landing page");
+      applyPayload(json);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not open that landing page");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function backToPages() {
+    setDraft(null);
+    setNotice(null);
+    setError(null);
+    setLoading(true);
+    try {
+      const next = rememberList(await fetchLandingList(clientId));
+      setScreen(next.length === 0 ? "offer" : "list");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not load");
+      setScreen("list");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   function portal(node: ReactNode) {
     if (!mounted || typeof document === "undefined") return null;
     return createPortal(node, document.body);
   }
 
-  if (loading || error || !draft) {
+  if (loading || (error && screen !== "offer" && screen !== "list" && !draft)) {
     return portal(
       <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4">
         <div className="max-w-md rounded-xl p-6" style={panelStyle}>
-          <p className="text-sm text-slate-300">{error || "Loading landing page…"}</p>
+          <p className="text-sm text-slate-300">{error || "Loading landing pages…"}</p>
           <button type="button" className="mt-4 text-sm text-slate-300 underline" onClick={onClose}>
             Close
           </button>
+        </div>
+      </div>,
+    );
+  }
+
+  if (screen !== "edit" || !draft) {
+    return portal(
+      <div className="fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto bg-black/70 p-3 sm:p-6">
+        <div className="my-2 w-full max-w-lg rounded-2xl shadow-2xl" style={panelStyle}>
+          <header className="flex items-start justify-between gap-3 border-b border-white/10 px-5 py-4">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Landing pages</p>
+              <h2 className="mt-1 text-lg font-semibold text-slate-100">{fallbackName}</h2>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-lg px-3 py-1.5 text-sm text-slate-400 hover:bg-white/5 hover:text-slate-200"
+            >
+              Close
+            </button>
+          </header>
+          <div className="space-y-4 px-5 py-5">
+            {error ? <p className="text-sm text-rose-300">{error}</p> : null}
+            {screen === "offer" ? (
+              <>
+                <p className="text-sm text-slate-300">Which offer is this page for?</p>
+                <div className="grid gap-3">
+                  {LANDING_PRODUCTS.map(choice => (
+                    <button
+                      key={choice}
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void startPage(choice)}
+                      className="rounded-xl px-4 py-3 text-left"
+                      style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)" }}
+                    >
+                      <p className="text-sm font-semibold text-slate-100">{LANDING_PRODUCT_LABELS[choice]}</p>
+                      <p className="mt-1 text-xs text-slate-400">{landingSiteLabel(choice)}</p>
+                    </button>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  className="text-sm text-slate-400 underline"
+                  onClick={() => {
+                    if (sites.length === 0) onClose();
+                    else {
+                      setError(null);
+                      setScreen("list");
+                    }
+                  }}
+                >
+                  {sites.length === 0 ? "Close" : "Back to pages"}
+                </button>
+              </>
+            ) : (
+              <>
+                {sites.map(site => (
+                  <div
+                    key={site.siteId}
+                    className="flex items-start justify-between gap-3 rounded-xl px-4 py-3"
+                    style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)" }}
+                  >
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-slate-100">
+                        {site.label}
+                        <span className="ml-2 text-xs font-normal text-slate-400">{LANDING_PRODUCT_LABELS[site.product]}</span>
+                      </p>
+                      <p className="mt-1 truncate text-xs text-slate-400">
+                        {site.landingPageUrl ?? (site.slug ? publicPageUrl(site.product, site.slug) : "Draft")}
+                        {site.locked ? " · publish open" : site.landingPageUrl ? "" : " · draft"}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void openSite(site.siteId)}
+                      className="rounded-lg px-3 py-1.5 text-xs font-semibold text-slate-100"
+                      style={{ background: "rgba(255,255,255,0.08)" }}
+                    >
+                      Edit
+                    </button>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => {
+                    setError(null);
+                    setScreen("offer");
+                  }}
+                  className="w-full rounded-xl px-4 py-3 text-sm font-semibold text-slate-950"
+                  style={{ background: "#34d399" }}
+                >
+                  Add new landing page
+                </button>
+              </>
+            )}
+          </div>
         </div>
       </div>,
     );
@@ -291,10 +493,13 @@ export default function LandingPageForm({ clientId, fallbackName, onClose, onPub
       <div className="my-2 w-full max-w-3xl rounded-2xl shadow-2xl" style={panelStyle}>
         <header className="flex items-start justify-between gap-3 border-b border-white/10 px-5 py-4">
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-              {reverse ? "Reverse landing page" : "Landing page"}
-            </p>
-            <h2 className="mt-1 text-lg font-semibold text-slate-100">{fallbackName}</h2>
+            <button type="button" className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 underline" onClick={() => void backToPages()}>
+              All landing pages
+            </button>
+            <h2 className="mt-1 text-lg font-semibold text-slate-100">
+              {fallbackName}
+              <span className="ml-2 text-sm font-normal text-slate-400">{LANDING_PRODUCT_LABELS[product]}</span>
+            </h2>
           </div>
           <button
             type="button"
@@ -308,7 +513,7 @@ export default function LandingPageForm({ clientId, fallbackName, onClose, onPub
         <div className="space-y-6 px-5 py-5">
           {locked && (
             <div className="rounded-lg border border-amber-400/30 bg-amber-500/10 px-3 py-3 text-sm text-amber-100">
-              <p>A publish is open. This form stays read-only until that pull request merges or closes.</p>
+              <p>A publish is open for this page. It stays read-only until that pull request merges or closes. Other pages can still be edited.</p>
               {publish?.pr_url ? (
                 <a className="mt-2 inline-block underline" href={publish.pr_url} target="_blank" rel="noreferrer">
                   Open pull request
@@ -338,7 +543,7 @@ export default function LandingPageForm({ clientId, fallbackName, onClose, onPub
             </p>
           ) : (
             <p className="text-xs text-slate-500">
-              Publishes to {site}. A pull request opens for review.
+              Publishes to {draft.slug ? publicPageUrl(product, draft.slug) : site}. A pull request opens for review.
             </p>
           )}
 
@@ -432,10 +637,15 @@ export default function LandingPageForm({ clientId, fallbackName, onClose, onPub
               <input
                 className={inputClass}
                 style={fieldStyle}
-                disabled={disabled}
+                disabled={disabled || slugLocked}
                 value={draft.slug}
                 onChange={e => patch({ slug: e.target.value.toLowerCase() })}
               />
+              <p className="mt-1 text-[11px] text-slate-500">
+                {slugLocked
+                  ? "This URL is live. Add a new page to get the next number."
+                  : "The number keeps this page on its own URL. It locks once the page is live."}
+              </p>
             </Field>
             <Field label="Quiz URL">
               <input

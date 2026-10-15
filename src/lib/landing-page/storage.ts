@@ -12,58 +12,71 @@ import {
   publishMetaFromResponses,
   toLandingResponses,
 } from "./responses";
+import {
+  LEGACY_SITE_ID,
+  rowsMatchSite,
+  shouldWritePrimaryUrl,
+  siteIdFromResponses,
+} from "./sites";
 import type { LandingDraft, LandingPublishMeta } from "./types";
 import { productionPageIsLive } from "./live";
 
-export async function getLatestLandingDraft(
+export async function listLandingRows(
   service: SupabaseClient,
   clientId: string,
-): Promise<FormSubmissionRow | null> {
+): Promise<FormSubmissionRow[]> {
   const { data, error } = await service
     .from("client_form_submissions")
     .select(FORM_SUBMISSION_FIELDS)
     .eq("client_id", clientId)
     .eq("form_type", "landing_page")
-    .eq("status", "draft")
-    .order("submitted_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .in("status", ["draft", "submitted", "applied"])
+    .order("submitted_at", { ascending: false });
   if (error) throw new Error(error.message);
-  return (data as FormSubmissionRow | null) ?? null;
+  return (data ?? []) as FormSubmissionRow[];
 }
 
-export async function getLatestAppliedLanding(
-  service: SupabaseClient,
-  clientId: string,
-): Promise<FormSubmissionRow | null> {
-  const { data, error } = await service
-    .from("client_form_submissions")
-    .select(FORM_SUBMISSION_FIELDS)
-    .eq("client_id", clientId)
-    .eq("form_type", "landing_page")
-    .eq("status", "applied")
-    .order("submitted_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (error) throw new Error(error.message);
-  return (data as FormSubmissionRow | null) ?? null;
+export function rowsForSite(rows: FormSubmissionRow[], clientId: string, siteId: string): FormSubmissionRow[] {
+  return rows.filter(row => rowsMatchSite(row, clientId, siteId));
 }
 
-export async function getOpenLandingSubmission(
+export async function takenSlugsForProduct(
   service: SupabaseClient,
-  clientId: string,
-): Promise<FormSubmissionRow | null> {
+  product: LandingProduct,
+): Promise<Set<string>> {
   const { data, error } = await service
     .from("client_form_submissions")
-    .select(FORM_SUBMISSION_FIELDS)
-    .eq("client_id", clientId)
+    .select("responses")
     .eq("form_type", "landing_page")
-    .eq("status", "submitted")
-    .order("submitted_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .in("status", ["draft", "submitted", "applied"])
+    .limit(5000);
   if (error) throw new Error(error.message);
-  return (data as FormSubmissionRow | null) ?? null;
+  const taken = new Set<string>();
+  for (const row of data ?? []) {
+    const responses = row.responses as Record<string, unknown> | null;
+    if (productFromResponses(responses) !== product) continue;
+    const slug = fieldsFromResponses(responses)?.slug;
+    if (slug) taken.add(slug);
+  }
+  return taken;
+}
+
+/** Give an older one-page client a stable id before a second page can be confused with it. */
+export async function claimLegacySite(
+  service: SupabaseClient,
+  clientId: string,
+): Promise<string> {
+  const rows = rowsForSite(await listLandingRows(service, clientId), clientId, LEGACY_SITE_ID);
+  if (rows.length === 0) throw new Error("That landing page was not found");
+  const siteId = crypto.randomUUID();
+  for (const row of rows) {
+    const { error } = await service
+      .from("client_form_submissions")
+      .update({ responses: { ...row.responses, site_id: siteId } })
+      .eq("id", row.id);
+    if (error) throw new Error(error.message);
+  }
+  return siteId;
 }
 
 export async function getSubmittedByPrNumber(
@@ -85,25 +98,31 @@ export async function getSubmittedByPrNumber(
   return (data as FormSubmissionRow | null) ?? null;
 }
 
-export async function slugTakenByOtherClient(
+export async function slugTakenByOtherSite(
   service: SupabaseClient,
   slug: string,
-  clientId: string,
   product: LandingProduct,
+  owner: { clientId: string; siteId: string },
 ): Promise<boolean> {
   const key = slug.trim().toLowerCase();
   if (!key) return false;
   const { data, error } = await service
     .from("client_form_submissions")
-    .select("client_id")
+    .select("client_id, responses")
     .eq("form_type", "landing_page")
     .in("status", ["draft", "submitted", "applied"])
-    .filter("responses->>product", "eq", product)
     .filter("responses->fields->>slug", "eq", key)
-    .neq("client_id", clientId)
-    .limit(1);
+    .limit(20);
   if (error) throw new Error(error.message);
-  return (data ?? []).length > 0;
+  return (data ?? []).some(row => {
+    const responses = row.responses as Record<string, unknown> | null;
+    if (productFromResponses(responses) !== product) return false;
+    return !rowsMatchSite(
+      { client_id: row.client_id as string | null, responses },
+      owner.clientId,
+      owner.siteId,
+    );
+  });
 }
 
 export async function saveLandingDraft(
@@ -111,10 +130,12 @@ export async function saveLandingDraft(
   clientId: string,
   draft: LandingDraft,
   submittedBy: string | null,
-  product: LandingProduct,
+  site: { siteId: string; product: LandingProduct },
 ): Promise<FormSubmissionRow> {
-  const responses = toLandingResponses(draft, emptyPublish(), product);
-  const existing = await getLatestLandingDraft(service, clientId);
+  const responses = toLandingResponses(draft, emptyPublish(), site);
+  const existing = rowsForSite(await listLandingRows(service, clientId), clientId, site.siteId).find(
+    row => row.status === "draft",
+  );
   if (existing) {
     const { data, error } = await service
       .from("client_form_submissions")
@@ -143,14 +164,14 @@ export async function insertLandingPublish(
   draft: LandingDraft,
   publish: LandingPublishMeta,
   submittedBy: string | null,
-  product: LandingProduct,
+  site: { siteId: string; product: LandingProduct },
 ): Promise<FormSubmissionRow> {
   return insertFormSubmission(service, {
     client_id: clientId,
     form_type: "landing_page",
     status: "submitted",
     submitted_by: submittedBy,
-    responses: toLandingResponses(draft, publish, product),
+    responses: toLandingResponses(draft, publish, site),
   });
 }
 
@@ -164,6 +185,7 @@ export async function settleMergedLanding(
   const fields = fieldsFromResponses(row.responses);
   const publish = publishMetaFromResponses(row.responses);
   const product = productFromResponses(row.responses);
+  const siteId = siteIdFromResponses(row.responses);
   if (!fields?.slug || !row.client_id) return "missing";
   const live = await productionPageIsLive(product, fields.slug, attempts);
   const nextPublish: LandingPublishMeta = {
@@ -171,7 +193,10 @@ export async function settleMergedLanding(
     merged: true,
     error: live ? null : "Production page is not live yet",
   };
-  const responses = toLandingResponses(fields, nextPublish, product);
+  const responses = toLandingResponses(fields, nextPublish, {
+    siteId: siteId === LEGACY_SITE_ID ? null : siteId,
+    product,
+  });
   if (!live) {
     const { error } = await service
       .from("client_form_submissions")
@@ -191,11 +216,19 @@ export async function settleMergedLanding(
     })
     .eq("id", row.id);
   if (rowError) throw new Error(rowError.message);
-  const { error: clientError } = await service
+  const { data: client, error: readError } = await service
     .from("clients")
-    .update({ landing_page_url: landing, thank_you_page_url: thankYou })
-    .eq("id", row.client_id);
-  if (clientError) throw new Error(clientError.message);
+    .select("landing_page_url")
+    .eq("id", row.client_id)
+    .maybeSingle();
+  if (readError) throw new Error(readError.message);
+  if (shouldWritePrimaryUrl(client?.landing_page_url as string | null | undefined, landing)) {
+    const { error: clientError } = await service
+      .from("clients")
+      .update({ landing_page_url: landing, thank_you_page_url: thankYou })
+      .eq("id", row.client_id);
+    if (clientError) throw new Error(clientError.message);
+  }
   return "applied";
 }
 

@@ -1,7 +1,7 @@
 ---
 title: Client landing builder — Design
 status: ready
-last_updated: 2026-10-14
+last_updated: 2026-10-15
 compatibility_reviewed: 2026-10-07
 artifact_type: design
 related_docs:
@@ -23,19 +23,20 @@ DSCR pages are built from YAML in `gwadawg/dscr-experts` and served at
 and the publish record. Each template repo keeps layout, copy, themes,
 and the compliance build.
 
-The client's product chooses the form. DSCR and reverse mortgage
-clients can publish. Call center clients cannot. Team Westside is
-later work.
+The form asks which offer the page is for. DSCR and reverse are the
+offers today. The client's reporting type does not choose the form.
+Any client can publish. Team Westside is later work.
 
 ## Purpose
 
-A teammate opens a DSCR or reverse client, fills the form, and publishes.
-The same form edits a page later. Each publish is a new row.
+A teammate opens any client, picks DSCR or reverse, fills the form,
+and publishes. The same form edits that page later, or adds another
+page with the next number. Each publish is a new row.
 The live page is rebuilt by the template repo from that save.
 
 ## Non-goals (v1)
 
-- A second site, a second Supabase project, or a second Railway app
+- A second Supabase project, or a second Railway app
 - New columns or actions on Client Roster
 - A history browser. Rows are kept. A screen to browse them comes later
 - Virtual cards, or merging this with the card wizard
@@ -52,7 +53,7 @@ The live page is rebuilt by the template repo from that save.
 | Topic | Decision |
 |-------|----------|
 | Where the form lives | Mr. Waiz. Own folder, own API route, lazy-loaded from Client File |
-| Who sees it | `clients.reporting_type` of `DSCR` or `RM`. Call center hides the control |
+| Who sees it | Every client. The offer is chosen in the form |
 | Which repo | `gwadawg/dscr-experts` (`LANDING_DSCR_GITHUB_REPO`) |
 | Public site | `https://dscrexperts.com/{slug}/` |
 | Where the design lives | The template repo. Mr. Waiz does not store HTML or CSS |
@@ -61,7 +62,7 @@ The live page is rebuilt by the template repo from that save.
 | v1 templates | `theme-1` (dark), `theme-light` (light), `theme-custom` (dark + hex accent) |
 | What a publish commits | `clients/{slug}.yaml` and, when a headshot exists, `brand_assets/clients/{slug}/headshot.{ext}` |
 | What a publish does not commit | Generated HTML, `vercel.json`, or theme files. Vercel runs `npm run build` |
-| Edit model | Open the last save, change fields, publish again. New row each publish |
+| Edit model | Each page is its own site. Edit that site, or add the next number. New row each publish |
 | When URLs are saved | After a human merges and `HEAD https://dscrexperts.com/{slug}/` returns 200 |
 | Phone on the page | The number on the form. Prefill from `clients.phone`. The operator confirms it. The YAML is a snapshot |
 | Texting | Form sets `compliance.sms.status` to `ready` or `pending`. Default `ready` |
@@ -74,12 +75,15 @@ The live page is rebuilt by the template repo from that save.
 ## Flow
 
 ```text
-Client File → Landing   (DSCR and RM clients)
+Client File → Landing   (every client)
   → GET  /api/clients/{id}/landing-page
-       latest draft, else latest applied, else clients row
+       list of this client's pages
+  → no pages yet, or Add new: choose DSCR or Reverse
+  → GET  /api/clients/{id}/landing-page?site={id}
+       that page's draft, else its applied save, else the client row
   → teammate edits fields
   → POST save
-       inserts or updates the open draft
+       inserts or updates the open draft for that page
   → POST publish
        validate
        reject a slug that is reserved, a demo, or already used
@@ -95,10 +99,10 @@ Client File → Landing   (DSCR and RM clients)
        retries the HEAD when a build finishes after the webhook
 ```
 
-If a `submitted` row already exists for that client, the form is
-read-only until the pull request merges or is closed. Closing the pull
-request sets that row to `dismissed`. The previous `applied` row stays
-the live page.
+If a `submitted` row already exists for that page, that page's form is
+read-only until the pull request merges or is closed. Another page for
+the same client can still be edited. Closing the pull request sets that
+row to `dismissed`. The previous `applied` row stays the live page.
 
 ## What each side owns
 
@@ -200,9 +204,9 @@ It does not block go-live.
 
 ## Reverse mortgage
 
-`reporting_type = RM` uses the same form, route, and webhook.
-The product on the client picks the fields, the repo, and the site.
-There is no picker inside the form.
+Reverse uses the same form, route, and webhook.
+The offer chosen for that page picks the fields, the repo, and the site.
+A DSCR page and a reverse page for the same client do not share a slug file.
 
 A publish writes `clients/{slug}.yaml` with `draft: false` and
 `theme: theme-1`, plus a headshot or logo when the client has one.
@@ -239,7 +243,7 @@ separately.
 ## Code layout
 
 Do not add the form body to `ClientFile.tsx` or `ClientRoster.tsx`.
-`ClientFile` gets one control, shown for DSCR and RM clients, that
+`ClientFile` gets one control, shown for every client, that
 mounts the lazy component. Client Roster gets no new action.
 
 ```text
@@ -314,10 +318,11 @@ public URL.
 
 ### Prefill order
 
-1. Open `draft` for this client and `form_type = landing_page`, if one exists.
-2. Else the latest `applied` row. Editing it creates a new draft.
-   The applied row stays as history.
+1. Open `draft` for this page, if one exists.
+2. Else the latest `applied` row for this page.
+   Editing it creates a new draft. The applied row stays as history.
 3. Else the `clients` row, using the prefill sources in the page contract.
+   The offer chosen for the page picks DSCR or reverse defaults.
 
 Empty form fields fall through to the next source.
 A saved value wins over the client row.
@@ -328,9 +333,14 @@ Every publish inserts a `submitted` row, which becomes `applied` only
 after the live page responds. Older applied rows stay.
 v1 has no history screen.
 
-There is one live page: the latest `applied` row.
-Changing the client file does not change that page.
-The team republishes to update it.
+Each page has its own live URL: `{host}/{slug}/`.
+A new page gets the next free number, `jane-doe-1`, then `jane-doe-2`.
+Numbers are counted separately on each offer.
+A page that is already live without a number keeps that address.
+Publishing one page does not replace another page's URL.
+`clients.landing_page_url` stays the first live page.
+Changing the client file does not change a live page.
+The team republishes that page to update it.
 
 ## Publish
 
@@ -357,7 +367,8 @@ Reverse uses the same webhook URL and the same secret.
 The `pull_request` hook on `gwadawg/rm-website-template` is already installed.
 The handler matches the repository name to the saved `template_repo`.
 
-Branch name: `landing/{slug}`. One open branch per client.
+Branch name: `landing/{slug}`. One open branch per page.
+A second page uses the next number, so its branch does not touch the first.
 The commit touches only the YAML and the headshot file.
 
 The template repo build remains the compliance gate.

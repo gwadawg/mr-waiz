@@ -1,12 +1,17 @@
-/** Landing factories. The client product picks the repo, the site, and the slug rules. */
+/** Landing factories. The offer chosen on the form picks the repo, the site, and the slug rules. */
 
 export const LANDING_PRODUCTS = ["DSCR", "RM"] as const;
 export type LandingProduct = (typeof LANDING_PRODUCTS)[number];
 
+export const LANDING_PRODUCT_LABELS: Record<LandingProduct, string> = {
+  DSCR: "DSCR",
+  RM: "Reverse",
+};
+
 export const DSCR_GITHUB_REPO = "gwadawg/dscr-experts";
 export const RM_GITHUB_REPO = "gwadawg/rm-website-template";
 export const DSCR_SITE_URL = "https://dscrexperts.com";
-export const RM_SITE_URL = "https://retirementmortgagexperts.com";
+export const RM_SITE_URL = "https://retirementmortgagexpert.com";
 export const LANDING_SCHEMA_VERSION = "2026-10-07";
 
 export const LANDING_THEMES = ["theme-1", "theme-light", "theme-custom"] as const;
@@ -40,7 +45,7 @@ export const RESERVED_SLUGS = new Set([
   "themes",
 ]);
 
-/** Host paths on retirementmortgagexperts.com. Client folders are not in this set. */
+/** Host paths on retirementmortgagexpert.com. Client folders are not in this set. */
 export const RM_RESERVED_SLUGS = new Set([
   "api",
   "assets",
@@ -82,11 +87,6 @@ const REPOS: Record<LandingProduct, { env: string; fallback: string; site: strin
   DSCR: { env: "LANDING_DSCR_GITHUB_REPO", fallback: DSCR_GITHUB_REPO, site: DSCR_SITE_URL },
   RM: { env: "LANDING_RM_GITHUB_REPO", fallback: RM_GITHUB_REPO, site: RM_SITE_URL },
 };
-
-export function landingProductFor(reportingType: string | null | undefined): LandingProduct | null {
-  if (reportingType === "DSCR" || reportingType === "RM") return reportingType;
-  return null;
-}
 
 export function landingRepo(product: LandingProduct): string {
   const profile = REPOS[product];

@@ -27,7 +27,6 @@ import {
   noteTypeLabel,
   reasonLabel,
 } from "@/lib/client-feedback";
-import { landingProductFor, landingSiteLabel } from "@/lib/landing-page/products";
 import ReportingTypeBadge, { ServiceProgramBadge } from "@/components/ReportingTypeBadge";
 import { getReportingTypeLabel, usesCallCenterKpiLayout } from "@/lib/reporting-types";
 import { getServiceProgramLabel } from "@/lib/service-program";
@@ -784,8 +783,6 @@ export default function ClientFile({
   }
 
   const offerName = client?.name ?? fallbackName;
-  const landingProduct = landingProductFor(client?.reporting_type);
-  const landingSite = landingProduct ? landingSiteLabel(landingProduct) : null;
   const accountName =
     accountDisplayName ||
     client?.primary_contact_name ||
@@ -1066,25 +1063,23 @@ export default function ClientFile({
                 >
                   Card{client.virtual_business_card_url ? " ✓" : ""}
                 </button>
-                {landingSite && (
-                  <button
-                    type="button"
-                    onClick={() => setShowLanding(true)}
-                    className="text-xs font-semibold px-3 py-1.5 rounded-lg whitespace-nowrap"
-                    style={{
-                      color: "#7dd3fc",
-                      background: "rgba(125,211,252,0.12)",
-                      border: "1px solid rgba(125,211,252,0.3)",
-                    }}
-                    title={
-                      client.landing_page_url
-                        ? `Landing page: ${client.landing_page_url}`
-                        : `Publish a ${landingSite} landing page`
-                    }
-                  >
-                    Landing{client.landing_page_url ? " ✓" : ""}
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={() => setShowLanding(true)}
+                  className="text-xs font-semibold px-3 py-1.5 rounded-lg whitespace-nowrap"
+                  style={{
+                    color: "#7dd3fc",
+                    background: "rgba(125,211,252,0.12)",
+                    border: "1px solid rgba(125,211,252,0.3)",
+                  }}
+                  title={
+                    client.landing_page_url
+                      ? `Primary landing page: ${client.landing_page_url}`
+                      : "Publish a DSCR or reverse landing page"
+                  }
+                >
+                  Landing{client.landing_page_url ? " ✓" : ""}
+                </button>
                 {(client.lifecycle_status === "onboarding" || client.lifecycle_status === "new_account") && (
                   <button
                     type="button"
@@ -1641,7 +1636,7 @@ export default function ClientFile({
               </button>
             </div>
 
-            {client && landingSite && (
+            {client && (
             <div
               className="rounded-lg px-4 py-3 flex items-start justify-between gap-4 flex-wrap"
               style={{
@@ -1651,12 +1646,12 @@ export default function ClientFile({
             >
               <div>
                 <p className="text-sm font-semibold" style={{ color: "#7dd3fc" }}>
-                  Landing page
+                  Landing pages
                 </p>
                 <p className="text-xs mt-1" style={{ color: "#94a3b8" }}>
                   {client.landing_page_url
-                    ? `Live at ${client.landing_page_url}`
-                    : `Publish a ${landingSite} page from a template. A pull request opens for review.`}
+                    ? `Primary page: ${client.landing_page_url}`
+                    : "Choose DSCR or reverse, then publish. Add another page when you want a second URL to test."}
                 </p>
               </div>
               <button
@@ -1669,7 +1664,7 @@ export default function ClientFile({
                   border: "1px solid rgba(125,211,252,0.3)",
                 }}
               >
-                {client.landing_page_url ? "Edit landing" : "Open Landing"}
+                {client.landing_page_url ? "Landing pages" : "Open Landing"}
               </button>
             </div>
             )}

@@ -7,12 +7,15 @@ import { headshotExtension, logoRepoFile } from "./headshot";
 import {
   draftForPublish,
   draftFromClient,
+  nextNumberedSlug,
   prefillLandingDraft,
   validateForPublish,
   type SlugContext,
 } from "./intake";
 import { RM_STOCK_HERO } from "./products";
+import { emptyPublish, toLandingResponses } from "./responses";
 import { verifyGithubSignature } from "./signature";
+import { groupLandingSites, shouldWritePrimaryUrl } from "./sites";
 import type { LandingClient, LandingDraft } from "./types";
 import { draftToYaml } from "./yaml";
 
@@ -82,8 +85,8 @@ const client: LandingClient = {
 
 describe("landing page intake", () => {
   it("prefills from the client and suggests texas", () => {
-    const draft = draftFromClient(client, "Jane");
-    assert.equal(draft.slug, "jane-doe");
+    const draft = draftFromClient(client, "Jane", "DSCR");
+    assert.equal(draft.slug, "jane-doe-1");
     assert.equal(draft.nmlsIndividual, "111111");
     assert.equal(draft.company, "Acme Lending");
     assert.deepEqual(draft.stateNotices, ["texas"]);
@@ -102,7 +105,7 @@ describe("landing page intake", () => {
     assert.ok(validateForPublish(filled({ slug: "themes" }), openSlug).some(e => /reserved/i.test(e)));
     assert.ok(validateForPublish(filled({ slug: "demo-lo" }), openSlug).some(e => /demo/i.test(e)));
     assert.ok(
-      validateForPublish(filled(), { ...openSlug, slugTaken: true }).some(e => /another client/i.test(e)),
+      validateForPublish(filled(), { ...openSlug, slugTaken: true }).some(e => /another landing page/i.test(e)),
     );
     assert.ok(
       validateForPublish(filled(), { ...openSlug, repoYamlExists: true }).some(e => /landing repo/i.test(e)),
@@ -221,7 +224,7 @@ describe("reverse landing validation", () => {
   const rmClient: LandingClient = { ...client, reporting_type: "RM" };
 
   it("prefills the stock hero and leaves texting pending", () => {
-    const draft = draftFromClient(rmClient, "Jane");
+    const draft = draftFromClient(rmClient, "Jane", "RM");
     assert.equal(draft.heroHeadline, RM_STOCK_HERO);
     assert.equal(draft.smsStatus, "pending");
     assert.equal(draft.tagline, "");
@@ -274,6 +277,62 @@ describe("reverse landing validation", () => {
       validateForPublish(filled({ heroHeadline: `*${"a".repeat(80)}*` }), openSlug, "RM").length,
       0,
     );
+  });
+});
+
+describe("numbered landing pages", () => {
+  it("starts at 1 and skips numbers already used on that offer", () => {
+    assert.equal(nextNumberedSlug("jane-doe", new Set(), "DSCR"), "jane-doe-1");
+    assert.equal(nextNumberedSlug("jane-doe", new Set(["jane-doe", "jane-doe-1"]), "DSCR"), "jane-doe-2");
+    assert.equal(
+      draftFromClient(client, "Jane", "RM", new Set(["jane-doe-1"])).slug,
+      "jane-doe-2",
+    );
+  });
+
+  it("keeps a second page off the client's primary URL", () => {
+    assert.equal(shouldWritePrimaryUrl(null, "https://dscrexperts.com/jane-doe-1/"), true);
+    assert.equal(
+      shouldWritePrimaryUrl("https://dscrexperts.com/jane-doe-1", "https://dscrexperts.com/jane-doe-1/"),
+      true,
+    );
+    assert.equal(
+      shouldWritePrimaryUrl("https://dscrexperts.com/jane-doe-1/", "https://dscrexperts.com/jane-doe-2/"),
+      false,
+    );
+  });
+
+  it("lists each offer and each number as its own page", () => {
+    const legacy = toLandingResponses(filled({ slug: "jane-doe" }), emptyPublish(), { product: "DSCR" });
+    const dscr = toLandingResponses(filled({ slug: "jane-doe-2" }), emptyPublish(), {
+      siteId: "11111111-1111-4111-8111-111111111111",
+      product: "DSCR",
+    });
+    const reverse = toLandingResponses(filled({ slug: "jane-doe-1" }), emptyPublish(), {
+      siteId: "22222222-2222-4222-8222-222222222222",
+      product: "RM",
+    });
+    const sites = groupLandingSites([
+      { id: "a", client_id: "c1", status: "applied", submitted_at: "2026-10-01T00:00:00.000Z", responses: legacy },
+      { id: "b", client_id: "c1", status: "applied", submitted_at: "2026-10-02T00:00:00.000Z", responses: legacy },
+      { id: "c", client_id: "c1", status: "draft", submitted_at: "2026-10-03T00:00:00.000Z", responses: dscr },
+      { id: "d", client_id: "c1", status: "applied", submitted_at: "2026-10-04T00:00:00.000Z", responses: reverse },
+    ]);
+    assert.deepEqual(
+      sites.map(site => [site.product, site.slug, site.landingPageUrl]),
+      [
+        ["DSCR", "jane-doe", "https://dscrexperts.com/jane-doe/"],
+        ["DSCR", "jane-doe-2", null],
+        ["RM", "jane-doe-1", "https://retirementmortgagexpert.com/jane-doe-1/"],
+      ],
+    );
+  });
+
+  it("uses the chosen offer on a client filed under another product", () => {
+    const draft = draftFromClient(client, "Jane", "RM");
+    assert.equal(draft.heroHeadline, RM_STOCK_HERO);
+    assert.equal(draft.smsStatus, "pending");
+    assert.equal(client.reporting_type, "DSCR");
   });
 });
 

@@ -23,9 +23,10 @@ export function templateRepoFromResponses(
 export function toLandingResponses(
   draft: LandingDraft,
   publish: LandingPublishMeta = emptyPublish(),
-  product: LandingProduct = "DSCR",
+  site: { siteId?: string | null; product?: LandingProduct } = {},
 ) {
-  return {
+  const product = site.product === "RM" ? "RM" : "DSCR";
+  const body: Record<string, unknown> = {
     schema_version: LANDING_SCHEMA_VERSION,
     product,
     template_repo: landingRepo(product),
@@ -33,6 +34,8 @@ export function toLandingResponses(
     fields: draft,
     publish,
   };
+  if (site.siteId) body.site_id = site.siteId;
+  return body;
 }
 
 export function fieldsFromResponses(responses: Record<string, unknown> | null | undefined): LandingDraft | null {

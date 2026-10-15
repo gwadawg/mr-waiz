@@ -5,7 +5,6 @@ import {
   RM_STOCK_HERO,
   SLUG_PATTERN,
   demoSlugs,
-  landingProductFor,
   reservedSlugs,
   type LandingProduct,
   type LandingTheme,
@@ -24,6 +23,24 @@ export function suggestSlug(name: string): string {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .replace(/-{2,}/g, "-");
+}
+
+/** Next `{base}-1`, `{base}-2`, … that is not already used on this offer. */
+export function nextNumberedSlug(
+  base: string,
+  taken: ReadonlySet<string>,
+  product: LandingProduct,
+): string {
+  const root = base.trim().toLowerCase().replace(/^-+|-+$/g, "") || "page";
+  for (let n = 1; n < 1000; n += 1) {
+    const slug = `${root}-${n}`;
+    const blocked =
+      taken.has(slug) ||
+      reservedSlugs(product).has(slug) ||
+      (demoSlugs(product) as readonly string[]).includes(slug);
+    if (!blocked && SLUG_PATTERN.test(slug)) return slug;
+  }
+  throw new Error("No open landing page number");
 }
 
 export function emptyLandingDraft(): LandingDraft {
@@ -72,15 +89,12 @@ function suggestNotices(states: string[] | null | undefined): StateNotice[] {
 export function draftFromClient(
   client: LandingClient,
   onboardingFirstName: string | null,
+  product: LandingProduct = "DSCR",
+  takenSlugs: ReadonlySet<string> = new Set(),
 ): LandingDraft {
-  const product = landingProductFor(client.reporting_type) ?? "DSCR";
   const name = text(client.primary_contact_name) || text(client.name);
   const suggested = suggestSlug(name);
-  const demos = demoSlugs(product);
-  const slug =
-    suggested && !reservedSlugs(product).has(suggested) && !demos.includes(suggested)
-      ? suggested
-      : "";
+  const slug = nextNumberedSlug(suggested || "page", takenSlugs, product);
   const first = text(onboardingFirstName) || name.split(/\s+/)[0] || "";
   const notices = suggestNotices(client.states_licensed);
   return {
@@ -181,8 +195,9 @@ export function prefillLandingDraft(
   client: LandingClient,
   saved: LandingDraft | null,
   onboardingFirstName: string | null,
+  product: LandingProduct = "DSCR",
 ): LandingDraft {
-  const fromClient = draftFromClient(client, onboardingFirstName);
+  const fromClient = draftFromClient(client, onboardingFirstName, product);
   if (!saved) return fromClient;
   return {
     slug: pick(saved.slug, fromClient.slug),
@@ -305,7 +320,7 @@ export function validateSlug(slug: string, ctx: SlugContext, product: LandingPro
     errors.push(`Slug "${slug}" is a demo page`);
   }
   if (ctx.slugTaken) {
-    errors.push(`Slug "${slug}" is already used by another client`);
+    errors.push(`Slug "${slug}" is already used by another landing page`);
   }
   if (ctx.repoYamlExists && !ctx.clientOwnsSlug) {
     errors.push(`Slug "${slug}" already has a page in the landing repo`);
