@@ -9,6 +9,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 | Task | Load |
 |------|------|
 | Which client-ad messages are working | `.cursor/skills/ad-performance-learnings/SKILL.md` — scorecard in this repo; learnings file in Wm-os `docs/client-fulfillment/media-buying/performance-learnings.md` |
+| Grade a DSCR Meta export: which test ads to graduate, extend, or turn off | `.cursor/skills/dscr-testing-level1/SKILL.md` — Stage 1 only (DSCR-Testing-Level1). Both stages: `docs/CREATIVE_TESTING.md`. Later gates: `docs/AD_TESTING_RULEBOOK.md` |
 | Label / name a new Meta ad (Mr. Waiz) | `.cursor/skills/ad-naming/SKILL.md` — lookup via `scripts/ad-name-lookup.ts` (live `ad_library` only) |
 | Closebot stale-ticket triage (pre-fix vs still-open) | `docs/superpowers/specs/2026-08-19-closebot-pre-fix-guard-design.md` |
 | CSM Cursor brief API (finance-safe client history) | `docs/CSM_BRIEF_API.md` — issue token via `scripts/issue-csm-api-token.ts` |
