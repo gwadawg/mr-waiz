@@ -731,7 +731,7 @@ export default function LandingPageForm({ clientId, fallbackName, onClose, onPub
             />
             <AssetSlot
               label="Logo"
-              hint="Optional company mark. Transparent PNG works best, about 800×200. Shown small on the page."
+              hint="Optional company mark. Transparent PNG works best, about 800×200. Replaces the name in the page header and footer."
               empty="No logo on this client. Upload one if this page should show a mark."
               url={logoUrl}
               contain
