@@ -8,6 +8,8 @@ import {
   LANDING_PRODUCTS,
   LANDING_THEME_LABELS,
   LANDING_THEMES,
+  asLandingProduct,
+  isEquityLanding,
   landingPageUrl as publicPageUrl,
   landingSiteLabel,
   type LandingProduct,
@@ -169,7 +171,7 @@ export default function LandingPageForm({ clientId, fallbackName, onClose, onPub
 
   function applyPayload(json: LoadResponse) {
     setSiteId(json.siteId);
-    setProduct(json.product === "RM" ? "RM" : "DSCR");
+    setProduct(asLandingProduct(json.product));
     setDraft(json.draft);
     setLocked(json.locked);
     setHasApplied(json.hasApplied);
@@ -483,9 +485,9 @@ export default function LandingPageForm({ clientId, fallbackName, onClose, onPub
 
   const inputClass = "w-full rounded-md px-3 py-2 text-sm outline-none";
   const disabled = locked || busy;
-  const reverse = product === "RM";
-  const showAccent = !reverse && (draft.theme === "theme-custom" || draft.theme === "theme-light");
-  const hero = reverse ? reviewHeroHeadline(draft.heroHeadline) : null;
+  const equity = isEquityLanding(product);
+  const showAccent = !equity && (draft.theme === "theme-custom" || draft.theme === "theme-light");
+  const hero = equity ? reviewHeroHeadline(draft.heroHeadline, product === "HS" ? "many" : "one") : null;
   const site = landingSiteLabel(product);
 
   return portal(
@@ -551,7 +553,7 @@ export default function LandingPageForm({ clientId, fallbackName, onClose, onPub
           {notice ? <p className="text-sm text-emerald-300">{notice}</p> : null}
 
           <section className="grid gap-4 sm:grid-cols-2">
-            {reverse ? (
+            {equity ? (
               <>
                 <Field label="Brand">
                   <select
@@ -617,7 +619,7 @@ export default function LandingPageForm({ clientId, fallbackName, onClose, onPub
                 />
               </Field>
             ) : null}
-            {reverse && draft.colorway === "custom" ? (
+            {equity && draft.colorway === "custom" ? (
               <>
                 <Field label="Ink (required)">
                   <input className={inputClass} style={fieldStyle} disabled={disabled} value={draft.ink} placeholder="#1B3A2F" onChange={e => patch({ ink: e.target.value })} />
@@ -663,7 +665,7 @@ export default function LandingPageForm({ clientId, fallbackName, onClose, onPub
             <Field label="Public name">
               <input className={inputClass} style={fieldStyle} disabled={disabled} value={draft.name} onChange={e => patch({ name: e.target.value })} />
             </Field>
-            {reverse && draft.brandType === "company" ? null : (
+            {equity && draft.brandType === "company" ? null : (
               <Field label="First name">
                 <input className={inputClass} style={fieldStyle} disabled={disabled} value={draft.firstName} onChange={e => patch({ firstName: e.target.value })} />
               </Field>
@@ -671,10 +673,10 @@ export default function LandingPageForm({ clientId, fallbackName, onClose, onPub
             <Field label="Title">
               <input className={inputClass} style={fieldStyle} disabled={disabled} value={draft.title} onChange={e => patch({ title: e.target.value })} />
             </Field>
-            <Field label={reverse && draft.brandType === "company" ? "Parent company (optional)" : "Company"}>
+            <Field label={equity && draft.brandType === "company" ? "Parent company (optional)" : "Company"}>
               <input className={inputClass} style={fieldStyle} disabled={disabled} value={draft.company} onChange={e => patch({ company: e.target.value })} />
             </Field>
-            {reverse && draft.brandType === "company" ? (
+            {equity && draft.brandType === "company" ? (
               <Field label="Legal name (optional)">
                 <input className={inputClass} style={fieldStyle} disabled={disabled} value={draft.legalName} onChange={e => patch({ legalName: e.target.value })} />
               </Field>
@@ -688,7 +690,7 @@ export default function LandingPageForm({ clientId, fallbackName, onClose, onPub
             <Field label="Email">
               <input className={inputClass} style={fieldStyle} disabled={disabled} value={draft.email} onChange={e => patch({ email: e.target.value })} />
             </Field>
-            {reverse ? null : (
+            {equity ? null : (
               <Field label="Booking URL">
                 <input className={inputClass} style={fieldStyle} disabled={disabled} value={draft.bookingUrl} placeholder="Optional" onChange={e => patch({ bookingUrl: e.target.value })} />
               </Field>
@@ -708,7 +710,7 @@ export default function LandingPageForm({ clientId, fallbackName, onClose, onPub
             <Field label="ZIP">
               <input className={inputClass} style={fieldStyle} disabled={disabled} value={draft.postalCode} onChange={e => patch({ postalCode: e.target.value })} />
             </Field>
-            {reverse && draft.brandType === "company" ? null : (
+            {equity && draft.brandType === "company" ? null : (
               <Field label="Individual NMLS">
                 <input className={inputClass} style={fieldStyle} disabled={disabled} value={draft.nmlsIndividual} onChange={e => patch({ nmlsIndividual: e.target.value })} />
               </Field>
@@ -738,7 +740,7 @@ export default function LandingPageForm({ clientId, fallbackName, onClose, onPub
             />
           </section>
 
-          {reverse ? (
+          {equity ? (
             <Field label={`Hero line${hero ? ` (${hero.length}/80)` : ""}`}>
               <textarea
                 className={`${inputClass} min-h-20`}
@@ -748,7 +750,11 @@ export default function LandingPageForm({ clientId, fallbackName, onClose, onPub
                 onChange={e => patch({ heroHeadline: e.target.value })}
               />
               {hero?.error ? <p className="mt-1 text-xs text-rose-300">{hero.error}</p> : (
-                <p className="mt-1 text-[11px] text-slate-500">Asterisks are not counted. One *phrase* is the italic accent.</p>
+                <p className="mt-1 text-[11px] text-slate-500">
+                  {product === "HS"
+                    ? "Asterisks are not counted. Wrap a phrase in *asterisks* for the accent. Several phrases are allowed."
+                    : "Asterisks are not counted. One *phrase* is the italic accent."}
+                </p>
               )}
             </Field>
           ) : (
@@ -763,6 +769,32 @@ export default function LandingPageForm({ clientId, fallbackName, onClose, onPub
             </Field>
           )}
 
+          {product === "HS" ? (
+            <section className="grid gap-4 sm:grid-cols-2">
+              <Field label="Minimum age">
+                <input
+                  className={inputClass}
+                  style={fieldStyle}
+                  disabled={disabled}
+                  value={draft.fitAge}
+                  inputMode="numeric"
+                  onChange={e => patch({ fitAge: e.target.value })}
+                />
+              </Field>
+              <Field label="Minimum credit score">
+                <input
+                  className={inputClass}
+                  style={fieldStyle}
+                  disabled={disabled}
+                  value={draft.fitCredit}
+                  inputMode="numeric"
+                  placeholder="Blank shows fair credit considered"
+                  onChange={e => patch({ fitCredit: e.target.value })}
+                />
+              </Field>
+            </section>
+          ) : null}
+
           <section className="flex flex-wrap gap-4 text-sm text-slate-300">
             <label className="flex items-center gap-2">
               <input
@@ -773,7 +805,7 @@ export default function LandingPageForm({ clientId, fallbackName, onClose, onPub
               />
               Texting approved
             </label>
-            {reverse ? null : (
+            {equity ? null : (
               <label className="flex items-center gap-2">
                 <input
                   type="checkbox"
@@ -793,7 +825,7 @@ export default function LandingPageForm({ clientId, fallbackName, onClose, onPub
               />
               Texas notice
             </label>
-            {reverse ? null : (
+            {equity ? null : (
               <label className="flex items-center gap-2">
                 <input
                   type="checkbox"
@@ -805,7 +837,7 @@ export default function LandingPageForm({ clientId, fallbackName, onClose, onPub
               </label>
             )}
           </section>
-          {!reverse && !hasApplied ? (
+          {!equity && !hasApplied ? (
             <p className="text-xs text-slate-500">The first publish stays out of search. Turn indexing on with a later publish.</p>
           ) : null}
         </div>

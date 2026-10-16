@@ -1,4 +1,4 @@
-import { landingRepo, LANDING_SCHEMA_VERSION, type LandingProduct } from "./products";
+import { asLandingProduct, isEquityLanding, landingRepo, LANDING_SCHEMA_VERSION, type LandingProduct } from "./products";
 import { parseLandingDraft } from "./intake";
 import type { LandingDraft, LandingPublishMeta } from "./types";
 
@@ -9,7 +9,7 @@ export function emptyPublish(): LandingPublishMeta {
 export function productFromResponses(
   responses: Record<string, unknown> | null | undefined,
 ): LandingProduct {
-  return responses?.product === "RM" ? "RM" : "DSCR";
+  return asLandingProduct(responses?.product);
 }
 
 export function templateRepoFromResponses(
@@ -25,12 +25,12 @@ export function toLandingResponses(
   publish: LandingPublishMeta = emptyPublish(),
   site: { siteId?: string | null; product?: LandingProduct } = {},
 ) {
-  const product = site.product === "RM" ? "RM" : "DSCR";
+  const product = asLandingProduct(site.product);
   const body: Record<string, unknown> = {
     schema_version: LANDING_SCHEMA_VERSION,
     product,
     template_repo: landingRepo(product),
-    template_id: product === "RM" ? "theme-1" : draft.theme,
+    template_id: isEquityLanding(product) ? "theme-1" : draft.theme,
     fields: draft,
     publish,
   };

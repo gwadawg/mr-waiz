@@ -1,5 +1,5 @@
 import YAML from "yaml";
-import { RM_STOCK_HERO, type LandingProduct } from "./products";
+import { HS_FIT_AGE, HS_STOCK_HERO, RM_STOCK_HERO, type LandingProduct } from "./products";
 import type { LandingDraft } from "./types";
 
 function phoneDigits(phone: string): string {
@@ -46,8 +46,9 @@ function contactBlock(draft: LandingDraft) {
   };
 }
 
-function reverseYaml(draft: LandingDraft): string {
+function equityYaml(draft: LandingDraft, product: "RM" | "HS"): string {
   const first = draft.firstName.trim() || draft.name.trim().split(/\s+/)[0] || "";
+  const hero = product === "HS" ? HS_STOCK_HERO : RM_STOCK_HERO;
   const identity: Record<string, string> = {
     name: draft.name.trim(),
     firstName: draft.brandType === "company" ? "" : first,
@@ -75,7 +76,7 @@ function reverseYaml(draft: LandingDraft): string {
     },
     applyUrl: draft.applyUrl.trim(),
     copy: {
-      heroHeadline: draft.heroHeadline.trim() || RM_STOCK_HERO,
+      heroHeadline: draft.heroHeadline.trim() || hero,
     },
     assets: {
       logo: "",
@@ -84,6 +85,13 @@ function reverseYaml(draft: LandingDraft): string {
       ogImage: "",
     },
   };
+  if (product === "HS") {
+    const fit: Record<string, number> = {
+      age: Number(draft.fitAge.trim() || HS_FIT_AGE),
+    };
+    if (/^\d{3}$/.test(draft.fitCredit.trim())) fit.creditScore = Number(draft.fitCredit.trim());
+    doc.fit = fit;
+  }
   if (draft.colorway === "custom") {
     const brandColors: Record<string, string> = {
       ink: draft.ink.trim(),
@@ -97,7 +105,7 @@ function reverseYaml(draft: LandingDraft): string {
 }
 
 export function draftToYaml(draft: LandingDraft, product: LandingProduct = "DSCR"): string {
-  if (product === "RM") return reverseYaml(draft);
+  if (product === "RM" || product === "HS") return equityYaml(draft, product);
   const first = draft.firstName.trim() || draft.name.trim().split(/\s+/)[0] || "";
   const doc: Record<string, unknown> = {
     slug: draft.slug,

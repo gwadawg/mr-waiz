@@ -19,17 +19,19 @@ The team publishes a loan-officer landing page from Client File.
 DSCR pages are built from YAML in `gwadawg/dscr-experts` and served at
 `https://dscrexperts.com/{slug}/`. Reverse pages are built from YAML in
 `gwadawg/rm-website-template` and served at
-`https://retirementmortgagexperts.com/{slug}/`. Mr. Waiz keeps the form
-and the publish record. Each template repo keeps layout, copy, themes,
-and the compliance build.
+`https://retirementmortgagexperts.com/{slug}/`. HomeSafe pages are
+built from YAML in `gwadawg/homesafe-landing` and served at
+`https://hs.retirementmortgagexpert.com/{slug}/`. Mr. Waiz keeps the
+form and the publish record. Each template repo keeps layout, copy,
+themes, and the compliance build.
 
-The form asks which offer the page is for. DSCR and reverse are the
-offers today. The client's reporting type does not choose the form.
-Any client can publish. Team Westside is later work.
+The form asks which offer the page is for. DSCR, reverse, and HomeSafe
+are the offers today. The client's reporting type does not choose the
+form. Any client can publish. Team Westside is later work.
 
 ## Purpose
 
-A teammate opens any client, picks DSCR or reverse, fills the form,
+A teammate opens any client, picks DSCR, reverse, or HomeSafe, fills the form,
 and publishes. The same form edits that page later, or adds another
 page with the next number. Each publish is a new row.
 The live page is rebuilt by the template repo from that save.
@@ -78,7 +80,7 @@ The live page is rebuilt by the template repo from that save.
 Client File → Landing   (every client)
   → GET  /api/clients/{id}/landing-page
        list of this client's pages
-  → no pages yet, or Add new: choose DSCR or Reverse
+  → no pages yet, or Add new: choose DSCR, Reverse, or HomeSafe
   → GET  /api/clients/{id}/landing-page?site={id}
        that page's draft, else its applied save, else the client row
   → teammate edits fields
@@ -237,8 +239,36 @@ Refuse a host path, a demo slug (`demo-specialist`, `demo-brand`,
 `demo-company`, `demo-evergreen`), or a yaml already on `main` that
 this client does not own. The same slug may exist on the DSCR site.
 Slug checks are per product. A merged pull request is matched by
-number and `template_repo`, because the two repos number pulls
-separately.
+number and `template_repo`, because the repos number pulls separately.
+
+## HomeSafe
+
+HomeSafe uses the same form, route, and webhook as reverse.
+The offer chosen for that page picks the fields, the repo, and the site.
+A HomeSafe page does not share a slug file with a DSCR page or a
+reverse page for the same client.
+
+A publish writes `clients/{slug}.yaml` in `gwadawg/homesafe-landing`
+with `draft: false` and `theme: theme-1`. The live page is
+`https://hs.retirementmortgagexpert.com/{slug}/`.
+Vercel runs `npm run build`.
+
+The fields match reverse, plus the fit check the factory prints:
+
+- Minimum age, prefilled `55`. A blank publish writes `55`.
+- Minimum credit score, prefilled `640`. A blank score is left off
+  the file, and the page says fair credit is considered.
+- Hero line. The stock line is prefilled. Eighty visible characters.
+  Several `*italic*` phrases are allowed. Reverse still allows one.
+
+Host paths and demo slugs match the reverse factory, because this
+repo was started from that kit. Slug checks stay per product, so the
+same slug may exist on the reverse site.
+
+The `pull_request` hook on `gwadawg/homesafe-landing` is hook
+`698820827`. It uses the same URL and the same
+`LANDING_GITHUB_WEBHOOK_SECRET`. The handler matches the repository
+name to the saved `template_repo`.
 
 ## Code layout
 
@@ -322,7 +352,7 @@ public URL.
 2. Else the latest `applied` row for this page.
    Editing it creates a new draft. The applied row stays as history.
 3. Else the `clients` row, using the prefill sources in the page contract.
-   The offer chosen for the page picks DSCR or reverse defaults.
+   The offer chosen for the page picks DSCR, reverse, or HomeSafe defaults.
 
 Empty form fields fall through to the next source.
 A saved value wins over the client row.
@@ -359,12 +389,15 @@ Set on Railway before the first real publish:
 |----------|-----|
 | `LANDING_GITHUB_TOKEN` | Fine-grained token. Contents and pull requests on `gwadawg/dscr-experts` |
 | `LANDING_RM_GITHUB_TOKEN` | Fine-grained token. Contents and pull requests on `gwadawg/rm-website-template` |
+| `LANDING_HS_GITHUB_TOKEN` | Fine-grained token. Contents and pull requests on `gwadawg/homesafe-landing` |
 | `LANDING_DSCR_GITHUB_REPO` | `gwadawg/dscr-experts` |
 | `LANDING_RM_GITHUB_REPO` | `gwadawg/rm-website-template` |
+| `LANDING_HS_GITHUB_REPO` | `gwadawg/homesafe-landing` |
 | `LANDING_GITHUB_WEBHOOK_SECRET` | Verifies `X-Hub-Signature-256` |
 
 Reverse uses the same webhook URL and the same secret.
 The `pull_request` hook on `gwadawg/rm-website-template` is already installed.
+HomeSafe uses hook `698820827` on `gwadawg/homesafe-landing`.
 The handler matches the repository name to the saved `template_repo`.
 
 Branch name: `landing/{slug}`. One open branch per page.

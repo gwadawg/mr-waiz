@@ -1,9 +1,9 @@
-import { landingRepo, yamlPath, type LandingProduct } from "./products";
+import { landingRepo, landingTokenEnv, yamlPath, type LandingProduct } from "./products";
 
 type GhResult<T> = { status: number; data: T };
 
 function token(product: LandingProduct): string {
-  const name = product === "RM" ? "LANDING_RM_GITHUB_TOKEN" : "LANDING_GITHUB_TOKEN";
+  const name = landingTokenEnv(product);
   const value = process.env[name]?.trim();
   if (!value) throw new Error(`${name} is not set`);
   return value;

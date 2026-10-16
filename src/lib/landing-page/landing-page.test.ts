@@ -12,7 +12,7 @@ import {
   validateForPublish,
   type SlugContext,
 } from "./intake";
-import { RM_STOCK_HERO } from "./products";
+import { HS_STOCK_HERO, RM_STOCK_HERO } from "./products";
 import { emptyPublish, toLandingResponses } from "./responses";
 import { verifyGithubSignature } from "./signature";
 import { groupLandingSites, shouldWritePrimaryUrl } from "./sites";
@@ -57,6 +57,8 @@ function filled(overrides: Partial<LandingDraft> = {}): LandingDraft {
     cream: "",
     legalName: "",
     heroHeadline: "",
+    fitAge: "",
+    fitCredit: "",
     ...overrides,
   };
 }
@@ -157,6 +159,7 @@ describe("landing page yaml", () => {
     assert.equal(parsed.colorway, undefined);
     assert.equal(parsed.brandType, undefined);
     assert.equal(parsed.copy, undefined);
+    assert.equal(parsed.fit, undefined);
     assert.equal((parsed.contacts as { phoneE164: string }).phoneE164, "15555550100");
     assert.equal((sms as { programName: string }).programName, "Jane Doe / Acme Lending");
 
@@ -190,6 +193,7 @@ describe("landing page yaml", () => {
     assert.equal(compliance.sms.programName, "Jane Doe");
     assert.equal(compliance.sms.frequency, "Message frequency varies.");
     assert.equal((parsed.copy as { heroHeadline: string }).heroHeadline, RM_STOCK_HERO);
+    assert.equal(parsed.fit, undefined);
     assert.deepEqual(compliance.stateNotices, ["texas"]);
   });
 
@@ -333,6 +337,93 @@ describe("numbered landing pages", () => {
     assert.equal(draft.heroHeadline, RM_STOCK_HERO);
     assert.equal(draft.smsStatus, "pending");
     assert.equal(client.reporting_type, "DSCR");
+  });
+});
+
+describe("homesafe landing", () => {
+  it("prefills the HomeSafe hero, fit floors, and pending texting", () => {
+    const draft = draftFromClient(client, "Jane", "HS");
+    assert.equal(draft.heroHeadline, HS_STOCK_HERO);
+    assert.equal(draft.fitAge, "55");
+    assert.equal(draft.fitCredit, "640");
+    assert.equal(draft.smsStatus, "pending");
+    assert.equal(draft.tagline, "");
+    assert.equal(draft.theme, "theme-1");
+    assert.equal(draft.slug, "jane-doe-1");
+  });
+
+  it("writes a HomeSafe page the factory can build", () => {
+    const ready = draftForPublish(filled({ heroHeadline: "", fitAge: "", fitCredit: "" }), false, "HS");
+    assert.equal(ready.heroHeadline, HS_STOCK_HERO);
+    assert.equal(ready.fitAge, "55");
+    assert.equal(ready.preview, false);
+    const parsed = YAML.parse(draftToYaml(ready, "HS")) as Record<string, unknown>;
+    const fit = parsed.fit as { age: number; creditScore?: number };
+    assert.equal(parsed.draft, false);
+    assert.equal(parsed.preview, undefined);
+    assert.equal(parsed.theme, "theme-1");
+    assert.equal(parsed.products, undefined);
+    assert.equal(parsed.bookingUrl, undefined);
+    assert.equal((parsed.copy as { heroHeadline: string }).heroHeadline, HS_STOCK_HERO);
+    assert.equal(fit.age, 55);
+    assert.equal(fit.creditScore, undefined);
+    const withCredit = YAML.parse(
+      draftToYaml(draftForPublish(filled({ fitCredit: "640" }), false, "HS"), "HS"),
+    ) as { fit: { creditScore: number } };
+    assert.equal(withCredit.fit.creditScore, 640);
+  });
+
+  it("allows several italic phrases and refuses a broken pair", () => {
+    const two = filled({
+      heroHeadline: "Keep *your rate* and skip *a new payment*.",
+      fitAge: "55",
+      fitCredit: "640",
+    });
+    assert.equal(validateForPublish(two, openSlug, "HS").length, 0);
+    assert.ok(
+      validateForPublish(filled({ heroHeadline: "Keep *your rate" }), openSlug, "HS").some(e =>
+        /matching pair/i.test(e),
+      ),
+    );
+    assert.ok(
+      validateForPublish(filled({ heroHeadline: "a".repeat(81) }), openSlug, "HS").some(e => /80/.test(e)),
+    );
+  });
+
+  it("keeps reverse to one italic pair", () => {
+    assert.ok(
+      validateForPublish(
+        filled({ heroHeadline: "Keep *your rate* and skip *a new payment*." }),
+        openSlug,
+        "RM",
+      ).some(e => /one pair/i.test(e)),
+    );
+  });
+
+  it("refuses host paths and a bad fit, and stores its own site", () => {
+    assert.ok(validateForPublish(filled({ slug: "faq" }), openSlug, "HS").some(e => /reserved/i.test(e)));
+    assert.ok(
+      validateForPublish(filled({ slug: "demo-company" }), openSlug, "HS").some(e => /demo/i.test(e)),
+    );
+    assert.ok(validateForPublish(filled({ fitAge: "5" }), openSlug, "HS").some(e => /Fit age/i.test(e)));
+    assert.ok(validateForPublish(filled({ fitCredit: "64" }), openSlug, "HS").some(e => /credit/i.test(e)));
+    const saved = toLandingResponses(filled({ slug: "jane-doe-1" }), emptyPublish(), {
+      siteId: "33333333-3333-4333-8333-333333333333",
+      product: "HS",
+    });
+    assert.equal(saved.product, "HS");
+    assert.equal(saved.template_repo, "gwadawg/homesafe-landing");
+    assert.equal(saved.template_id, "theme-1");
+    const sites = groupLandingSites([
+      {
+        id: "e",
+        client_id: "c1",
+        status: "applied",
+        submitted_at: "2026-10-05T00:00:00.000Z",
+        responses: saved,
+      },
+    ]);
+    assert.equal(sites[0]?.landingPageUrl, "https://hs.retirementmortgagexpert.com/jane-doe-1/");
   });
 });
 

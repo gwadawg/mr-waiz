@@ -1,17 +1,20 @@
 /** Landing factories. The offer chosen on the form picks the repo, the site, and the slug rules. */
 
-export const LANDING_PRODUCTS = ["DSCR", "RM"] as const;
+export const LANDING_PRODUCTS = ["DSCR", "RM", "HS"] as const;
 export type LandingProduct = (typeof LANDING_PRODUCTS)[number];
 
 export const LANDING_PRODUCT_LABELS: Record<LandingProduct, string> = {
   DSCR: "DSCR",
   RM: "Reverse",
+  HS: "HomeSafe",
 };
 
 export const DSCR_GITHUB_REPO = "gwadawg/dscr-experts";
 export const RM_GITHUB_REPO = "gwadawg/rm-website-template";
+export const HS_GITHUB_REPO = "gwadawg/homesafe-landing";
 export const DSCR_SITE_URL = "https://dscrexperts.com";
 export const RM_SITE_URL = "https://retirementmortgagexpert.com";
+export const HS_SITE_URL = "https://hs.retirementmortgagexpert.com";
 export const LANDING_SCHEMA_VERSION = "2026-10-07";
 
 export const LANDING_THEMES = ["theme-1", "theme-light", "theme-custom"] as const;
@@ -81,12 +84,59 @@ export const HEX_COLOR = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
 export const DEFAULT_TAGLINE = "DSCR refinance for rental investors";
 export const RM_STOCK_HERO =
   "Turn the equity in your home into retirement cash flow — *without selling.*";
+export const HS_STOCK_HERO =
+  "Take cash out of your home without giving up *your rate* or adding a payment.";
+export const HS_FIT_AGE = "55";
+export const HS_FIT_CREDIT = "640";
 export const HERO_HEADLINE_MAX = 80;
 
-const REPOS: Record<LandingProduct, { env: string; fallback: string; site: string }> = {
-  DSCR: { env: "LANDING_DSCR_GITHUB_REPO", fallback: DSCR_GITHUB_REPO, site: DSCR_SITE_URL },
-  RM: { env: "LANDING_RM_GITHUB_REPO", fallback: RM_GITHUB_REPO, site: RM_SITE_URL },
+const REPOS: Record<LandingProduct, { env: string; fallback: string; site: string; tokenEnv: string }> = {
+  DSCR: {
+    env: "LANDING_DSCR_GITHUB_REPO",
+    fallback: DSCR_GITHUB_REPO,
+    site: DSCR_SITE_URL,
+    tokenEnv: "LANDING_GITHUB_TOKEN",
+  },
+  RM: {
+    env: "LANDING_RM_GITHUB_REPO",
+    fallback: RM_GITHUB_REPO,
+    site: RM_SITE_URL,
+    tokenEnv: "LANDING_RM_GITHUB_TOKEN",
+  },
+  HS: {
+    env: "LANDING_HS_GITHUB_REPO",
+    fallback: HS_GITHUB_REPO,
+    site: HS_SITE_URL,
+    tokenEnv: "LANDING_HS_GITHUB_TOKEN",
+  },
 };
+
+const SLUG_RULES: Record<LandingProduct, { reserved: ReadonlySet<string>; demos: readonly string[] }> = {
+  DSCR: { reserved: RESERVED_SLUGS, demos: DEMO_SLUGS },
+  RM: { reserved: RM_RESERVED_SLUGS, demos: RM_DEMO_SLUGS },
+  HS: { reserved: RM_RESERVED_SLUGS, demos: RM_DEMO_SLUGS },
+};
+
+/** Missing or unknown stored values stay DSCR, which is how rows saved before a product field behave. */
+export function asLandingProduct(value: unknown): LandingProduct {
+  return typeof value === "string" && (LANDING_PRODUCTS as readonly string[]).includes(value)
+    ? (value as LandingProduct)
+    : "DSCR";
+}
+
+export function isEquityLanding(product: LandingProduct): boolean {
+  return product === "RM" || product === "HS";
+}
+
+export function stockHero(product: LandingProduct): string {
+  if (product === "HS") return HS_STOCK_HERO;
+  if (product === "RM") return RM_STOCK_HERO;
+  return "";
+}
+
+export function landingTokenEnv(product: LandingProduct): string {
+  return REPOS[product].tokenEnv;
+}
 
 export function landingRepo(product: LandingProduct): string {
   const profile = REPOS[product];
@@ -110,11 +160,11 @@ export function thankYouPageUrl(product: LandingProduct, slug: string): string {
 }
 
 export function reservedSlugs(product: LandingProduct): ReadonlySet<string> {
-  return product === "RM" ? RM_RESERVED_SLUGS : RESERVED_SLUGS;
+  return SLUG_RULES[product].reserved;
 }
 
 export function demoSlugs(product: LandingProduct): readonly string[] {
-  return product === "RM" ? RM_DEMO_SLUGS : DEMO_SLUGS;
+  return SLUG_RULES[product].demos;
 }
 
 export function yamlPath(slug: string): string {

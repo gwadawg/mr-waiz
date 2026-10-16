@@ -238,7 +238,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   if (action === "create") {
     if (!isLandingProduct(body?.product)) {
-      return NextResponse.json({ error: "Choose DSCR or Reverse" }, { status: 400 });
+      return NextResponse.json({ error: "Choose DSCR, Reverse, or HomeSafe" }, { status: 400 });
     }
     const product = body.product;
     const taken = await takenSlugsForProduct(ctx.service, product);

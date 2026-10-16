@@ -36,6 +36,8 @@ export type LandingDraft = {
   cream: string;
   legalName: string;
   heroHeadline: string;
+  fitAge: string;
+  fitCredit: string;
 };
 
 export type LandingPublishMeta = {

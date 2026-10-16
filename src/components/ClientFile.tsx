@@ -1075,7 +1075,7 @@ export default function ClientFile({
                   title={
                     client.landing_page_url
                       ? `Primary landing page: ${client.landing_page_url}`
-                      : "Publish a DSCR or reverse landing page"
+                      : "Publish a DSCR, reverse, or HomeSafe landing page"
                   }
                 >
                   Landing{client.landing_page_url ? " ✓" : ""}
@@ -1651,7 +1651,7 @@ export default function ClientFile({
                 <p className="text-xs mt-1" style={{ color: "#94a3b8" }}>
                   {client.landing_page_url
                     ? `Primary page: ${client.landing_page_url}`
-                    : "Choose DSCR or reverse, then publish. Add another page when you want a second URL to test."}
+                    : "Choose DSCR, reverse, or HomeSafe, then publish. Add another page when you want a second URL to test."}
                 </p>
               </div>
               <button

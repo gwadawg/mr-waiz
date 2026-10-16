@@ -2,10 +2,13 @@ import {
   DEFAULT_TAGLINE,
   HEX_COLOR,
   HERO_HEADLINE_MAX,
-  RM_STOCK_HERO,
+  HS_FIT_AGE,
+  HS_FIT_CREDIT,
   SLUG_PATTERN,
   demoSlugs,
+  isEquityLanding,
   reservedSlugs,
+  stockHero,
   type LandingProduct,
   type LandingTheme,
 } from "./products";
@@ -75,6 +78,8 @@ export function emptyLandingDraft(): LandingDraft {
     cream: "",
     legalName: "",
     heroHeadline: "",
+    fitAge: "",
+    fitCredit: "",
   };
 }
 
@@ -103,7 +108,7 @@ export function draftFromClient(
     name,
     firstName: first,
     company: text(client.brokerage_name) || text(client.legal_business_name),
-    tagline: product === "RM" ? "" : DEFAULT_TAGLINE,
+    tagline: isEquityLanding(product) ? "" : DEFAULT_TAGLINE,
     bio: text(client.biography),
     phone: text(client.phone),
     email: text(client.email),
@@ -112,9 +117,11 @@ export function draftFromClient(
     region: text(client.state),
     postalCode: text(client.zip_code),
     nmlsIndividual: text(client.nmls),
-    smsStatus: product === "RM" ? "pending" : "ready",
-    stateNotices: product === "RM" ? notices.filter(notice => notice === "texas") : notices,
-    heroHeadline: product === "RM" ? RM_STOCK_HERO : "",
+    smsStatus: isEquityLanding(product) ? "pending" : "ready",
+    stateNotices: isEquityLanding(product) ? notices.filter(notice => notice === "texas") : notices,
+    heroHeadline: stockHero(product),
+    fitAge: product === "HS" ? HS_FIT_AGE : "",
+    fitCredit: product === "HS" ? HS_FIT_CREDIT : "",
   };
 }
 
@@ -183,6 +190,8 @@ export function parseLandingDraft(input: unknown): LandingDraft {
     cream: text(raw.cream),
     legalName: text(raw.legalName),
     heroHeadline: text(raw.heroHeadline),
+    fitAge: text(raw.fitAge),
+    fitCredit: text(raw.fitCredit),
   };
 }
 
@@ -230,28 +239,54 @@ export function prefillLandingDraft(
     cream: saved.cream,
     legalName: pick(saved.legalName, fromClient.legalName),
     heroHeadline: pick(saved.heroHeadline, fromClient.heroHeadline),
+    fitAge: pick(saved.fitAge, fromClient.fitAge),
+    fitCredit: pick(saved.fitCredit, fromClient.fitCredit),
   };
 }
 
-/** DSCR first publish is live and noindex. Later publishes keep that choice. Reverse pages publish live. */
+/** DSCR first publish is live and noindex. Later publishes keep that choice. Equity pages publish live. */
 export function draftForPublish(
   draft: LandingDraft,
   hasApplied: boolean,
   product: LandingProduct = "DSCR",
 ): LandingDraft {
-  if (product === "RM") {
+  if (isEquityLanding(product)) {
     return {
       ...draft,
       theme: "theme-1",
-      heroHeadline: draft.heroHeadline.trim() || RM_STOCK_HERO,
+      heroHeadline: draft.heroHeadline.trim() || stockHero(product),
+      fitAge: product === "HS" ? draft.fitAge.trim() || HS_FIT_AGE : draft.fitAge,
     };
   }
   if (!hasApplied) return { ...draft, preview: true };
   return draft;
 }
 
-/** Visible characters, ignoring one *italic* pair. Empty is valid and uses the stock line. */
-export function reviewHeroHeadline(raw: string): { length: number; error: string | null } {
+function reviewManyHero(input: string): { length: number; error: string | null } {
+  const stars = input.match(/\*/g);
+  const visible = [...input.replace(/\*/g, "")].length;
+  if (stars && stars.length % 2 !== 0) {
+    return { length: visible, error: "Hero line phrases need a matching pair of *asterisks*." };
+  }
+  const parts = input.split("*");
+  for (let i = 1; i < parts.length; i += 2) {
+    if (!parts[i].trim()) {
+      return { length: visible, error: "Hero line phrases need a matching pair of *asterisks*." };
+    }
+  }
+  const text = parts.join("").replace(/\s+/g, " ").trim();
+  const length = [...text].length;
+  if (length > HERO_HEADLINE_MAX) {
+    return { length, error: `Hero line is ${length} characters. Theme 1 allows ${HERO_HEADLINE_MAX}.` };
+  }
+  return { length, error: null };
+}
+
+/** Visible characters, ignoring *italic* phrases. Empty is valid and uses the stock line. */
+export function reviewHeroHeadline(
+  raw: string,
+  pairs: "one" | "many" = "one",
+): { length: number; error: string | null } {
   const input = raw.replace(/\s+/g, " ").trim();
   if (!input) return { length: 0, error: null };
   if (/[<>]/.test(input)) {
@@ -260,6 +295,7 @@ export function reviewHeroHeadline(raw: string): { length: number; error: string
       error: "Hero line cannot include HTML. Wrap one phrase in *asterisks* for the italic.",
     };
   }
+  if (pairs === "many") return reviewManyHero(input);
   const stars = input.match(/\*/g);
   if (stars && stars.length !== 2) {
     return {
@@ -342,7 +378,8 @@ export function validateForPublish(
   product: LandingProduct = "DSCR",
 ): string[] {
   const errors = validateSlug(draft.slug, ctx, product);
-  const individualBrand = product !== "RM" || draft.brandType === "individual";
+  const equity = isEquityLanding(product);
+  const individualBrand = !equity || draft.brandType === "individual";
   if (!draft.name) errors.push("Public name is required");
   if (individualBrand && !draft.company) errors.push("Company is required");
   if (!draft.phone) errors.push("Phone is required");
@@ -355,7 +392,7 @@ export function validateForPublish(
   if (!draft.applyUrl) errors.push("Quiz URL is required");
   else if (!/^https?:\/\/\S+$/i.test(draft.applyUrl)) {
     errors.push("Quiz URL must be a full http(s) link");
-  } else if (product === "RM" && hasTrackingParams(draft.applyUrl)) {
+  } else if (equity && hasTrackingParams(draft.applyUrl)) {
     errors.push("Quiz URL must be a plain link. Leave off utm, fbclid, and gclid.");
   }
   if (product === "DSCR") {
@@ -372,7 +409,7 @@ export function validateForPublish(
       errors.push("Accent must be a hex color like #1B4D3E");
     }
   }
-  if (product === "RM") {
+  if (equity) {
     const colors = [draft.ink, draft.action, draft.mark, draft.cream].some(value => value.trim());
     if (draft.colorway === "stock" && colors) {
       errors.push("Set colorway to custom to use brand colors, or clear them");
@@ -383,8 +420,16 @@ export function validateForPublish(
       pushHexError(errors, "Mark", draft.mark, false);
       pushHexError(errors, "Cream", draft.cream, false);
     }
-    const hero = reviewHeroHeadline(draft.heroHeadline);
+    const hero = reviewHeroHeadline(draft.heroHeadline, product === "HS" ? "many" : "one");
     if (hero.error) errors.push(hero.error);
+  }
+  if (product === "HS") {
+    if (draft.fitAge.trim() && !/^\d{2,3}$/.test(draft.fitAge.trim())) {
+      errors.push("Fit age must be a number of years");
+    }
+    if (draft.fitCredit.trim() && !/^\d{3}$/.test(draft.fitCredit.trim())) {
+      errors.push("Fit credit score must be a three-digit number, or leave it blank");
+    }
   }
   if (draft.smsStatus !== "ready" && draft.smsStatus !== "pending") {
     errors.push("Texting status must be ready or pending");
