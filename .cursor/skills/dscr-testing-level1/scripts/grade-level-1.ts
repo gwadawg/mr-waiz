@@ -1,45 +1,53 @@
 /**
- * Level 1 creative-test grader for a Meta Ads Manager export.
+ * Testing-card grader for a Meta Ads Manager export.
  *
- * Rules are copied from docs/CREATIVE_TESTING.md (Stage 1) and the
- * Gate 1 tables in docs/AD_TESTING_RULEBOOK.md. Change the doc first,
- * then this file. Do not invent a looser bar here.
+ * Rules are copied from docs/CREATIVE_TESTING.md (the ruling card).
+ * Change the doc first, then this file. Do not invent a looser bar
+ * here.
  *
- * CPQL_MAX is the 2,000-impression rescue only. It is not the general
- * $50 CPL standard and not the Stage 2 $80 hot exception.
+ * The card, first match wins:
+ *   1. Under 1,000 impressions ............ waiting
+ *   2. Link CTR under 1.5% ................ kill (skipped on instant-form
+ *      accounts, and skipped once the ad is already at the row-5 stop —
+ *      a drifted CTR does not block a pass)
+ *   3. Spend under $200 ................... spending (leave on)
+ *   4. $200+ and 0–1 leads ................ off; shelf creative if CTR >= 1.5%
+ *      ($500 with 0–1 leads is this row, not a grade)
+ *   5. 10 leads, or $500 with 2+ leads .... off and grade: CPQL <= $65 and
+ *      qualified rate >= 70% passes to Growth; anything else is off for good.
+ *      Qualified rate >= 70% and CTR >= 1.5% that only missed the cost
+ *      shelves the creative.
+ *   (else: $200–$500 with 2–9 leads ....... spending)
  *
- *   npx tsx .cursor/skills/dscr-testing-level1/scripts/grade-level-1.ts --file report.csv --baseline 2.1
+ *   npx tsx .cursor/skills/dscr-testing-level1/scripts/grade-level-1.ts --file report.csv
  *   npx tsx .cursor/skills/dscr-testing-level1/scripts/grade-level-1.ts --self-test
  */
 import { readFileSync } from 'fs';
 
 const FLOOR = 1000;
-const FINAL = 2000;
-/** Hourly turn-off rules overshoot. Past this, the ad is no longer a Level 1 read. */
-const PAST = 2500;
 const KILL_CTR = 1.5;
-const PROMOTE_CTR = 2.0;
-const GOOD_CTR = 2.2;
-const CPM_LOW = 90;
-const CPM_HIGH = 190;
+const SPEND_MIN = 200;
+const SPEND_MAX = 500;
+const LEADS_DONE = 10;
 const CPQL_MAX = 65;
-const RESCUE_QUALIFIED = 5;
+const QUAL_RATE_MIN = 0.7;
 const CLICK_TO_LEAD_LEAK = 0.06;
-const MAX_GRADUATE = 3;
-const CPC_PAUSE = 10;
+const HEALTHY_CTR = 2.0;
+/** Spend past which this is probably not a testing ad set. Warning only. */
+const PAST_SPEND = 750;
 
-type BaselineSource = 'flag' | 'campaign_name' | 'new_account_median' | 'missing';
+type BaselineSource = 'flag' | 'campaign_name' | 'missing';
 
 type Verdict =
   | 'waiting'
-  | 'extend'
-  | 'graduate'
   | 'kill'
-  | 'held'
-  | 'page_stop'
-  | 'needs_baseline'
-  | 'past_level_1'
-  | 'ungraded';
+  | 'spending'
+  | 'off_no_leads'
+  | 'pass'
+  | 'off_graded'
+  | 'needs_leads'
+  | 'needs_qualified'
+  | 'page_stop';
 
 interface RawAd {
   campaign: string;
@@ -51,7 +59,6 @@ interface RawAd {
   spend: number;
   results: number | null;
   qualified: number | null;
-  hookPlays: number | null;
   resultType: string | null;
 }
 
@@ -62,18 +69,15 @@ interface GradedAd {
   link_clicks: number;
   spend: number;
   link_ctr_pct: number | null;
-  cpm: number | null;
-  cpc: number | null;
-  results: number | null;
+  leads: number | null;
   qualified: number | null;
+  qualified_rate: number | null;
   cpql: number | null;
-  stage: 'waiting' | 'floor' | 'final' | 'past';
-  verdict: Verdict;
   rule: string;
+  verdict: Verdict;
+  shelf_creative: boolean;
   why: string;
-  would_have_been: Verdict | null;
   notes: string[];
-  priority: number | null;
 }
 
 interface Batch {
@@ -88,15 +92,13 @@ interface Batch {
   warning: string | null;
   ads: GradedAd[];
   actions: {
-    graduate: string[];
-    held: string[];
     turn_off: string[];
-    confirm_before_kill: string[];
-    extend: string[];
+    pass_to_growth: string[];
+    shelf_creative: string[];
+    spending: string[];
     waiting: string[];
-    needs_baseline: string[];
-    past_level_1: string[];
-    ungraded: string[];
+    needs_leads: string[];
+    needs_qualified: string[];
     page_stop: string[];
   };
 }
@@ -270,12 +272,6 @@ export function adsFromCsv(text: string): RawAd[] {
   const iResults = col(header, 'results');
   const iResultType = col(header, 'result type');
   const iQualified = col(header, 'qualified', 'qualified leads');
-  const iHook = col(
-    header,
-    '3-second video plays',
-    '3-second video plays (view)',
-    'video plays',
-  );
 
   if (iImpr < 0 || iLinks < 0 || iSpend < 0) {
     throw new Error(
@@ -297,7 +293,6 @@ export function adsFromCsv(text: string): RawAd[] {
     const resultType = cell(row, iResultType).trim();
     const resultNum = parseNumber(cell(row, iResults));
     const qualified = parseNumber(cell(row, iQualified));
-    const hook = parseNumber(cell(row, iHook));
 
     const key = `${cell(row, iCampaign).trim()}||${cell(row, iAdSet).trim()}||${adId || adName}`;
     let acc = grouped.get(key);
@@ -312,7 +307,6 @@ export function adsFromCsv(text: string): RawAd[] {
         spend: 0,
         results: null,
         qualified: null,
-        hookPlays: null,
         resultType: null,
         resultTypes: new Set<string>(),
         sawResult: false,
@@ -328,7 +322,6 @@ export function adsFromCsv(text: string): RawAd[] {
       acc.sawResult = true;
     }
     if (qualified != null) acc.qualified = (acc.qualified ?? 0) + qualified;
-    if (hook != null) acc.hookPlays = (acc.hookPlays ?? 0) + hook;
   }
 
   return [...grouped.values()].map((acc) => {
@@ -350,7 +343,6 @@ export function adsFromCsv(text: string): RawAd[] {
       spend: acc.spend,
       results,
       qualified: acc.qualified,
-      hookPlays: acc.hookPlays,
       resultType,
     };
   });
@@ -361,23 +353,6 @@ function linkCtr(ad: RawAd): number | null {
   return (ad.linkClicks / ad.impressions) * 100;
 }
 
-function cpmOf(ad: RawAd): number | null {
-  if (ad.impressions <= 0) return null;
-  return (ad.spend / ad.impressions) * 1000;
-}
-
-function cpcOf(ad: RawAd): number | null {
-  if (ad.linkClicks <= 0) return null;
-  return ad.spend / ad.linkClicks;
-}
-
-function stageOf(impr: number): GradedAd['stage'] {
-  if (impr < FLOOR) return 'waiting';
-  if (impr < FINAL) return 'floor';
-  if (impr <= PAST) return 'final';
-  return 'past';
-}
-
 function parseBaselineFromName(campaign: string): number | null {
   const m = campaign.match(
     /(?:baseline|link\s*ctr|bctr)\s*[:=]?\s*(\d+(?:\.\d+)?)\s*%/i,
@@ -386,186 +361,145 @@ function parseBaselineFromName(campaign: string): number | null {
   return Number(m[1]);
 }
 
-function median(values: number[]): number | null {
-  if (values.length === 0) return null;
-  const s = [...values].sort((a, b) => a - b);
-  const mid = Math.floor(s.length / 2);
-  if (s.length % 2 === 1) return s[mid];
-  return (s[mid - 1] + s[mid]) / 2;
-}
-
 interface RuleHit {
   verdict: Verdict;
   rule: string;
+  shelf: boolean;
   why: string;
 }
 
-function inPromoteBand(ctr: number, cpm: number, baseline: number): boolean {
-  return ctr >= PROMOTE_CTR && ctr >= baseline && cpm >= CPM_LOW && cpm <= CPM_HIGH;
-}
-
 /**
- * First matching row wins. Mirrors the buyer sheet.
- * `results` null means the export did not say, which is not the same as zero.
+ * The ruling card. First matching row wins.
+ * `results` null means the export did not say, which is not zero.
  */
-export function gradeWindow(
-  ad: RawAd,
-  stage: 'floor' | 'final',
-  baseline: number | null,
-  isBest: boolean,
-): RuleHit {
+export function gradeCard(ad: RawAd, instantForm: boolean): RuleHit {
   const ctr = linkCtr(ad);
-  const cpm = cpmOf(ad);
-  if (ctr == null || cpm == null) {
+
+  // Row 1 — under the floor.
+  if (ad.impressions < FLOOR) {
     return {
-      verdict: 'needs_baseline',
-      rule: 'missing-metrics',
-      why: 'Impressions, link clicks, or spend were missing after the rows were added up.',
+      verdict: 'waiting',
+      rule: 'row-1',
+      shelf: false,
+      why: `${ad.impressions} impressions. Under 1,000. Waiting, not failing.`,
     };
   }
 
-  const clears =
-    baseline != null && inPromoteBand(ctr, cpm, baseline);
+  const leads = ad.results;
+  // Row 5 is read before the click kill. A link CTR that drifted under
+  // 1.5% after the ad reached 10 leads, or $500 with 2+ leads, does not
+  // block the grade. $500 with 0–1 leads is row 4, so it is not a stop.
+  const atGradeStop =
+    leads != null && leads >= 2 && (leads >= LEADS_DONE || ad.spend >= SPEND_MAX);
+  if (atGradeStop) return gradeAtStop(ad, ctr, leads);
 
-  if (stage === 'floor') {
-    if (isBest && ctr >= PROMOTE_CTR && ad.results === 0 && !(ad.qualified != null && ad.qualified >= 1)) {
-      return {
-        verdict: 'extend',
-        rule: 'floor-1',
-        why: `Best link CTR in the batch (${round2(ctr)}%) is at or above 2.0% and the export shows zero leads. Leave it on to 2,000. This is a page check, not a promotion.`,
-      };
-    }
-
-    const failsRow3 = baseline == null ? ctr < PROMOTE_CTR || cpm < CPM_LOW || cpm > CPM_HIGH : !clears;
-    if (failsRow3 && ad.qualified != null && ad.qualified >= 1) {
-      return {
-        verdict: 'extend',
-        rule: 'floor-2',
-        why: `${ad.qualified} qualified lead${ad.qualified === 1 ? '' : 's'} stops a kill. One more run to 2,000. A lead does not promote it.`,
-      };
-    }
-
-    if (baseline == null && ctr >= PROMOTE_CTR && cpm >= CPM_LOW && cpm <= CPM_HIGH) {
-      return {
-        verdict: 'needs_baseline',
-        rule: 'floor-baseline',
-        why: `Link CTR ${round2(ctr)}% and CPM $${round2(cpm)} would graduate if this account's trailing link CTR is ${round2(ctr)}% or lower. The campaign name has no baseline.`,
-      };
-    }
-
-    if (clears && baseline != null) {
-      const good = ctr >= GOOD_CTR ? ' 2.2% or better, so it goes first if several graduate.' : '';
-      return {
-        verdict: 'graduate',
-        rule: 'floor-3',
-        why: `Link CTR ${round2(ctr)}% clears 2.0% and the ${round2(baseline)}% account baseline. CPM $${round2(cpm)} is inside $90–$190.${good}`,
-      };
-    }
-
-    const middle = ctr >= KILL_CTR && ctr < PROMOTE_CTR;
-    const underBaseline =
-      baseline != null && ctr >= PROMOTE_CTR && ctr < baseline;
-    const cheap = cpm < CPM_LOW;
-    if (middle || underBaseline || cheap) {
-      const bits: string[] = [];
-      if (middle) bits.push(`link CTR ${round2(ctr)}% is in the 1.5–2.0% band`);
-      if (underBaseline) bits.push(`link CTR ${round2(ctr)}% is under the ${round2(baseline!)}% baseline`);
-      if (cheap) bits.push(`CPM $${round2(cpm)} is under $90 (cheap inventory, not a win)`);
-      return {
-        verdict: 'extend',
-        rule: 'floor-4',
-        why: `Leave it on to 2,000. ${bits.join('; ')}.`,
-      };
-    }
-
-    if (ctr < KILL_CTR || cpm > CPM_HIGH) {
-      const why =
-        ctr < KILL_CTR
-          ? `Link CTR ${round2(ctr)}% is under 1.5%.`
-          : `CPM $${round2(cpm)} is over $190.`;
-      return { verdict: 'kill', rule: 'floor-5', why: `${why} Turn it off.` };
-    }
-
+  // Row 2 — the click kill. Skipped on instant-form accounts.
+  if (!instantForm && ctr != null && ctr < KILL_CTR) {
     return {
       verdict: 'kill',
-      rule: 'floor-5',
-      why: `Link CTR ${round2(ctr)}% and CPM $${round2(cpm)} did not clear a graduate or extend row.`,
+      rule: 'row-2',
+      shelf: false,
+      why: `Link CTR ${round2(ctr)}% is under 1.5%. Turn it off.`,
     };
   }
 
-  if (baseline != null && clears) {
-    const good = ctr >= GOOD_CTR ? ' 2.2% or better, so it goes first if several graduate.' : '';
+  // Row 3 — buying its lead sample.
+  if (ad.spend < SPEND_MIN) {
     return {
-      verdict: 'graduate',
-      rule: 'final-1',
-      why: `At 2,000 impressions, link CTR ${round2(ctr)}% clears 2.0% and the ${round2(baseline)}% baseline. CPM $${round2(cpm)} is inside $90–$190.${good}`,
+      verdict: 'spending',
+      rule: 'row-3',
+      shelf: false,
+      why: `$${round2(ad.spend)} spent is under $200. Leave it on. One expensive lead is not a cost.`,
     };
   }
 
-  if (baseline == null && ctr >= PROMOTE_CTR && cpm >= CPM_LOW && cpm <= CPM_HIGH) {
+  if (leads == null) {
     return {
-      verdict: 'needs_baseline',
-      rule: 'final-baseline',
-      why: `Link CTR ${round2(ctr)}% and CPM $${round2(cpm)} would graduate if the account baseline is ${round2(ctr)}% or lower.`,
+      verdict: 'needs_leads',
+      rule: 'needs-leads',
+      shelf: false,
+      why: `$${round2(ad.spend)} spent, but the export has no usable lead count (Results missing or not a lead type). Rows 4 and 5 cannot be read.`,
     };
   }
 
-  if (ad.qualified != null && ad.qualified >= RESCUE_QUALIFIED) {
-    const cpql = ad.spend / ad.qualified;
-    if (cpql <= CPQL_MAX) {
-      return {
-        verdict: 'graduate',
-        rule: 'final-2',
-        why: `${ad.qualified} qualified leads at CPQL $${round2(cpql)} (bar is $65). This is the only Level 1 promotion that ignores link CTR and CPM.`,
-      };
-    }
+  // Row 4 — spend with nothing behind it. Includes $500 with 0–1 leads.
+  if (leads <= 1) {
+    const shelf = ctr != null && ctr >= KILL_CTR;
+    return {
+      verdict: 'off_no_leads',
+      rule: 'row-4',
+      shelf,
+      why:
+        `$${round2(ad.spend)} spent with ${leads} lead${leads === 1 ? '' : 's'}. Turn it off.` +
+        (shelf
+          ? ` Link CTR ${round2(ctr!)}% is still 1.5%+, so the page missed, not the ad. Shelf the creative.`
+          : ''),
+    };
   }
 
-  const bits: string[] = [];
-  if (ctr < PROMOTE_CTR) bits.push(`link CTR ${round2(ctr)}% is under 2.0%`);
-  else if (baseline != null && ctr < baseline) bits.push(`link CTR ${round2(ctr)}% is under the ${round2(baseline)}% baseline`);
-  if (cpm < CPM_LOW) bits.push(`CPM $${round2(cpm)} is still under $90`);
-  if (cpm > CPM_HIGH) bits.push(`CPM $${round2(cpm)} is over $190`);
-  if (ad.qualified == null) bits.push('qualified leads were not in the export, so the 5-lead rescue was not checked');
-  else if (ad.qualified < RESCUE_QUALIFIED) bits.push(`${ad.qualified} qualified leads is under the 5-lead rescue`);
-  else bits.push(`CPQL $${round2(ad.spend / ad.qualified)} is over $65`);
+  // No row matched: $200–$500 with 2–9 leads.
   return {
-    verdict: 'kill',
-    rule: 'final-3',
-    why: `Final look. ${bits.join('; ')}. Turn it off. No third run.`,
+    verdict: 'spending',
+    rule: 'between',
+    shelf: false,
+    why: `$${round2(ad.spend)} with ${leads} leads. Between the stops. Leave it on.`,
   };
 }
 
-function notesFor(ad: RawAd, hit: RuleHit, stage: GradedAd['stage']): string[] {
+/** Row 5. The ad is already off; this only decides pass, shelf, or done. */
+function gradeAtStop(ad: RawAd, ctr: number | null, leads: number): RuleHit {
+  if (ad.qualified == null) {
+    return {
+      verdict: 'needs_qualified',
+      rule: 'row-5',
+      shelf: false,
+      why: `At a stop (${leads} leads, $${round2(ad.spend)}). Grade needs the qualified count from the pipeline. Turn it off, then grade.`,
+    };
+  }
+  const qualRate = leads > 0 ? ad.qualified / leads : 0;
+  const cpql = ad.qualified > 0 ? ad.spend / ad.qualified : null;
+  if (cpql != null && cpql <= CPQL_MAX && qualRate >= QUAL_RATE_MIN) {
+    return {
+      verdict: 'pass',
+      rule: 'row-5',
+      shelf: false,
+      why: `CPQL $${round2(cpql)} is $65 or under and the qualified rate is ${Math.round(qualRate * 100)}%. Duplicate into Growth, publish it, then turn this copy off.`,
+    };
+  }
+  const shelf = qualRate >= QUAL_RATE_MIN && ctr != null && ctr >= KILL_CTR;
+  const bits: string[] = [];
+  if (cpql == null) bits.push('no qualified leads');
+  else if (cpql > CPQL_MAX) bits.push(`CPQL $${round2(cpql)} is over $65`);
+  if (qualRate < QUAL_RATE_MIN)
+    bits.push(`qualified rate ${Math.round(qualRate * 100)}% is under 70%`);
+  return {
+    verdict: 'off_graded',
+    rule: 'row-5',
+    shelf,
+    why:
+      `Graded at the stop: ${bits.join('; ')}. Turn it off for good.` +
+      (shelf
+        ? ' Qualified rate held and the click held, so the page made the lead expensive. Shelf the creative for a later page test.'
+        : ''),
+  };
+}
+
+function notesFor(ad: RawAd, hit: RuleHit): string[] {
   const notes: string[] = [];
-  const cpc = cpcOf(ad);
-  if (cpc != null && cpc > CPC_PAUSE) {
+  if (hit.verdict === 'kill' && ad.qualified != null && ad.qualified > 0) {
     notes.push(
-      `CPC is $${round2(cpc)}, over the $10 pause line. CPC is CPM ÷ link CTR, so it does not change this verdict.`,
+      `This ad has ${ad.qualified} qualified lead${ad.qualified === 1 ? '' : 's'}. The card still says off: there is no lead veto at the click kill.`,
     );
   }
-  if (hit.verdict === 'kill' && ad.qualified == null && stage === 'floor') {
+  if (ad.spend > PAST_SPEND) {
     notes.push(
-      'Confirm 0 qualified leads in Mr. Waiz before turning it off. One qualified lead at this sample extends it instead.',
+      `$${round2(ad.spend)} spent is past the $500 testing ceiling. Confirm this is a testing ad set and not Growth before acting.`,
     );
-  }
-  if (hit.verdict === 'kill' && ad.qualified == null && stage === 'final') {
-    notes.push(
-      'Confirm it does not have 5+ qualified leads at CPQL $65 or under. That is the only thing that saves an ad at 2,000.',
-    );
-  }
-  if (cpmOf(ad) != null && cpmOf(ad)! < CPM_LOW && hit.verdict === 'extend') {
-    notes.push('Check placements and exclude Audience Network before the second run.');
   }
   if (ad.resultType && !isLeadResult(ad.resultType)) {
     notes.push(`Results column is "${ad.resultType}", not leads, so it was ignored.`);
   }
   return notes;
-}
-
-function hookRate(ad: RawAd): number | null {
-  if (ad.hookPlays == null || ad.impressions <= 0) return null;
-  return ad.hookPlays / ad.impressions;
 }
 
 function gradeBatch(
@@ -577,168 +511,80 @@ function gradeBatch(
   const adSet = rawAds[0]?.adSet ?? '';
   const instant = baselinePct != null && baselinePct < KILL_CTR;
 
-  const measured = rawAds
-    .map((ad) => ({ ad, ctr: linkCtr(ad), stage: stageOf(ad.impressions) }))
-    .filter((x) => x.ctr != null);
-
-  const windowAds = measured.filter((x) => x.stage === 'floor' || x.stage === 'final');
-  const bestCtr = windowAds.reduce((max, x) => Math.max(max, x.ctr ?? 0), -1);
-  const bestIds = new Set(
-    windowAds.filter((x) => x.ctr != null && Math.abs(x.ctr - bestCtr) < 1e-9).map((x) => x.ad.adId || x.ad.adName),
-  );
-
   const graded: GradedAd[] = rawAds.map((ad) => {
     const ctr = linkCtr(ad);
-    const cpm = cpmOf(ad);
-    const stage = stageOf(ad.impressions);
-    const key = ad.adId || ad.adName;
-    const base: GradedAd = {
+    const hit = gradeCard(ad, instant);
+    const leads = ad.results;
+    const qualRate =
+      leads != null && leads > 0 && ad.qualified != null
+        ? round2(ad.qualified / leads)
+        : null;
+    return {
       ad_name: ad.adName,
       ad_id: ad.adId,
       impressions: ad.impressions,
       link_clicks: ad.linkClicks,
       spend: round2(ad.spend),
       link_ctr_pct: ctr == null ? null : round2(ctr),
-      cpm: cpm == null ? null : round2(cpm),
-      cpc: cpcOf(ad) == null ? null : round2(cpcOf(ad)!),
-      results: ad.results,
+      leads,
       qualified: ad.qualified,
+      qualified_rate: qualRate,
       cpql:
-        ad.qualified != null && ad.qualified > 0 ? round2(ad.spend / ad.qualified) : null,
-      stage,
-      verdict: 'waiting',
-      rule: 'waiting',
-      why: `${ad.impressions} impressions. Under 1,000. Still waiting, not failing.`,
-      would_have_been: null,
-      notes: [],
-      priority: null,
+        ad.qualified != null && ad.qualified > 0
+          ? round2(ad.spend / ad.qualified)
+          : null,
+      rule: hit.rule,
+      verdict: hit.verdict,
+      shelf_creative: hit.shelf,
+      why: hit.why,
+      notes: notesFor(ad, hit),
     };
-
-    if (stage === 'waiting') return base;
-
-    if (instant) {
-      const vs =
-        ctr != null && baselinePct != null
-          ? ctr >= baselinePct
-            ? `Link CTR ${round2(ctr)}% is at or above this account's ${round2(baselinePct)}% baseline.`
-            : `Link CTR ${round2(ctr)}% is under this account's ${round2(baselinePct)}% baseline.`
-          : 'No link CTR.';
-      base.verdict = 'ungraded';
-      base.rule = 'instant-form';
-      base.why = `Account baseline is under 1.5%, so these are not landing-page bars. Do not kill on 1.5% and do not graduate on 2.0%. ${vs}`;
-      return base;
-    }
-
-    const hit = gradeWindow(
-      ad,
-      stage === 'past' ? 'final' : stage,
-      baselinePct,
-      bestIds.has(key),
-    );
-
-    if (stage === 'past') {
-      base.verdict = 'past_level_1';
-      base.would_have_been = hit.verdict;
-      base.rule = 'past';
-      base.why = `${ad.impressions} impressions is past the Level 1 window (judge at 1,000, final at 2,000, overshoot kept through ${PAST}). Do not turn this ad off from this sheet. On these totals the 2,000 rule would have said ${hit.verdict}. Gate 2 and Gate 3 judge it from here.`;
-      base.notes = notesFor(ad, hit, 'final');
-      return base;
-    }
-
-    base.verdict = hit.verdict;
-    base.rule = hit.rule;
-    base.why = hit.why;
-    base.notes = notesFor(ad, hit, stage);
-    if (
-      bestIds.has(key) &&
-      ad.results == null &&
-      (hit.verdict === 'graduate' || hit.verdict === 'needs_baseline')
-    ) {
-      base.notes.push(
-        'Results was blank, so the zero-lead page check did not run. If this ad has zero leads, extend it to 2,000 instead of graduating.',
-      );
-    }
-    if (
-      stage === 'final' &&
-      hit.verdict === 'graduate' &&
-      hit.rule === 'final-1' &&
-      ad.results === 0 &&
-      windowAds.length < 2
-    ) {
-      base.notes.push(
-        'Zero leads at 2,000. One ad cannot show a page leak. Graduate on link CTR and watch the page.',
-      );
-    }
-    return base;
   });
 
+  // Page check: survivors mostly healthy on clicks, batch not converting.
   let pageLeak = false;
   let pageLeakReason: string | null = null;
   if (!instant) {
-    const inWindow = graded.filter((g) => g.stage === 'floor' || g.stage === 'final');
-    const known = inWindow.every((g) => g.results !== null);
-    const clicks = rawAds
-      .filter((a) => {
-        const s = stageOf(a.impressions);
-        return s === 'floor' || s === 'final';
-      })
-      .reduce((s, a) => s + a.linkClicks, 0);
-    const leads = inWindow.reduce((s, g) => s + (g.results ?? 0), 0);
-    const high = inWindow.filter((g) => (g.link_ctr_pct ?? 0) >= PROMOTE_CTR).length;
-    if (inWindow.length >= 2 && known && clicks > 0 && leads / clicks < CLICK_TO_LEAD_LEAK && high * 2 > inWindow.length) {
+    const inWindow = graded.filter((g) => g.impressions >= FLOOR);
+    const survivors = inWindow.filter((g) => g.verdict !== 'kill');
+    const known = inWindow.every((g) => g.leads !== null);
+    const clicks = inWindow.reduce((s, g) => s + g.link_clicks, 0);
+    const leads = inWindow.reduce((s, g) => s + (g.leads ?? 0), 0);
+    const healthy = survivors.filter(
+      (g) => (g.link_ctr_pct ?? 0) >= HEALTHY_CTR,
+    ).length;
+    if (
+      survivors.length >= 2 &&
+      known &&
+      clicks > 0 &&
+      leads / clicks < CLICK_TO_LEAD_LEAK &&
+      healthy * 2 > survivors.length
+    ) {
       pageLeak = true;
       const pct = round2((leads / clicks) * 100);
-      pageLeakReason = `${high} of ${inWindow.length} ads at the floor are at or above 2.0% link CTR, and click-to-lead is ${pct}% (under 6%). Stop. Fix the page, form, or pixel. Re-run these same ads. Do not graduate or kill them for creative.`;
+      pageLeakReason = `${healthy} of ${survivors.length} surviving ads are at 2.0%+ link CTR and batch click-to-lead is ${pct}% (under 6%). Stop. Fix the page, form, or pixel, then re-run these ads. Do not pass or kill on creative.`;
       for (const g of inWindow) {
         g.verdict = 'page_stop';
         g.rule = 'page';
+        g.shelf_creative = false;
         g.why = pageLeakReason;
-        g.priority = null;
       }
     }
-  }
-
-  if (!pageLeak && !instant) {
-    const grads = graded.filter((g) => g.verdict === 'graduate');
-    const rawByKey = new Map(rawAds.map((r) => [r.adId || r.adName, r]));
-    grads.sort((a, b) => {
-      const ctrGap = (b.link_ctr_pct ?? 0) - (a.link_ctr_pct ?? 0);
-      if (Math.abs(ctrGap) > 0.05) return ctrGap;
-      const ha = hookRate(rawByKey.get(a.ad_id || a.ad_name)!);
-      const hb = hookRate(rawByKey.get(b.ad_id || b.ad_name)!);
-      if (ha != null && hb != null && hb !== ha) return hb - ha;
-      if (Math.abs(ctrGap) > 1e-9) return ctrGap;
-      return a.ad_name.localeCompare(b.ad_name);
-    });
-    grads.forEach((g, i) => {
-      if (i < MAX_GRADUATE) {
-        g.priority = i + 1;
-      } else {
-        g.verdict = 'held';
-        g.rule = `${g.rule}+held`;
-        g.priority = null;
-        g.why = `${g.why} Held. Already graduating ${MAX_GRADUATE} ads with a higher link CTR.`;
-      }
-    });
   }
 
   const names = (v: Verdict) =>
     graded.filter((g) => g.verdict === v).map((g) => g.ad_name);
 
-  const kills = graded.filter((g) => g.verdict === 'kill');
   const warning =
     rawAds.length > 12
-      ? 'This ad set has more than 12 ads. A Level 1 batch is sized from the testing budget, usually 3–5. Confirm this is the test before acting.'
+      ? 'This ad set has more than 12 ads. A batch is 3–5 ads in its own ad set. Confirm this is a testing ad set before acting.'
       : null;
 
   const clickToLead = (() => {
-    const inWindow = rawAds.filter((a) => {
-      const s = stageOf(a.impressions);
-      return s === 'floor' || s === 'final';
-    });
-    if (inWindow.some((a) => a.results == null)) return null;
-    const clicks = inWindow.reduce((s, a) => s + a.linkClicks, 0);
-    const leads = inWindow.reduce((s, a) => s + (a.results ?? 0), 0);
+    const inWindow = graded.filter((g) => g.impressions >= FLOOR);
+    if (inWindow.some((g) => g.leads == null)) return null;
+    const clicks = inWindow.reduce((s, g) => s + g.link_clicks, 0);
+    const leads = inWindow.reduce((s, g) => s + (g.leads ?? 0), 0);
     if (clicks <= 0) return null;
     return round2(leads / clicks);
   })();
@@ -753,17 +599,21 @@ function gradeBatch(
     page_leak_reason: pageLeakReason,
     click_to_lead: clickToLead,
     warning,
-    ads: graded.sort((a, b) => (b.link_ctr_pct ?? -1) - (a.link_ctr_pct ?? -1)),
+    ads: graded.sort((a, b) => b.spend - a.spend),
     actions: {
-      graduate: names('graduate'),
-      held: names('held'),
-      turn_off: names('kill'),
-      confirm_before_kill: kills.filter((g) => g.qualified == null).map((g) => g.ad_name),
-      extend: names('extend'),
+      turn_off: [
+        ...names('kill'),
+        ...names('off_no_leads'),
+        ...names('off_graded'),
+      ],
+      pass_to_growth: names('pass'),
+      shelf_creative: graded
+        .filter((g) => g.shelf_creative)
+        .map((g) => g.ad_name),
+      spending: names('spending'),
       waiting: names('waiting'),
-      needs_baseline: names('needs_baseline'),
-      past_level_1: names('past_level_1'),
-      ungraded: names('ungraded'),
+      needs_leads: names('needs_leads'),
+      needs_qualified: names('needs_qualified'),
       page_stop: names('page_stop'),
     },
   };
@@ -771,7 +621,7 @@ function gradeBatch(
 
 export function gradeAds(
   rawAds: RawAd[],
-  opts: { baseline: number | null; newAccount: boolean },
+  opts: { baseline: number | null },
 ): Batch[] {
   const groups = new Map<string, RawAd[]>();
   for (const ad of rawAds) {
@@ -791,17 +641,6 @@ export function gradeAds(
         source = 'campaign_name';
       }
     }
-    if (baseline == null && opts.newAccount) {
-      const sample = ads
-        .filter((a) => a.impressions >= FLOOR && a.impressions <= PAST)
-        .map((a) => linkCtr(a))
-        .filter((n): n is number => n != null);
-      const pool = sample.length
-        ? sample
-        : ads.map((a) => linkCtr(a)).filter((n): n is number => n != null);
-      baseline = median(pool);
-      source = 'new_account_median';
-    }
     return gradeBatch(ads, baseline, source);
   });
 }
@@ -810,7 +649,10 @@ function assert(cond: boolean, message: string, failures: string[]): void {
   if (!cond) failures.push(message);
 }
 
-function ad(partial: Partial<RawAd> & Pick<RawAd, 'adName' | 'impressions' | 'linkClicks' | 'spend'>): RawAd {
+function ad(
+  partial: Partial<RawAd> &
+    Pick<RawAd, 'adName' | 'impressions' | 'linkClicks' | 'spend'>,
+): RawAd {
   return {
     campaign: partial.campaign ?? 'Test | baseline 2.00%',
     adSet: partial.adSet ?? 'Batch',
@@ -821,7 +663,6 @@ function ad(partial: Partial<RawAd> & Pick<RawAd, 'adName' | 'impressions' | 'li
     spend: partial.spend,
     results: partial.results === undefined ? 2 : partial.results,
     qualified: partial.qualified === undefined ? 0 : partial.qualified,
-    hookPlays: partial.hookPlays ?? null,
     resultType: partial.resultType ?? null,
   };
 }
@@ -837,112 +678,133 @@ function verdictOf(batches: Batch[], name: string): GradedAd {
 export function selfTest(): string[] {
   const failures: string[] = [];
 
-  const standard = gradeAds(
+  const card = gradeAds(
     [
-      ad({ adName: 'grad', impressions: 1000, linkClicks: 22, spend: 120, results: 2, qualified: 0 }),
-      ad({ adName: 'middle', impressions: 1000, linkClicks: 17, spend: 120, results: 1, qualified: 0 }),
-      ad({ adName: 'killctr', impressions: 1100, linkClicks: 10, spend: 121, results: 0, qualified: 0 }),
-      ad({ adName: 'veto', impressions: 1000, linkClicks: 10, spend: 150, results: 1, qualified: 1 }),
-      ad({ adName: 'cheap', impressions: 1000, linkClicks: 8, spend: 80, results: 0, qualified: 0 }),
-      ad({ adName: 'expensive', impressions: 1000, linkClicks: 25, spend: 200, results: 3, qualified: 0 }),
-      ad({ adName: 'wait', impressions: 800, linkClicks: 20, spend: 80, results: 1, qualified: 0 }),
-      ad({ adName: 'pagecheck', impressions: 1000, linkClicks: 25, spend: 120, results: 0, qualified: 0, adSet: 'Page' }),
-      ad({ adName: 'weaker', impressions: 1000, linkClicks: 16, spend: 120, results: 1, qualified: 0, adSet: 'Page' }),
+      // Row 1: under the floor.
+      ad({ adName: 'wait', impressions: 800, linkClicks: 20, spend: 80 }),
+      // Row 2: click kill, even with a qualified lead (no veto).
+      ad({ adName: 'killctr', impressions: 1100, linkClicks: 10, spend: 121, qualified: 1 }),
+      // Row 3: past the floor, healthy click, still buying its sample.
+      ad({ adName: 'sample', impressions: 1600, linkClicks: 28, spend: 150, results: 2 }),
+      // Row 4: $200+ and one lead, click held -> shelf.
+      ad({ adName: 'pagemiss', impressions: 2000, linkClicks: 40, spend: 240, results: 1 }),
+      // Row 4: $200+ and zero leads, click still 1.54% -> shelf.
+      ad({ adName: 'nothing', impressions: 2600, linkClicks: 40, spend: 260, results: 0 }),
+      // Between the stops: leave on.
+      ad({ adName: 'midband', impressions: 2500, linkClicks: 50, spend: 300, results: 5, qualified: 4 }),
     ],
-    { baseline: 2, newAccount: false },
+    { baseline: 2 },
   );
-  assert(verdictOf(standard, 'grad').verdict === 'graduate', 'clear ad should graduate', failures);
-  assert(verdictOf(standard, 'middle').verdict === 'extend', '1.7% should extend', failures);
-  assert(verdictOf(standard, 'killctr').verdict === 'kill', '0.9% with 0 qualified should kill', failures);
-  assert(verdictOf(standard, 'veto').verdict === 'extend' && verdictOf(standard, 'veto').rule === 'floor-2', 'qualified lead vetoes a kill', failures);
-  assert(verdictOf(standard, 'cheap').verdict === 'extend', 'cheap CPM extends even with weak CTR', failures);
-  assert(verdictOf(standard, 'expensive').verdict === 'kill', 'CPM over $190 kills', failures);
-  assert(verdictOf(standard, 'wait').verdict === 'waiting', 'under 1,000 waits', failures);
-  assert(verdictOf(standard, 'pagecheck').rule === 'floor-1', 'best ad with zero leads is a page check', failures);
+  assert(verdictOf(card, 'wait').verdict === 'waiting', 'under 1,000 waits', failures);
+  assert(verdictOf(card, 'killctr').verdict === 'kill', '0.9% kills', failures);
+  assert(
+    verdictOf(card, 'killctr').notes.some((n) => n.includes('no lead veto')),
+    'kill with a qualified lead carries the no-veto note',
+    failures,
+  );
+  assert(verdictOf(card, 'sample').verdict === 'spending', 'under $200 leaves on', failures);
+  const pagemiss = verdictOf(card, 'pagemiss');
+  assert(pagemiss.verdict === 'off_no_leads' && pagemiss.shelf_creative, '1 lead at $240 with 2% CTR is off and shelved', failures);
+  const nothing = verdictOf(card, 'nothing');
+  assert(nothing.verdict === 'off_no_leads' && nothing.shelf_creative, '1.54% CTR still shelves at row 4', failures);
+  assert(verdictOf(card, 'midband').verdict === 'spending', '$300 with 5 leads is between the stops', failures);
 
-  const rescue = gradeAds(
+  const stops = gradeAds(
     [
-      ad({ adName: 'save', impressions: 2100, linkClicks: 20, spend: 250, results: 6, qualified: 5 }),
-      ad({ adName: 'pricey', impressions: 2100, linkClicks: 20, spend: 400, results: 6, qualified: 5 }),
-      ad({ adName: 'ctrwin', impressions: 2100, linkClicks: 50, spend: 250, results: 4, qualified: 0 }),
+      // Pass: 10 leads, 8 qualified (80%), CPQL $56.25.
+      ad({ adName: 'winner', impressions: 4000, linkClicks: 70, spend: 450, results: 10, qualified: 8 }),
+      // Fail on rate: 10 leads, 6 qualified (60%), cheap.
+      ad({ adName: 'lowqual', impressions: 4000, linkClicks: 70, spend: 300, results: 10, qualified: 6 }),
+      // Fail on cost at $500 ceiling: 6 leads, 5 qualified (83%), CPQL $100 -> shelf.
+      ad({ adName: 'pricey', impressions: 4500, linkClicks: 80, spend: 500, results: 6, qualified: 5 }),
+      // At a stop with no qualified data.
+      ad({ adName: 'blind', impressions: 4000, linkClicks: 70, spend: 520, results: 8, qualified: null }),
     ],
-    { baseline: 2, newAccount: false },
+    { baseline: 2 },
   );
-  assert(verdictOf(rescue, 'save').rule === 'final-2', '5 qualified at CPQL $50 graduates', failures);
-  assert(verdictOf(rescue, 'pricey').verdict === 'kill', 'CPQL over $65 does not rescue', failures);
-  assert(verdictOf(rescue, 'ctrwin').rule === 'final-1', '2,000 with a clear CTR graduates', failures);
-
-  const cap = gradeAds(
-    [40, 35, 30, 25].map((clicks, i) =>
-      ad({
-        adName: `c${clicks}`,
-        impressions: 1000,
-        linkClicks: clicks,
-        spend: 120,
-        results: 5,
-        qualified: 0,
-      }),
-    ),
-    { baseline: 2, newAccount: false },
+  assert(verdictOf(stops, 'winner').verdict === 'pass', '80% at $56 CPQL passes to Growth', failures);
+  assert(verdictOf(stops, 'lowqual').verdict === 'off_graded', '60% qualified rate fails', failures);
+  const drifted = gradeAds(
+    [
+      // Row 5 pass even though link CTR has drifted to 1.25%.
+      ad({ adName: 'driftpass', impressions: 4000, linkClicks: 50, spend: 450, results: 10, qualified: 8 }),
+      // $500 with one lead is row 4, not a grade.
+      ad({ adName: 'ceiling', impressions: 5000, linkClicks: 100, spend: 500, results: 1, qualified: 1 }),
+    ],
+    { baseline: 2 },
   );
-  const capBatch = cap[0];
-  assert(capBatch.actions.graduate.length === 3, 'promote at most 3', failures);
-  assert(capBatch.actions.graduate[0] === 'c40', 'highest link CTR graduates first', failures);
-  assert(capBatch.actions.held[0] === 'c25', 'fourth graduate is held', failures);
-  assert(!capBatch.page_leak, '15% click-to-lead is not a page leak', failures);
+  assert(verdictOf(drifted, 'driftpass').verdict === 'pass', 'a drifted link CTR does not block a row-5 pass', failures);
+  assert(verdictOf(drifted, 'ceiling').verdict === 'off_no_leads', '$500 with one lead is row 4', failures);
+  const pricey = verdictOf(stops, 'pricey');
+  assert(pricey.verdict === 'off_graded' && pricey.shelf_creative, 'good rate, missed cost shelves the creative', failures);
+  assert(verdictOf(stops, 'blind').verdict === 'needs_qualified', 'a stop without qualified data asks for it', failures);
 
   const leak = gradeAds(
-    [1, 2, 3].map((n) =>
+    [
+      ...[1, 2, 3].map((n) =>
+        ad({
+          adName: `dry${n}`,
+          impressions: 1200,
+          linkClicks: 30,
+          spend: 150,
+          results: 1,
+          qualified: 0,
+        }),
+      ),
       ad({
-        adName: `dry${n}`,
-        impressions: 1000,
-        linkClicks: 25,
-        spend: 120,
-        results: 1,
+        adName: 'weakclick',
+        impressions: 1200,
+        linkClicks: 10,
+        spend: 140,
+        results: 0,
         qualified: 0,
       }),
-    ),
-    { baseline: 2, newAccount: false },
+    ],
+    { baseline: 2 },
   );
   assert(leak[0].page_leak, 'high CTR and click-to-lead under 6% stops the batch', failures);
-  assert(leak[0].actions.graduate.length === 0, 'page leak does not graduate', failures);
-  assert(leak[0].actions.page_stop.length === 3, 'page leak keeps every ad for the re-run', failures);
-
-  const missing = gradeAds(
-    [
-      ad({ adName: 'maybe', campaign: 'No Baseline', impressions: 1000, linkClicks: 25, spend: 120, results: 3, qualified: 0 }),
-      ad({ adName: 'dead', campaign: 'No Baseline', impressions: 1000, linkClicks: 12, spend: 120, results: 0, qualified: 0 }),
-    ],
-    { baseline: null, newAccount: false },
-  );
-  assert(verdictOf(missing, 'maybe').verdict === 'needs_baseline', '2.5% without a baseline does not graduate', failures);
-  assert(verdictOf(missing, 'dead').verdict === 'kill', 'under 1.5% still kills without a baseline', failures);
+  assert(leak[0].actions.page_stop.length === 4, 'page leak holds the batch, including the click kill', failures);
+  assert(leak[0].actions.turn_off.length === 0, 'page leak turns nothing off on creative', failures);
+  assert(leak[0].actions.pass_to_growth.length === 0, 'page leak passes nothing', failures);
 
   const instant = gradeAds(
-    [ad({ adName: 'form', campaign: 'IF', impressions: 1000, linkClicks: 12, spend: 120, results: 1, qualified: 0 })],
-    { baseline: 1.11, newAccount: false },
+    [ad({ adName: 'form', campaign: 'IF | baseline 1.11%', impressions: 1500, linkClicks: 15, spend: 150, results: 3 })],
+    { baseline: null },
   );
-  assert(instant[0].instant_form && verdictOf(instant, 'form').verdict === 'ungraded', 'instant form is not killed on 1.5%', failures);
+  assert(instant[0].instant_form, 'baseline under 1.5% flags instant form', failures);
+  assert(verdictOf(instant, 'form').verdict === 'spending', 'instant form skips the click kill, spend rows still run', failures);
+  const instantOff = gradeAds(
+    [
+      ad({
+        adName: 'formdry',
+        campaign: 'IF | baseline 1.11%',
+        impressions: 2600,
+        linkClicks: 30,
+        spend: 260,
+        results: 0,
+      }),
+    ],
+    { baseline: null },
+  );
+  const formdry = verdictOf(instantOff, 'formdry');
+  assert(
+    formdry.verdict === 'off_no_leads' && !formdry.shelf_creative,
+    'instant form at row 4 with CTR under 1.5% is off and not shelved',
+    failures,
+  );
 
-  const parsed = gradeAds(
-    [ad({ adName: 'named', impressions: 1000, linkClicks: 22, spend: 120, results: 2, qualified: 0 })],
-    { baseline: null, newAccount: false },
+  const noLeads = gradeAds(
+    [ad({ adName: 'noresults', campaign: 'X', impressions: 2000, linkClicks: 40, spend: 300, results: null })],
+    { baseline: null },
   );
-  assert(parsed[0].baseline_source === 'campaign_name', 'baseline is read from the campaign name', failures);
-  assert(verdictOf(parsed, 'named').verdict === 'graduate', 'campaign-name baseline can graduate', failures);
-
-  const past = gradeAds(
-    [ad({ adName: 'old', impressions: 18000, linkClicks: 200, spend: 2000, results: 40, qualified: 0 })],
-    { baseline: 2, newAccount: false },
-  );
-  assert(verdictOf(past, 'old').verdict === 'past_level_1', 'scaled ads are not cut from Level 1', failures);
+  assert(verdictOf(noLeads, 'noresults').verdict === 'needs_leads', 'missing Results past $200 asks for data', failures);
 
   const csv = `Campaign name,Ad set name,Ad name,Ad ID,Day,Impressions,Link clicks,Amount spent (USD),CTR (all),Results,Result type
 Totals,,,,,1200,12,120,4.00%,,
 "Test, baseline 2.00%",Set,Ad A,111,2026-10-01,600,6,60,4.00%,1,lead
 "Test, baseline 2.00%",Set,Ad A,111,2026-10-02,600,6,60,4.00%,0,lead
 `;
-  const fromCsv = gradeAds(adsFromCsv(csv), { baseline: null, newAccount: false });
+  const fromCsv = gradeAds(adsFromCsv(csv), { baseline: null });
   assert(fromCsv.length === 1, 'totals row is dropped and days collapse to one batch', failures);
   assert(fromCsv[0].ads.length === 1, 'two days are one ad', failures);
   const summed = fromCsv[0].ads[0];
@@ -988,10 +850,7 @@ function main(): void {
   const qualifiedPath = arg('--qualified');
   if (qualifiedPath) attachQualified(ads, loadQualified(qualifiedPath));
 
-  const batches = gradeAds(ads, {
-    baseline,
-    newAccount: hasFlag('--new-account'),
-  });
+  const batches = gradeAds(ads, { baseline });
 
   console.log(
     JSON.stringify(
