@@ -1,0 +1,865 @@
+<!DOCTYPE html>
+<!--
+  Recruiting page for the Ops VA seat.
+  Same layout as the Senior Media Buyer page.
+  Copy source: docs/operations/hiring/va/landing-outline.md
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ops VA · Waiz Media</title>
+<meta name="description" content="Set up client systems, fix what breaks, and ship small builds. Remote, full-time. $700–$1,000/mo to start. How full the day is depends on how busy we are.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800;900&family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --navy: #061A4A;
+    --royal: #0E2F73;
+    --accent: #4FA3FF;
+    --accent-deep: #2B7DE0;
+    --green: #7CFF7A;
+    --gold: #F5C842;
+    --white: #FFFFFF;
+    --light: #F4F7FC;
+    --dark: #0B1220;
+    --mid: #5B6475;
+    --soft: #8B93A7;
+    --divider: #D1D9F0;
+    --line: rgba(255, 255, 255, 0.12);
+    --shadow: 0 22px 56px rgba(6, 26, 74, 0.14);
+    --radius: 8px;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+
+  body {
+    font-family: 'IBM Plex Sans', sans-serif;
+    background: var(--light);
+    color: var(--dark);
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.5;
+  }
+
+  a { color: inherit; text-decoration: none; }
+
+  .wrap {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 0 28px;
+  }
+
+  section.block { padding: 84px 0; }
+
+  .label {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--accent-deep);
+    margin-bottom: 12px;
+  }
+
+  .block h2 {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: clamp(34px, 4.5vw, 48px);
+    font-weight: 800;
+    color: var(--navy);
+    line-height: 1.05;
+    text-transform: uppercase;
+    margin-bottom: 14px;
+    max-width: 22ch;
+  }
+
+  .block .lead {
+    font-size: 17px;
+    color: var(--mid);
+    max-width: 44em;
+    line-height: 1.65;
+    margin-bottom: 44px;
+  }
+  .block .lead strong { color: var(--navy); font-weight: 600; }
+
+  /* ── Banner ── */
+  .banner {
+    background: var(--royal);
+    color: rgba(255, 255, 255, 0.92);
+    text-align: center;
+    padding: 11px 20px;
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+  }
+  .banner strong { color: var(--white); font-weight: 600; }
+
+  /* ── Hero ── */
+  .hero {
+    position: relative;
+    background:
+      radial-gradient(ellipse 65% 70% at 95% 5%, rgba(79, 163, 255, 0.28), transparent 55%),
+      radial-gradient(ellipse 45% 55% at 5% 95%, rgba(124, 255, 122, 0.1), transparent 50%),
+      linear-gradient(165deg, #041436 0%, var(--navy) 55%, #0a2458 100%);
+    color: var(--white);
+    padding: 68px 28px 84px;
+    overflow: hidden;
+  }
+
+  .hero::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+    background-size: 48px 48px;
+    mask-image: radial-gradient(ellipse 80% 70% at 50% 40%, black, transparent);
+    pointer-events: none;
+  }
+
+  .hero-inner {
+    position: relative;
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+
+  .eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 20px;
+  }
+  .eyebrow::before {
+    content: "";
+    width: 28px;
+    height: 2px;
+    background: var(--accent);
+  }
+
+  .hero h1 {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: clamp(44px, 6.5vw, 76px);
+    font-weight: 900;
+    line-height: 0.94;
+    text-transform: uppercase;
+    letter-spacing: 0.01em;
+    margin-bottom: 22px;
+    max-width: 16ch;
+  }
+  .hero h1 em {
+    font-style: normal;
+    color: var(--accent);
+    display: block;
+  }
+
+  .hero-sub {
+    font-size: clamp(16px, 1.8vw, 19px);
+    font-weight: 300;
+    color: rgba(255, 255, 255, 0.78);
+    max-width: 40em;
+    line-height: 1.65;
+    margin-bottom: 30px;
+  }
+  .hero-sub strong { color: var(--white); font-weight: 500; }
+
+  .hero-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 28px;
+  }
+  .pill {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    padding: 7px 13px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid var(--line);
+    color: rgba(255, 255, 255, 0.8);
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 20px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    padding: 20px 40px;
+    border-radius: var(--radius);
+    border: none;
+    cursor: pointer;
+    transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+  }
+  .btn:hover { transform: translateY(-1px); }
+  .btn-primary {
+    background: var(--accent);
+    color: var(--navy);
+    box-shadow: 0 10px 28px rgba(79, 163, 255, 0.35);
+  }
+  .btn-primary:hover {
+    background: #6bb4ff;
+    box-shadow: 0 14px 32px rgba(79, 163, 255, 0.45);
+  }
+  .btn-navy {
+    background: var(--navy);
+    color: var(--white);
+    box-shadow: 0 12px 28px rgba(6, 26, 74, 0.22);
+  }
+  .btn-navy:hover {
+    background: var(--royal);
+    box-shadow: 0 16px 34px rgba(6, 26, 74, 0.28);
+  }
+  .btn-note {
+    display: block;
+    margin-top: 12px;
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.55);
+  }
+  .close .btn-note {
+    color: var(--soft);
+  }
+
+  /* ── Comp strip ── */
+  .comp {
+    background: var(--white);
+    border-bottom: 1px solid var(--divider);
+  }
+
+  .comp-grid {
+    display: grid;
+    grid-template-columns: 0.9fr 1.1fr;
+    gap: 48px;
+    align-items: center;
+  }
+
+  .comp-figure {
+    background: var(--navy);
+    border-radius: var(--radius);
+    padding: 36px 32px;
+    color: var(--white);
+    box-shadow: var(--shadow);
+  }
+  .comp-figure .comp-label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 14px;
+  }
+  .comp-figure .amount {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: clamp(38px, 5vw, 54px);
+    font-weight: 900;
+    line-height: 1;
+    letter-spacing: 0.01em;
+  }
+  .comp-figure .per {
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.6);
+    margin-top: 8px;
+  }
+  .comp-figure .note {
+    margin-top: 20px;
+    padding-top: 18px;
+    border-top: 1px solid var(--line);
+    font-size: 14px;
+    line-height: 1.6;
+    color: rgba(255, 255, 255, 0.8);
+  }
+  .comp-figure .note strong { color: var(--gold); font-weight: 600; }
+
+  .comp-copy h2 { margin-bottom: 16px; }
+  .comp-copy p {
+    font-size: 16px;
+    color: var(--mid);
+    line-height: 1.7;
+    margin-bottom: 14px;
+  }
+  .comp-copy p strong { color: var(--navy); font-weight: 600; }
+  .comp-copy p:last-child { margin-bottom: 0; }
+
+  /* ── Own / Don't own ── */
+  .own { background: var(--light); }
+
+  .own-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 16px;
+  }
+
+  .own-card {
+    background: var(--white);
+    border: 1px solid var(--divider);
+    border-radius: var(--radius);
+    padding: 26px 24px;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+  }
+  .own-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow);
+  }
+  .own-card .num {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 13px;
+    font-weight: 800;
+    letter-spacing: 0.16em;
+    color: var(--accent-deep);
+    margin-bottom: 10px;
+  }
+  .own-card h3 {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 25px;
+    font-weight: 800;
+    text-transform: uppercase;
+    color: var(--navy);
+    line-height: 1.1;
+    margin-bottom: 10px;
+  }
+  .own-card p {
+    font-size: 15px;
+    color: var(--mid);
+    line-height: 1.6;
+  }
+
+  /* ── Not yours ── */
+  .notyours {
+    background: var(--white);
+    border-top: 1px solid var(--divider);
+    border-bottom: 1px solid var(--divider);
+  }
+
+  .notyours-list {
+    list-style: none;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 14px;
+  }
+  .notyours-list li {
+    background: #f8f9fc;
+    border: 1px solid var(--divider);
+    border-radius: var(--radius);
+    padding: 20px 22px 20px 46px;
+    position: relative;
+    font-size: 15px;
+    color: var(--mid);
+    line-height: 1.55;
+  }
+  .notyours-list li::before {
+    content: "×";
+    position: absolute;
+    left: 20px;
+    top: 18px;
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--soft);
+  }
+  .notyours-list li strong {
+    display: block;
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 20px;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: var(--navy);
+    margin-bottom: 3px;
+  }
+
+  /* ── Measured vs raised ── */
+  .split { background: var(--light); }
+
+  .split-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+
+  .split-card {
+    border-radius: var(--radius);
+    padding: 34px 30px;
+    border: 1px solid var(--divider);
+    background: var(--white);
+  }
+  .split-card.growth {
+    background: var(--navy);
+    color: var(--white);
+    border-color: transparent;
+    box-shadow: var(--shadow);
+  }
+
+  .split-card .tag {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+    color: var(--accent-deep);
+  }
+  .split-card.growth .tag { color: var(--gold); }
+
+  .split-card h3 {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 30px;
+    font-weight: 800;
+    text-transform: uppercase;
+    line-height: 1.05;
+    margin-bottom: 14px;
+    color: var(--navy);
+  }
+  .split-card.growth h3 { color: var(--white); }
+
+  .split-card p {
+    font-size: 15px;
+    line-height: 1.65;
+    color: var(--mid);
+    margin-bottom: 16px;
+  }
+  .split-card.growth p { color: rgba(255, 255, 255, 0.78); }
+  .split-card p:last-child { margin-bottom: 0; }
+  .split-card p strong { color: var(--navy); font-weight: 600; }
+  .split-card.growth p strong { color: var(--white); font-weight: 600; }
+
+  /* ── Bar ── */
+  .bar { background: var(--white); }
+
+  .bar-grid {
+    display: grid;
+    grid-template-columns: 1.25fr 0.75fr;
+    gap: 48px;
+    align-items: start;
+  }
+
+  .bar-list {
+    list-style: none;
+    display: grid;
+    gap: 2px;
+  }
+  .bar-list li {
+    padding: 16px 0 16px 32px;
+    border-top: 1px solid var(--divider);
+    position: relative;
+    font-size: 16px;
+    color: var(--dark);
+    line-height: 1.6;
+  }
+  .bar-list li:last-child { border-bottom: 1px solid var(--divider); }
+  .bar-list li::before {
+    content: "→";
+    position: absolute;
+    left: 0;
+    top: 16px;
+    color: var(--accent-deep);
+    font-weight: 600;
+  }
+
+  .bar-aside {
+    background: #f8f9fc;
+    border: 1px solid var(--divider);
+    border-radius: var(--radius);
+    padding: 28px 26px;
+  }
+  .bar-aside h4 {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 22px;
+    font-weight: 800;
+    text-transform: uppercase;
+    color: var(--navy);
+    line-height: 1.1;
+    margin-bottom: 8px;
+  }
+  .bar-aside p {
+    font-size: 14px;
+    color: var(--mid);
+    line-height: 1.6;
+    margin-bottom: 16px;
+  }
+  .bar-aside ul {
+    list-style: none;
+    display: grid;
+    gap: 9px;
+  }
+  .bar-aside li {
+    font-size: 14px;
+    color: var(--mid);
+    padding-left: 18px;
+    position: relative;
+    line-height: 1.5;
+  }
+  .bar-aside li::before {
+    content: "–";
+    position: absolute;
+    left: 0;
+    color: var(--soft);
+  }
+
+  /* ── Systems ── */
+  .systems {
+    background: var(--navy);
+    color: var(--white);
+    position: relative;
+    overflow: hidden;
+  }
+  .systems::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(ellipse 50% 60% at 85% 15%, rgba(79, 163, 255, 0.22), transparent 60%);
+    pointer-events: none;
+  }
+  .systems .wrap { position: relative; }
+  .systems .label { color: var(--accent); }
+  .systems h2 { color: var(--white); }
+  .systems .lead { color: rgba(255, 255, 255, 0.72); }
+  .systems .lead strong { color: var(--white); }
+
+  .systems-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 16px;
+  }
+  .system-card {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 24px 22px;
+  }
+  .system-card h3 {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 22px;
+    font-weight: 800;
+    text-transform: uppercase;
+    color: var(--gold);
+    line-height: 1.1;
+    margin-bottom: 9px;
+  }
+  .system-card p {
+    font-size: 14.5px;
+    color: rgba(255, 255, 255, 0.75);
+    line-height: 1.6;
+  }
+
+  /* ── Close ── */
+  .close { background: var(--light); }
+  .close-inner {
+    max-width: 42em;
+  }
+  .close h2 { margin-bottom: 18px; }
+  .close p {
+    font-size: 17px;
+    color: var(--mid);
+    line-height: 1.75;
+    margin-bottom: 16px;
+  }
+  .close p strong { color: var(--navy); font-weight: 600; }
+  .close-actions {
+    margin-top: 28px;
+  }
+
+  footer {
+    background: var(--dark);
+    color: rgba(255, 255, 255, 0.5);
+    padding: 28px;
+    text-align: center;
+    font-size: 13px;
+  }
+  footer strong {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 16px;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.85);
+  }
+
+  @media (max-width: 900px) {
+    .comp-grid,
+    .split-grid,
+    .bar-grid { grid-template-columns: 1fr; gap: 32px; }
+    section.block { padding: 60px 0; }
+    .hero { padding: 52px 24px 64px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="banner">
+  Waiz Media · <strong>Now hiring</strong> · Remote · Full-time
+</div>
+
+<header class="hero">
+  <div class="hero-inner">
+    <div class="eyebrow">Role Overview</div>
+    <h1>Ops VA <em>Client systems</em></h1>
+    <p class="hero-sub">
+      Set up client systems, fix what breaks, and ship the small builds that keep a new client moving.
+      You work from the written process, and you take a first pass when a step is missing.
+      <strong>This is an existing seat with the systems already running</strong>, not a blank operations role we are inventing as we go.
+    </p>
+    <div class="hero-pills">
+      <span class="pill">GoHighLevel, Make, ClickUp, Closebot</span>
+      <span class="pill">Claude Code or Cursor</span>
+      <span class="pill">Client setups and system fixes</span>
+      <span class="pill">Full-time</span>
+      <span class="pill">Remote</span>
+      <span class="pill">English required</span>
+    </div>
+    <a
+      class="btn btn-primary"
+      href="https://link.waizmedia.net/widget/survey/HiOfLpmFqA5vL3AfpesG?notrack=true"
+      target="_blank"
+      rel="noopener noreferrer"
+    >Fill Out Application</a>
+    <span class="btn-note">Form plus a 2-minute Loom of a workflow you built or fixed. We hire from the Loom.</span>
+  </div>
+</header>
+
+<section class="block comp">
+  <div class="wrap">
+    <div class="comp-grid">
+      <div class="comp-figure">
+        <div class="comp-label">Compensation</div>
+        <div class="amount">$700&ndash;$1,000</div>
+        <div class="per">per month to start</div>
+        <div class="note">
+          The rate inside that band depends on what you have already shipped.
+          The first five working days are paid, <strong>pro-rated</strong> from the monthly rate we agree on the call.
+        </div>
+      </div>
+      <div class="comp-copy">
+        <div class="label">Straight Answer First</div>
+        <h2>What you'll earn</h2>
+        <p>
+          We put the number up front so you can decide early whether this fits.
+          <strong>$700&ndash;$1,000 per month</strong> to start, based on proof of work, not on a résumé.
+        </p>
+        <p>
+          The first five working days are a paid trial at that same rate, pro-rated. If the trial is a yes, the
+          monthly rate continues. The first month is still a mutual trial. Either side can end it in writing.
+        </p>
+        <p>
+          <strong>This is a full-time seat.</strong> You are the ops person, not a few hours on the side.
+          How full the day is depends on how busy we are. A quiet week is lighter. A busy week is a full day.
+          The monthly rate stays the same either way.
+        </p>
+        <p>
+          <strong>The ceiling is more of the build, not a second job tacked on later.</strong>
+          Clean setups, same-day tickets, and guardrails held are how the seat grows.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="block own">
+  <div class="wrap">
+    <div class="label">The Job</div>
+    <h2>What you own</h2>
+    <p class="lead">
+      Six areas, and they are yours. <strong>You are the person who gets a new client's tech live and keeps
+      the systems from sitting broken.</strong> Client Success owns the client conversation. The media buyer owns the ads.
+      When the queue is full: system fires, then client onboarding, then assigned builds, then everything else.
+    </p>
+
+    <div class="own-grid">
+      <article class="own-card">
+        <div class="num">01</div>
+        <h3>Client tech setup</h3>
+        <p>After kickoff, you build from the packet: GoHighLevel subaccount, forms, pipelines, folders, calendars, routing, and A2P steps when the packet has what you need.</p>
+      </article>
+      <article class="own-card">
+        <div class="num">02</div>
+        <h3>Tech QA before launch</h3>
+        <p>You walk your own checklist and submit Tech QA. A miss stays on you. The client does not move to launch with an open tech item you own.</p>
+      </article>
+      <article class="own-card">
+        <div class="num">03</div>
+        <h3>Tickets and bugs</h3>
+        <p>A form that did not create a task. A Make scenario error. A booking link that failed. A bot that answered wrong. A ClickUp task that never landed. Find the break, fix what you are allowed to fix, and write down the cause.</p>
+      </article>
+      <article class="own-card">
+        <div class="num">04</div>
+        <h3>Small builds</h3>
+        <p>Approved updates: a Make error handler, a ClickUp view, a missing SOP step, a small automation edit with Claude Code. New scenarios and structural changes wait for a written yes.</p>
+      </article>
+      <article class="own-card">
+        <div class="num">05</div>
+        <h3>The missing step</h3>
+        <p>Follow the SOP when one exists. When it does not, write the step you used so the next person is not guessing.</p>
+      </article>
+      <article class="own-card">
+        <div class="num">06</div>
+        <h3>A clear update</h3>
+        <p>Each day: done, blocked, next. If you are blocked more than 30 minutes, send one problem, what you already checked, and one recommended next step.</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<section class="block notyours">
+  <div class="wrap">
+    <div class="label">Just As Important</div>
+    <h2>What you don't own</h2>
+    <p class="lead">
+      Roles fail when the edges are vague. <strong>These stay off your plate</strong>,
+      including six months from now.
+    </p>
+
+    <ul class="notyours-list">
+      <li><strong>Ads and creative</strong> Budgets, campaigns, and ad updates belong to the media buyer.</li>
+      <li><strong>The client relationship</strong> Retention, the kickoff conversation, and the client-facing forms belong to Client Success. You build from the packet they hand you.</li>
+      <li><strong>Sales appointments</strong> You do not set or run sales calls.</li>
+      <li><strong>The founder's calendar</strong> This is not an assistant seat for inbox, Zoom links, and scheduling.</li>
+      <li><strong>The GHL snapshot</strong> An edit there hits every client account.</li>
+      <li><strong>Live Closebot flows</strong> You can find the break. You do not change a live flow or booking logic without a yes.</li>
+      <li><strong>Unapproved structure</strong> A new Make scenario, ClickUp space or list structure, Perspective funnel structure, and any process change wait for written approval.</li>
+    </ul>
+  </div>
+</section>
+
+<section class="block split">
+  <div class="wrap">
+    <div class="label">Incentives, Plainly</div>
+    <h2>How you're measured vs. how you grow</h2>
+    <p class="lead">
+      Two different things, and we keep them separate on purpose.
+    </p>
+
+    <div class="split-grid">
+      <article class="split-card">
+        <div class="tag">The Standard</div>
+        <h3>Measured on the queue</h3>
+        <p>
+          <strong>Clean setups, same-day tickets, and guardrails held.</strong> Tech QA comes back without a chase.
+          A ticket is fixed or escalated the same day, with the cause written down. You do not edit a live system you were told to leave alone.
+        </p>
+        <p>
+          You will know where you stand. We grade this at day 30 on those items, plus whether the daily update showed up without someone asking.
+        </p>
+      </article>
+
+      <article class="split-card growth">
+        <div class="tag">The Upside</div>
+        <h3>Raised on what you can own next</h3>
+        <p>
+          <strong>More of the build is how the seat grows.</strong> Once the queue is clean, the work moves from
+          "fix this ticket" to the small systems that take the founder out of the middle.
+        </p>
+        <p>
+          Following the SOP is the job. Noticing the missing step, writing it, and shipping the small fix with a yes is what earns the next piece of ownership.
+        </p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<section class="block bar">
+  <div class="wrap">
+    <div class="label">The Bar</div>
+    <h2>What you should already be able to do</h2>
+    <p class="lead">
+      You do not need to be deep in every tool. <strong>You do need to already be dangerous in a couple of them, and fast at the rest.</strong>
+      Concretely, that means:
+    </p>
+
+    <div class="bar-grid">
+      <ul class="bar-list">
+        <li>You have personally used at least two of GoHighLevel, Make.com, ClickUp, Closebot, and Claude Code or Cursor. A course certificate does not count.</li>
+        <li>You can show one workflow you built or fixed, on a 2-minute Loom, and say what changed.</li>
+        <li>Your written English is clear enough to send a client-safe update and a founder update.</li>
+        <li>You can follow a written process, and you take a first pass when the process is missing.</li>
+        <li>You can work without someone narrating every click.</li>
+        <li>You can treat this as a full-time seat and overlap at least 4 hours inside 12:00–20:00 Brasília time, Monday to Friday. That window is when we need you reachable. The rest of the day fills up when the queue is busy, and stays lighter when it is not.</li>
+      </ul>
+
+      <aside class="bar-aside">
+        <h4>Not required on day one</h4>
+        <p>Don't rule yourself out over these. They are trainable, and the SOPs are already written.</p>
+        <ul>
+          <li>Expert-level skill in every tool on the list</li>
+          <li>Reverse mortgage or DSCR product knowledge</li>
+          <li>Media buying or ad creative</li>
+          <li>Graphic design</li>
+          <li>Being online for the full Brasília window. Four hours inside it is the bar.</li>
+        </ul>
+      </aside>
+    </div>
+  </div>
+</section>
+
+<section class="block systems">
+  <div class="wrap">
+    <div class="label">What You're Walking Into</div>
+    <h2>You're not starting from a blank page</h2>
+    <p class="lead">
+      The tool list sounds wide until you see what is already built.
+      <strong>You are joining a system, not inventing the agency's operations.</strong>
+    </p>
+
+    <div class="systems-grid">
+      <article class="system-card">
+        <h3>A written onboarding path</h3>
+        <p>Kickoff produces a packet. You build from it, then close your side with Tech QA. You are not chasing the client for facts after kickoff.</p>
+      </article>
+      <article class="system-card">
+        <h3>A priority order</h3>
+        <p>When everything feels urgent, the order is already written: system fires, then a new client's setup, then assigned builds, then everything else.</p>
+      </article>
+      <article class="system-card">
+        <h3>Systems that already run</h3>
+        <p>GoHighLevel, Make, ClickUp, and Closebot are in production. Your job is to set them up for a new client and fix what breaks, inside the guardrails.</p>
+      </article>
+      <article class="system-card">
+        <h3>The other seats are filled</h3>
+        <p>A media buyer owns the ads. Client Success owns the client. You are not covering those jobs while you learn this one.</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<section class="block close">
+  <div class="wrap">
+    <div class="close-inner">
+      <div class="label">In Short</div>
+      <h2>Who this is really for</h2>
+      <p>
+        This is a systems seat. We can find people who will post ads, manage a calendar, and wait to be told the next click.
+        <strong>What is harder to find is someone who can open a broken automation, say what failed, and either fix it or come back with a real next step.</strong>
+      </p>
+      <p>
+        If you have already built or fixed something in GoHighLevel, Make, ClickUp, Closebot, or Claude Code,
+        and you want a remote seat where that work is the job, start with the application.
+      </p>
+      <p>
+        The Loom is the résumé. A tool list with no workflow behind it will not move forward.
+      </p>
+      <div class="close-actions">
+        <a
+          class="btn btn-navy"
+          href="https://link.waizmedia.net/widget/survey/HiOfLpmFqA5vL3AfpesG?notrack=true"
+          target="_blank"
+          rel="noopener noreferrer"
+        >Fill Out Application</a>
+        <span class="btn-note">Form, then a 2-minute Loom. Serious applicants only.</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <strong>Waiz Media</strong><br>
+  Ops VA
+</footer>
+
+</body>
+</html>

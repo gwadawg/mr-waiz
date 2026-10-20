@@ -37,6 +37,14 @@ const nextConfig: NextConfig = {
         destination: "/offers/senior-media-buyer/index.html",
       },
       {
+        source: "/offers/ops-va",
+        destination: "/offers/ops-va/index.html",
+      },
+      {
+        source: "/offers/ops-va/",
+        destination: "/offers/ops-va/index.html",
+      },
+      {
         source: "/offers/mandi-stephens",
         destination: "/offers/mandi-stephens/index.html",
       },
