@@ -64,6 +64,7 @@ import AccountWeekPlansClientHistory from "@/components/AccountWeekPlansClientHi
 import ClientAccountOffersPanel from "@/components/ClientAccountOffersPanel";
 import { requiresLifecycleFeedback } from "@/lib/client-feedback";
 import { isKickoffIncomplete, isKickoffLifecycle } from "@/lib/kickoff";
+import { cycleKickoffFiled } from "@/lib/reinstate-progress";
 import { isLaunchKitLifecycle } from "@/lib/launch-kit/intake";
 import type { ClientContact } from "@/lib/client-contacts";
 import { csCallTypeLabel, type CsCallType } from "@/lib/cs-appointments";
@@ -792,7 +793,9 @@ export default function ClientFile({
   const lifecycle = client?.lifecycle_status ?? "—";
   const missingCount = countMissingFields(client);
   const onboardingCall = calls.find(c => c.call_type === "onboarding") ?? null;
-  const kickoffPending = client ? isKickoffIncomplete(client, onboardingCall) : false;
+  const kickoffPending = client
+    ? isKickoffIncomplete(client, onboardingCall, cycleKickoffFiled(formSubmissions))
+    : false;
   const latestReinstate = formSubmissions.find(s => s.form_type === "reinstate") ?? null;
   const techQaDone = formSubmissions.some(s => s.form_type === "tech_qa" && s.status === "applied");
   const mediaQaDone = formSubmissions.some(s => s.form_type === "marketing_qa" && s.status === "applied");

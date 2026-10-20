@@ -49,6 +49,18 @@ export function mapCycleProgress(
   return out;
 }
 
+/** True when this cycle has a filed kick-off. A pre-reinstate kick-off does not count. */
+export function cycleKickoffFiled(
+  rows: Array<{ form_type: string; submitted_at: string; status?: string | null }>,
+): boolean {
+  const stamps = rows.map(row => ({
+    form_type: row.form_type,
+    submitted_at: row.submitted_at,
+    status: row.status ?? undefined,
+  }));
+  return mapCycleProgress(stamps, latestReinstateCutoffIso(stamps)).kickoff === true;
+}
+
 export function isLaunchBlockingForCycle(
   launchRows: SubmissionStamp[],
   cutoffIso: string | null,

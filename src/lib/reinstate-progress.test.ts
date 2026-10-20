@@ -4,6 +4,7 @@ import {
   latestReinstateCutoffIso,
   mapCycleProgress,
   isLaunchBlockingForCycle,
+  cycleKickoffFiled,
 } from '@/lib/reinstate-progress';
 
 describe('reinstate-progress', () => {
@@ -25,6 +26,19 @@ describe('reinstate-progress', () => {
     // unset cycle steps stay undefined on Partial<Record<...>> (falsy = incomplete)
     assert.equal(progress.kickoff, undefined);
     assert.equal(progress.launch, undefined);
+    assert.equal(cycleKickoffFiled([
+      { form_type: 'kickoff', submitted_at: '2025-01-03T00:00:00.000Z', status: 'applied' },
+      { form_type: 'reinstate', submitted_at: cutoff, status: 'applied' },
+    ]), false);
+  });
+
+  it('treats a kick-off filed after reinstate as the current cycle', () => {
+    const cutoff = '2026-09-01T00:00:00.000Z';
+    assert.equal(cycleKickoffFiled([
+      { form_type: 'kickoff', submitted_at: '2025-01-03T00:00:00.000Z', status: 'applied' },
+      { form_type: 'reinstate', submitted_at: cutoff, status: 'applied' },
+      { form_type: 'kickoff', submitted_at: '2026-09-03T00:00:00.000Z', status: 'applied' },
+    ]), true);
   });
 
   it('does not block launch on pre-reinstate launch rows', () => {

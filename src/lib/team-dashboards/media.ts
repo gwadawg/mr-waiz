@@ -18,6 +18,7 @@ import {
 } from '@/lib/client-health-interventions';
 import { ymdLocal } from '@/lib/date-presets';
 import { gradesForLens, mediaBuyerStatus, TIER_WEIGHT } from '@/lib/dept-health';
+import { kickoffFiledClientIds } from '@/lib/form-submissions';
 import { isKickoffIncomplete } from '@/lib/kickoff';
 import { defaultHealthGradingRange, loadClientHealthBundle } from '@/lib/load-client-health';
 import {
@@ -425,8 +426,21 @@ export async function buildMediaBuyerCommandPayload(
   }
 
   // ── Onboarding queue ──────────────────────────────────────────────────────
-  onboarding = allClients
-    .filter(c => ONBOARDING_STATUSES.has(c.lifecycle_status ?? ''))
+  const onboardingClients = allClients.filter(c =>
+    ONBOARDING_STATUSES.has(c.lifecycle_status ?? ''),
+  );
+  let kickoffFiled = new Set<string>();
+  if (onboardingClients.length) {
+    try {
+      kickoffFiled = await kickoffFiledClientIds(
+        service,
+        onboardingClients.map(c => c.id as string),
+      );
+    } catch (e) {
+      if (!errors.onboarding) errors.onboarding = e instanceof Error ? e.message : String(e);
+    }
+  }
+  onboarding = onboardingClients
     .map(c => {
       const kickoff_incomplete = isKickoffIncomplete(
         {
@@ -435,7 +449,8 @@ export async function buildMediaBuyerCommandPayload(
           name: c.name,
           primary_contact_name: c.primary_contact_name,
         },
-        latestOnboardingCall.get(c.id),
+        latestOnboardingCall.get(c.id as string),
+        kickoffFiled.has(c.id as string),
       );
       const anchor =
         (c.last_status_changed_at as string | null)?.slice(0, 10) ||

@@ -3,7 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { getAppBaseUrl } from '@/lib/app-url';
 import { getAuthContext, isAuthError, requireAnyPermission } from '@/lib/api-auth';
 import { recordClientFormNote, saveMarkedClientNote } from '@/lib/client-form-notes';
-import { insertFormSubmission } from '@/lib/form-submissions';
+import { insertFormSubmission, kickoffFiledClientIds } from '@/lib/form-submissions';
 import { isKickoffIncomplete } from '@/lib/kickoff';
 import { buildLaunchKitBlocks } from '@/lib/launch-kit/build';
 import {
@@ -72,11 +72,12 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if (denied) return denied;
 
   const { id: clientId } = await params;
-  const [client, onboardingCall, kits, draftRow] = await Promise.all([
+  const [client, onboardingCall, kits, draftRow, kickoffFiled] = await Promise.all([
     loadClient(ctx.service, clientId),
     loadOnboardingCall(ctx.service, clientId),
     listLaunchKitVersions(ctx.service, clientId),
     getLatestLaunchKitDraft(ctx.service, clientId),
+    kickoffFiledClientIds(ctx.service, [clientId]),
   ]);
   if (!client) return NextResponse.json({ error: 'Client not found' }, { status: 404 });
 
@@ -87,7 +88,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       ? draftRow
       : latestApplied;
   const draft = draftFromClient(client, prefillSource?.responses ?? null);
-  const kickoffIncomplete = isKickoffIncomplete(client, onboardingCall);
+  const kickoffIncomplete = isKickoffIncomplete(client, onboardingCall, kickoffFiled.has(clientId));
 
   return NextResponse.json({
     client: {
@@ -121,9 +122,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const mode = body?.mode === 'generate' ? 'generate' : 'draft';
   const draft = parseLaunchKitDraft(body?.draft);
 
-  const [client, onboardingCall] = await Promise.all([
+  const [client, onboardingCall, kickoffFiled] = await Promise.all([
     loadClient(ctx.service, clientId),
     loadOnboardingCall(ctx.service, clientId),
+    kickoffFiledClientIds(ctx.service, [clientId]),
   ]);
   if (!client) return NextResponse.json({ error: 'Client not found' }, { status: 404 });
 
@@ -153,7 +155,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       { status: 400 },
     );
   }
-  if (isKickoffIncomplete(client, onboardingCall)) {
+  if (isKickoffIncomplete(client, onboardingCall, kickoffFiled.has(clientId))) {
     return NextResponse.json(
       { error: 'Complete the kick-off call before generating the Launch Kit (GHL mapping + OB recording required)' },
       { status: 400 },

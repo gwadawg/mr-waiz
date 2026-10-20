@@ -11,6 +11,7 @@ import {
   type HealthTier,
 } from '@/lib/client-health';
 import { getDateRange, ymdLocal } from '@/lib/date-presets';
+import { kickoffFiledClientIds } from '@/lib/form-submissions';
 import { isKickoffIncomplete } from '@/lib/kickoff';
 import { defaultHealthGradingRange, loadClientHealthBundle } from '@/lib/load-client-health';
 import { listUpcomingCsAppointments } from '@/lib/cs-appointments';
@@ -164,6 +165,10 @@ export async function GET() {
       c => c.lifecycle_status === 'off_boarding' || c.lifecycle_status === 'paused',
     );
 
+    const kickoffFiled = await kickoffFiledClientIds(
+      ctx.service,
+      onboardingClients.map(c => c.id),
+    );
     const onboarding = onboardingClients.map(c => {
       const kickoff_incomplete = isKickoffIncomplete(
         {
@@ -173,6 +178,7 @@ export async function GET() {
           primary_contact_name: c.primary_contact_name,
         },
         latestOnboardingCall.get(c.id),
+        kickoffFiled.has(c.id),
       );
       const anchor =
         (c.last_status_changed_at as string | null)?.slice(0, 10) ||

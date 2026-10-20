@@ -4,6 +4,7 @@ import { formatMarkedClientNote } from '@/lib/client-form-notes';
 import { emptyChurnDraft, churnClientFileNoteSections } from '@/lib/churn-form';
 import {
   applyKickoffSavedNarrative,
+  isKickoffIncomplete,
   kickoffClientFileNote,
   kickoffDraftFromClient,
   kickoffNarrativeFromResponses,
@@ -96,6 +97,11 @@ describe('client form notes', () => {
     assert.match(note.body, /Phone\n555/);
     assert.match(note.body, /GHL sub-account name\nRussell Tunick/);
     assert.doesNotMatch(note.body, /Competitor references/);
+    draft.transcript = 'Full call transcript that belongs on the call record.';
+    const withTranscript = kickoffClientFileNote('marketing_core', draft);
+    assert.ok(withTranscript);
+    assert.doesNotMatch(withTranscript.body, /Full call transcript/);
+    assert.doesNotMatch(withTranscript.body, /OB call transcript/);
 
     const saved = kickoffNarrativeFromResponses({
       pm_landing_copy: 'REMEMBER ITS ATI REVERSE',
@@ -104,6 +110,19 @@ describe('client form notes', () => {
     const reloaded = applyKickoffSavedNarrative(kickoffDraftFromClient(client), saved);
     assert.equal(reloaded.pm_landing_copy, 'REMEMBER ITS ATI REVERSE');
     assert.equal(reloaded.pm_competitor_refs, '');
+  });
+
+  it('clears later kick-off blocks once the form is filed', () => {
+    const onboarding = {
+      lifecycle_status: 'onboarding',
+      name: 'Jon Meer',
+      primary_contact_name: 'Jon Meer',
+      ghl_location_id: 'loc_1',
+    };
+    assert.equal(isKickoffIncomplete(onboarding, null), true);
+    assert.equal(isKickoffIncomplete(onboarding, null, true), false);
+    assert.equal(isKickoffIncomplete(onboarding, { recording_url: 'https://fathom.video/share/x' }, false), false);
+    assert.equal(isKickoffIncomplete({ ...onboarding, lifecycle_status: 'active' }, null), false);
   });
 
   it('keeps onboarding overflow that has no client column', () => {

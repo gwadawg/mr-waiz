@@ -37,7 +37,7 @@ import {
   type KickoffDraft,
 } from '@/lib/kickoff';
 import { saveMarkedClientNote } from '@/lib/client-form-notes';
-import { insertFormSubmission } from '@/lib/form-submissions';
+import { insertFormSubmission, kickoffFiledClientIds } from '@/lib/form-submissions';
 import { normalizeReportingType } from '@/lib/reporting-types';
 import { normalizeStatesLicensed } from '@/lib/us-states';
 import {
@@ -230,11 +230,12 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const subject = { isOwner: ctx.isOwner, allowedPermissions: ctx.allowedPermissions };
   const includeRevenue = canViewClientRevenue(subject);
 
-  const [clientRes, onboardingCall, priorKickoffConfirmed, savedNarrative] = await Promise.all([
+  const [clientRes, onboardingCall, priorKickoffConfirmed, savedNarrative, kickoffFiled] = await Promise.all([
     ctx.service.from('clients').select(KICKOFF_CLIENT_FIELDS).eq('id', id).single(),
     findOnboardingCall(ctx.service, id),
     findLatestKickoffVerticalConfirmed(ctx.service, id),
     findLatestKickoffNarrative(ctx.service, id),
+    kickoffFiledClientIds(ctx.service, [id]),
   ]);
 
   if (clientRes.error) {
@@ -282,7 +283,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   return NextResponse.json({
     client,
     onboarding_call: onboardingCall,
-    kickoff_complete: !isKickoffIncomplete(mergedClient, onboardingCall),
+    kickoff_complete: !isKickoffIncomplete(mergedClient, onboardingCall, kickoffFiled.has(id)),
     can_view_revenue: includeRevenue,
     vertical_confirmed: verticalConfirmed,
     form_profile: formProfile,
@@ -605,7 +606,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   return NextResponse.json({
     client: redactedClient,
     onboarding_call: onboardingCall,
-    kickoff_complete: !isKickoffIncomplete(kickoffClient, onboardingCall),
+    kickoff_complete: !isKickoffIncomplete(
+      kickoffClient,
+      onboardingCall,
+      saveMode === 'complete' || (await kickoffFiledClientIds(ctx.service, [clientId])).has(clientId),
+    ),
     saved_mode: saveMode,
     pending_replay,
     vertical_confirmed: verticalConfirmed,

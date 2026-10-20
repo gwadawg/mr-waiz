@@ -208,6 +208,13 @@ export function isKickoffLifecycle(status: string | null | undefined): boolean {
   return status === 'new_account' || status === 'onboarding';
 }
 
+/**
+ * Kick-off still blocks later work (roster, Launch Kit, launch checklist).
+ * A kick-off form filed this cycle clears that block.
+ * Before it is filed, an onboarding client still needs a mapped GHL location
+ * and an OB recording. Callers that do not have the call must pass `submitted`
+ * from the form record — a missing call is not the same as a filed form.
+ */
 export function isKickoffIncomplete(
   client: {
     lifecycle_status?: string | null;
@@ -216,8 +223,10 @@ export function isKickoffIncomplete(
     primary_contact_name?: string | null;
   },
   onboardingCall: { recording_url?: string | null } | null | undefined,
+  submitted = false,
 ): boolean {
   if (!isKickoffLifecycle(client.lifecycle_status)) return false;
+  if (submitted) return false;
   if (clientNeedsGhlMapping(client)) return true;
   return !client.ghl_location_id?.trim() || !onboardingCall?.recording_url?.trim();
 }
@@ -437,7 +446,6 @@ export function kickoffClientFileNote(
   add('GHL sub-account name', draft.sub_account_name);
   add('GHL location ID', draft.ghl_location_id);
   add('OB call recording', draft.recording_url);
-  add('OB call transcript', draft.transcript);
 
   const body = formatMarkedClientNote(marker, sections);
   return body ? { marker, body } : null;

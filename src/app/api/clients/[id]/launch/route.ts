@@ -8,7 +8,7 @@ import {
 } from '@/lib/clickup';
 import { CLIENT_CALL_FIELDS } from '@/lib/client-calls';
 import { recordClientFormNote, saveMarkedClientNote } from '@/lib/client-form-notes';
-import { insertFormSubmission, isBackfillFormSubmission } from '@/lib/form-submissions';
+import { insertFormSubmission, isBackfillFormSubmission, kickoffFiledClientIds } from '@/lib/form-submissions';
 import { isKickoffIncomplete } from '@/lib/kickoff';
 import { isLaunchBlockingForCycle, latestReinstateCutoffIso } from '@/lib/reinstate-progress';
 import {
@@ -223,7 +223,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
   const { id: clientId } = await params;
 
-  const [clientRes, cycleSubs, onboardingCallRes, assignableUsers, launchKitRes] = await Promise.all([
+  const [clientRes, cycleSubs, onboardingCallRes, assignableUsers, launchKitRes, kickoffFiled] = await Promise.all([
     ctx.service
       .from('clients')
       .select('id, name, lifecycle_status, ghl_location_id, phone_ghl, primary_contact_name, launch_date, slack_id, reporting_type, service_program')
@@ -246,6 +246,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       .eq('client_id', clientId)
       .eq('form_type', 'launch_kit')
       .eq('status', 'applied'),
+    kickoffFiledClientIds(ctx.service, [clientId]),
   ]);
 
   if (clientRes.error) {
@@ -254,7 +255,11 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   }
 
   const formProfile = profileFromClient(clientRes.data);
-  const kickoffIncomplete = isKickoffIncomplete(clientRes.data, onboardingCallRes.data);
+  const kickoffIncomplete = isKickoffIncomplete(
+    clientRes.data,
+    onboardingCallRes.data,
+    kickoffFiled.has(clientId),
+  );
   const defaultUser = assignableUsers.find(u => u.id === ctx.userId);
   const alreadyLaunched = alreadyLaunchedForCycle(
     (cycleSubs.launchSubRes.data ?? []) as LaunchGateRow[],
@@ -283,7 +288,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   const { id: clientId } = await params;
 
-  const [clientRes, cycleSubs, onboardingCallRes] = await Promise.all([
+  const [clientRes, cycleSubs, onboardingCallRes, kickoffFiled] = await Promise.all([
     ctx.service
       .from('clients')
       .select('id, name, lifecycle_status, slack_id, launch_date, ghl_location_id, primary_contact_name, reporting_type, service_program, onboarding_clickup_task_id')
@@ -299,6 +304,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       .order('called_at', { ascending: false })
       .limit(1)
       .maybeSingle(),
+    kickoffFiledClientIds(ctx.service, [clientId]),
   ]);
 
   if (clientRes.error || !clientRes.data) {
@@ -330,7 +336,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     );
   }
 
-  if (isKickoffIncomplete(client, onboardingCallRes.data)) {
+  if (isKickoffIncomplete(client, onboardingCallRes.data, kickoffFiled.has(clientId))) {
     return NextResponse.json(
       { error: 'Complete the kick-off call before launching (GHL mapping + OB recording required)' },
       { status: 400 },

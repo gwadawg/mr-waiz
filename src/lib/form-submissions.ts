@@ -193,6 +193,19 @@ export async function getFormProgressForClients(
   return out;
 }
 
+/** Client ids whose current cycle has a filed kick-off form. */
+export async function kickoffFiledClientIds(
+  service: SupabaseClient,
+  clientIds: string[],
+): Promise<Set<string>> {
+  const progress = await getFormProgressForClients(service, clientIds);
+  const filed = new Set<string>();
+  for (const [id, row] of Object.entries(progress)) {
+    if (row.kickoff) filed.add(id);
+  }
+  return filed;
+}
+
 /** Latest applied churn form reason label per client (batch). */
 export async function getLatestChurnReasonsByClient(
   service: SupabaseClient,

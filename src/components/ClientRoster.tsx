@@ -1687,7 +1687,7 @@ function ClientRow({
   const clientName = c.primary_contact_name ?? c.primary_contact ?? "";
   const hasOverrides = !!c.kpi_benchmarks && Object.keys(c.kpi_benchmarks).length > 0;
   const stale = benchmarksStale(c);
-  const kickoffPending = isKickoffIncomplete(c, null);
+  const kickoffPending = isKickoffIncomplete(c, null, !!c.form_progress?.kickoff);
   const needsGhlMapping = clientNeedsGhlMapping(c);
   const showKickoffAction = isKickoffLifecycle(c.lifecycle_status) || kickoffPending;
   const showLaunchAction = c.lifecycle_status === "onboarding" || c.lifecycle_status === "new_account";

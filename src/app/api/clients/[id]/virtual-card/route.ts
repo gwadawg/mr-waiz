@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getAuthContext, isAuthError, requireAnyPermission } from "@/lib/api-auth";
 import { recordClientFormNote } from "@/lib/client-form-notes";
-import { insertFormSubmission } from "@/lib/form-submissions";
+import { insertFormSubmission, kickoffFiledClientIds } from "@/lib/form-submissions";
 import { isKickoffIncomplete } from "@/lib/kickoff";
 import {
   VIRTUAL_CARD_CLIENT_FIELDS,
@@ -104,7 +104,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if (denied) return denied;
 
   const { id: clientId } = await params;
-  const [client, onboardingCall, draftRow, publishedRow, calendarUrl, headshotUrl] =
+  const [client, onboardingCall, draftRow, publishedRow, calendarUrl, headshotUrl, kickoffFiled] =
     await Promise.all([
       loadClient(ctx.service, clientId),
       loadOnboardingCall(ctx.service, clientId),
@@ -112,6 +112,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       getLatestPublishedVirtualCard(ctx.service, clientId),
       loadCalendarFromLaunchKit(ctx.service, clientId),
       loadHeadshotUrl(ctx.service, clientId),
+      kickoffFiledClientIds(ctx.service, [clientId]),
     ]);
   if (!client) return NextResponse.json({ error: "Client not found" }, { status: 404 });
 
@@ -149,7 +150,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       virtual_business_card_url: client.virtual_business_card_url,
       virtual_card_slug: client.virtual_card_slug,
     },
-    kickoff_complete: !isKickoffIncomplete(client, onboardingCall),
+    kickoff_complete: !isKickoffIncomplete(client, onboardingCall, kickoffFiled.has(clientId)),
     draft,
     prefill_source: prefillSource ? prefillSource.status : null,
     packs,
