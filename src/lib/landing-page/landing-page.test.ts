@@ -16,8 +16,10 @@ import { HS_STOCK_HERO, RM_STOCK_HERO } from "./products";
 import { emptyPublish, toLandingResponses } from "./responses";
 import { verifyGithubSignature } from "./signature";
 import { groupLandingSites, shouldWritePrimaryUrl } from "./sites";
+import { landingEditSource } from "./storage";
 import type { LandingClient, LandingDraft } from "./types";
 import { draftToYaml } from "./yaml";
+import type { FormSubmissionRow } from "@/lib/form-submissions";
 
 const openSlug: SlugContext = {
   slugTaken: false,
@@ -447,6 +449,52 @@ describe("landing headshot", () => {
       logoRepoFile("jane-doe", { filename: "mark.webp" }).path,
       "brand_assets/clients/jane-doe/logo.webp",
     );
+  });
+});
+
+describe("landing edit source", () => {
+  function row(
+    status: FormSubmissionRow["status"],
+    submittedAt: string,
+    company: string,
+  ): FormSubmissionRow {
+    return {
+      id: `${status}-${submittedAt}`,
+      client_id: "c1",
+      form_type: "landing_page",
+      status,
+      submitted_by: null,
+      match_email: null,
+      match_phone: null,
+      responses: toLandingResponses(filled({ company }), emptyPublish(), {
+        siteId: "11111111-1111-4111-8111-111111111111",
+        product: "DSCR",
+      }),
+      applied_patch: null,
+      submitted_at: submittedAt,
+    };
+  }
+
+  it("ignores a create-time draft that is older than the applied publish", () => {
+    const draft = row("draft", "2026-10-01T00:00:00.000Z", "Old Draft Co");
+    const applied = row("applied", "2026-10-05T00:00:00.000Z", "Live Co");
+    const source = landingEditSource(null, draft, applied);
+    assert.equal(source?.id, applied.id);
+  });
+
+  it("keeps a draft saved after the last applied publish", () => {
+    const applied = row("applied", "2026-10-05T00:00:00.000Z", "Live Co");
+    const draft = row("draft", "2026-10-06T00:00:00.000Z", "WIP Co");
+    const source = landingEditSource(null, draft, applied);
+    assert.equal(source?.id, draft.id);
+  });
+
+  it("prefers an open publish over draft and applied", () => {
+    const draft = row("draft", "2026-10-06T00:00:00.000Z", "WIP Co");
+    const applied = row("applied", "2026-10-05T00:00:00.000Z", "Live Co");
+    const submitted = row("submitted", "2026-10-07T00:00:00.000Z", "Publishing Co");
+    const source = landingEditSource(submitted, draft, applied);
+    assert.equal(source?.id, submitted.id);
   });
 });
 

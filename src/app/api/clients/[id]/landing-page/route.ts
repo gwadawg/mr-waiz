@@ -26,6 +26,7 @@ import { groupLandingSites, isSiteId, LEGACY_SITE_ID } from "@/lib/landing-page/
 import {
   claimLegacySite,
   insertLandingPublish,
+  landingEditSource,
   listLandingRows,
   rowsForSite,
   saveLandingDraft,
@@ -100,7 +101,7 @@ function formPayload(
   const draftRow = statusRow(siteRows, "draft");
   const appliedRow = statusRow(siteRows, "applied");
   const submittedRow = statusRow(siteRows, "submitted");
-  const source = submittedRow ?? draftRow ?? appliedRow;
+  const source = landingEditSource(submittedRow, draftRow, appliedRow);
   const saved = fieldsFromResponses(source?.responses ?? null);
   const draft = prefillLandingDraft(client, saved, firstName, product);
   const appliedSlug = fieldsFromResponses(appliedRow?.responses ?? null)?.slug ?? "";

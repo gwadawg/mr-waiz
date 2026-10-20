@@ -71,15 +71,30 @@ async function branchSha(product: LandingProduct, branch: string): Promise<strin
   return data.object.sha;
 }
 
-async function ensureBranch(product: LandingProduct, branch: string, mainSha: string): Promise<void> {
+async function ensureBranch(
+  product: LandingProduct,
+  branch: string,
+  mainSha: string,
+  options: { resetToMain: boolean },
+): Promise<void> {
   const existing = await branchSha(product, branch);
-  if (existing) return;
-  const { status, data } = await gh<RefData>(product, "/git/refs", {
-    method: "POST",
-    body: JSON.stringify({ ref: `refs/heads/${branch}`, sha: mainSha }),
+  if (!existing) {
+    const { status, data } = await gh<RefData>(product, "/git/refs", {
+      method: "POST",
+      body: JSON.stringify({ ref: `refs/heads/${branch}`, sha: mainSha }),
+    });
+    if (status === 201 || status === 422) return;
+    throw new Error(data.message || `Could not create branch ${branch}`);
+  }
+  // Republish after a merge: start from current main so the PR only carries this update.
+  if (!options.resetToMain || existing === mainSha) return;
+  const { status, data } = await gh<RefData>(product, `/git/refs/heads/${branch}`, {
+    method: "PATCH",
+    body: JSON.stringify({ sha: mainSha, force: true }),
   });
-  if (status === 201 || status === 422) return;
-  throw new Error(data.message || `Could not create branch ${branch}`);
+  if (status !== 200) {
+    throw new Error(data.message || `Could not reset branch ${branch}`);
+  }
 }
 
 async function putFile(
@@ -115,7 +130,15 @@ export async function openLandingPull(input: {
   const main = await branchSha(input.product, "main");
   if (!main) throw new Error("Could not read main");
   const branch = `landing/${input.slug}`;
-  await ensureBranch(input.product, branch, main);
+  const head = `${repoOwner(input.product)}:${branch}`;
+  const existing = await gh<PullData[]>(
+    input.product,
+    `/pulls?head=${encodeURIComponent(head)}&state=open`,
+  );
+  const open = Array.isArray(existing.data) ? existing.data[0] : undefined;
+  const hasOpenPull = Boolean(open?.number && open.html_url);
+
+  await ensureBranch(input.product, branch, main, { resetToMain: !hasOpenPull });
   const message = input.title;
   for (const file of input.files) {
     await putFile(input.product, branch, file.path, file.bytes, message);
@@ -123,12 +146,6 @@ export async function openLandingPull(input: {
   const headSha = await branchSha(input.product, branch);
   if (!headSha) throw new Error("Branch disappeared after commit");
 
-  const head = `${repoOwner(input.product)}:${branch}`;
-  const existing = await gh<PullData[]>(
-    input.product,
-    `/pulls?head=${encodeURIComponent(head)}&state=open`,
-  );
-  const open = Array.isArray(existing.data) ? existing.data[0] : undefined;
   if (open?.number && open.html_url) {
     return { prUrl: open.html_url, prNumber: open.number, headSha };
   }

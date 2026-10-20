@@ -40,6 +40,23 @@ export function rowsForSite(rows: FormSubmissionRow[], clientId: string, siteId:
   return rows.filter(row => rowsMatchSite(row, clientId, siteId));
 }
 
+/**
+ * Open publish wins. Else a draft that is at least as new as the last applied
+ * save (WIP after a live page). A draft left behind from before that publish is
+ * ignored so reopen shows the published fields, not the create-time prefill.
+ */
+export function landingEditSource(
+  submitted: FormSubmissionRow | null,
+  draft: FormSubmissionRow | null,
+  applied: FormSubmissionRow | null,
+): FormSubmissionRow | null {
+  if (submitted) return submitted;
+  if (draft && applied) {
+    return draft.submitted_at >= applied.submitted_at ? draft : applied;
+  }
+  return draft ?? applied;
+}
+
 export async function takenSlugsForProduct(
   service: SupabaseClient,
   product: LandingProduct,
@@ -125,6 +142,24 @@ export async function slugTakenByOtherSite(
   });
 }
 
+/** Drop the open draft for this page so a later load reads the publish, not stale form values. */
+export async function dismissLandingDraftsForSite(
+  service: SupabaseClient,
+  clientId: string,
+  siteId: string,
+): Promise<void> {
+  const drafts = rowsForSite(await listLandingRows(service, clientId), clientId, siteId).filter(
+    row => row.status === "draft",
+  );
+  for (const row of drafts) {
+    const { error } = await service
+      .from("client_form_submissions")
+      .update({ status: "dismissed" })
+      .eq("id", row.id);
+    if (error) throw new Error(error.message);
+  }
+}
+
 export async function saveLandingDraft(
   service: SupabaseClient,
   clientId: string,
@@ -142,6 +177,7 @@ export async function saveLandingDraft(
       .update({
         responses,
         submitted_by: submittedBy,
+        submitted_at: new Date().toISOString(),
       })
       .eq("id", existing.id)
       .select(FORM_SUBMISSION_FIELDS)
@@ -166,13 +202,16 @@ export async function insertLandingPublish(
   submittedBy: string | null,
   site: { siteId: string; product: LandingProduct },
 ): Promise<FormSubmissionRow> {
-  return insertFormSubmission(service, {
+  const row = await insertFormSubmission(service, {
     client_id: clientId,
     form_type: "landing_page",
     status: "submitted",
     submitted_by: submittedBy,
     responses: toLandingResponses(draft, publish, site),
   });
+  // Publish inserts a new row; the draft would otherwise win on reload with older fields.
+  await dismissLandingDraftsForSite(service, clientId, site.siteId);
+  return row;
 }
 
 export type SettleResult = "applied" | "waiting" | "dismissed" | "missing";
