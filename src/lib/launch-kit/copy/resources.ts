@@ -1,57 +1,17 @@
 /**
- * Launch Kit — 04 Resource index, by product.
+ * Launch Kit — 04 Resource index.
  *
- * Links only, no pasted playbooks. Only `paying-client` / `lo-course` resources.
- * Playbooks are only listed for clients who work their own leads; when Waiz dials, the
- * index shrinks to what the LO actually uses (ads playbook, swipe folder).
- *
- * SOURCE OF TRUTH: Wm-os docs/templates/client-launch-kit-template.md — "Product appendix — Resource index".
+ * Only the client resources the team selected for this kit. Internal playbooks are not
+ * listed as a fallback.
  */
 
-import type { KitBlock, KitVariant } from '../types';
+import type { KitBlock } from '../types';
 import type { LaunchKitResource } from '../intake';
 
-// Keep separators plain: "folder / subfolder" reads in any font.
-const SWIPE_ROW = ['Your live ads and approved examples', 'Launch Kit folder / 03-Swipe-and-Ads'];
+const EMPTY_RESOURCES =
+  'Your CSM will share the playbooks that apply to this account.';
 
-function rmRows(dialOwner: KitVariant['dialOwner']): string[][] {
-  if (dialOwner === 'client') {
-    return [
-      ['How the Waiz stack nurtures after the click', 'Lead Nurture Playbook (Waiz Meta Stack)'],
-      ['How we think about quality leads', 'RM High-Quality Lead Acquisition'],
-      ['How the ads are meant to feel', 'Reverse Mortgage Ads Playbook'],
-      ['Booking the next step on the phone', 'BAMFAM Playbook'],
-      SWIPE_ROW,
-    ];
-  }
-  return [
-    ['How the ads are meant to feel', 'Reverse Mortgage Ads Playbook'],
-    ['How we think about quality leads', 'RM High-Quality Lead Acquisition'],
-    ['How appointments reach your calendar', 'Your CSM walks this on the launch call. No separate playbook to run.'],
-    SWIPE_ROW,
-  ];
-}
-
-function dscrRows(dialOwner: KitVariant['dialOwner']): string[][] {
-  if (dialOwner === 'client') {
-    return [
-      ['How to structure the campaign and work every lead', 'Launch Kit folder / 05-Playbooks / DSCR-Prospecting-Playbook.pdf'],
-      ['CRM drip when they go quiet (cash-out angle)', 'Launch Kit folder / 05-Playbooks / DSCR-Cash-Out-Drip.md'],
-      ['Booking the next step on the phone', 'BAMFAM, covered inside the Prospecting Playbook'],
-      SWIPE_ROW,
-    ];
-  }
-  return [
-    ['How your assistant books consults', 'Your CSM walks this on the launch call. No separate playbook to run.'],
-    SWIPE_ROW,
-  ];
-}
-
-export function resourceRows(variant: KitVariant): string[][] {
-  return variant.product === 'rm' ? rmRows(variant.dialOwner) : dscrRows(variant.dialOwner);
-}
-
-export function resourceTable(variant: KitVariant, resources: LaunchKitResource[] = []): KitBlock {
+export function resourceTable(resources: LaunchKitResource[] = []): KitBlock {
   const selectedRows = resources
     .map(resource => {
       const title = resource.title.trim();
@@ -63,11 +23,15 @@ export function resourceTable(variant: KitVariant, resources: LaunchKitResource[
     })
     .filter((row): row is string[] => !!row);
 
+  if (!selectedRows.length) {
+    return { type: 'body', text: EMPTY_RESOURCES };
+  }
+
   return {
     type: 'table',
     variant: 'kv',
     headers: ['When you need', 'Open'],
     col_widths: [0.44, 0.56],
-    rows: selectedRows.length ? selectedRows : resourceRows(variant),
+    rows: selectedRows,
   };
 }

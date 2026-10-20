@@ -196,7 +196,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const clientPatch = clientPatchFromDraft(draft, client);
   if (Object.keys(clientPatch).length) {
     const { error: patchErr } = await ctx.service.from('clients').update(clientPatch).eq('id', clientId);
-    if (patchErr) console.error('[launch-kit] client patch failed', patchErr.message);
+    if (patchErr) {
+      console.error('[launch-kit] client patch failed', patchErr.message);
+      return NextResponse.json(
+        { error: `Could not save these values back to the client file: ${patchErr.message}. The kit was not recorded.` },
+        { status: 500 },
+      );
+    }
   }
 
   const responses = {

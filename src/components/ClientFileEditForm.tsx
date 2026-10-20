@@ -64,6 +64,7 @@ export type EditableClient = {
   ghl_location_id?: string | null;
   phone_ghl: string | null;
   phone_live_transfer: string | null;
+  phone_notifications?: string | null;
   live_transfer_approved: boolean | null;
   appointment_watch: boolean | null;
   brand_subject?: string | null;
@@ -93,6 +94,8 @@ type Draft = {
   clickup_task_id: string;
   ghl_location_id: string;
   phone_ghl: string;
+  phone_live_transfer: string;
+  phone_notifications: string;
   source: string;
   website: string;
   drive_folder_url: string;
@@ -118,7 +121,6 @@ type Draft = {
   daily_adspend: string;
   performance_terms: string;
   churned_at: string;
-  phone_live_transfer: string;
   live_transfer_approved: boolean;
   appointment_watch: boolean;
   brand_subject: BrandSubject | "";
@@ -157,6 +159,8 @@ export function clientToDraft(c: EditableClient): Draft {
     clickup_task_id: c.clickup_task_id ?? "",
     ghl_location_id: c.ghl_location_id ?? "",
     phone_ghl: c.phone_ghl ?? "",
+    phone_live_transfer: c.phone_live_transfer ?? "",
+    phone_notifications: c.phone_notifications ?? "",
     source: normalizeClientLeadSource(c.source) ?? "",
     website: c.website ?? "",
     drive_folder_url: c.drive_folder_url ?? "",
@@ -182,7 +186,6 @@ export function clientToDraft(c: EditableClient): Draft {
     daily_adspend: c.daily_adspend != null ? String(c.daily_adspend) : "",
     performance_terms: c.performance_terms ?? "",
     churned_at: toDateInputValue(c.churned_at),
-    phone_live_transfer: c.phone_live_transfer ?? "",
     live_transfer_approved: c.live_transfer_approved === true,
     appointment_watch: c.appointment_watch === true,
     brand_subject: c.brand_subject === "client" || c.brand_subject === "company" ? c.brand_subject : "",
@@ -215,6 +218,8 @@ export function draftToPatchBody(draft: Draft, canViewRevenue: boolean): Record<
     onboarding_clickup_task_id: draft.onboarding_clickup_task_id.trim() || null,
     ghl_location_id: draft.ghl_location_id.trim() || null,
     phone_ghl: draft.phone_ghl.trim() || null,
+    phone_live_transfer: draft.phone_live_transfer.trim() || null,
+    phone_notifications: draft.phone_notifications.trim() || null,
     source: normalizeClientLeadSource(draft.source),
     website: draft.website.trim() || null,
     drive_folder_url: draft.drive_folder_url.trim() || null,
@@ -236,7 +241,6 @@ export function draftToPatchBody(draft: Draft, canViewRevenue: boolean): Record<
     contract_term_months: draft.contract_term_months.trim() || null,
     contract_end_date: draft.contract_end_date || null,
     performance_terms: draft.performance_terms.trim() || null,
-    phone_live_transfer: draft.phone_live_transfer.trim() || null,
     live_transfer_approved: draft.live_transfer_approved,
     appointment_watch: draft.appointment_watch,
     brand_subject: draft.brand_subject || null,
@@ -347,7 +351,8 @@ export default function ClientFileEditForm({
             label="Go High Level number"
             value={draft.phone_ghl}
             onChange={v => patch("phone_ghl", v)}
-            placeholder="GHL number we prospect with"
+            placeholder="Number we text and call leads from"
+            hint="The number we use to text and call leads. The client sees this when we text them or live-transfer a call. They should save it in their contacts."
             highlightEmpty
           />
           <Field label="Client name" value={draft.primary_contact_name} onChange={v => patch("primary_contact_name", v)} highlightEmpty />
@@ -402,10 +407,18 @@ export default function ClientFileEditForm({
             placeholder="e.g. 86abc123"
           />
           <Field
-            label="Live transfer phone"
+            label="Live transfer number"
             value={draft.phone_live_transfer}
             onChange={v => patch("phone_live_transfer", v)}
-            placeholder="Number for live transfers"
+            placeholder="Client's phone"
+            hint="The client's phone number. This is the number we call to live-transfer a lead to them."
+          />
+          <Field
+            label="Notification number"
+            value={draft.phone_notifications}
+            onChange={v => patch("phone_notifications", v)}
+            placeholder="Leave blank if same as live transfer"
+            hint="A client number we send notifications to, when that is different from the live transfer number."
           />
           <label className="flex flex-col gap-1 justify-end">
             <span className="text-xs uppercase tracking-wider" style={{ color: "#475569" }}>
@@ -637,10 +650,11 @@ export default function ClientFileEditForm({
             wide
           />
           <Field
-            label="Perspective funnel"
+            label="WM Apex Funnel"
             value={draft.funnel_url}
             onChange={v => patch("funnel_url", v)}
-            placeholder="Ads → Perspective entry URL…"
+            placeholder="Landing page our team built…"
+            hint="Landing page our team built for this client."
             wide
           />
           <Field
@@ -685,7 +699,7 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 }
 
 function Field({
-  label, value, onChange, type = "text", placeholder, highlightEmpty, wide, multiline, mono,
+  label, value, onChange, type = "text", placeholder, highlightEmpty, wide, multiline, mono, hint,
 }: {
   label: string;
   value: string;
@@ -696,6 +710,7 @@ function Field({
   wide?: boolean;
   multiline?: boolean;
   mono?: boolean;
+  hint?: string;
 }) {
   const missing = highlightEmpty && !value.trim();
   const cls = `px-2 py-1.5 rounded-lg text-sm outline-none w-full${mono ? " font-mono" : ""}`;
@@ -709,6 +724,7 @@ function Field({
       ) : (
         <input type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} className={cls} style={inputStyle(missing)} />
       )}
+      {hint && <span className="text-xs" style={{ color: "#64748b" }}>{hint}</span>}
     </label>
   );
 }

@@ -317,10 +317,11 @@ The PDF is deterministic — no AI, no free-form copy. Only per-client fields ar
 
 ### Wizard steps
 
-1. **Variant** — product, who works leads, contact first name, company / DBA, go-live date, market, plus on-file snapshot (NMLS, states licensed). Snapshot fields do not write back to the client file.
-2. **What's live** — funnel, CRM, calendar, Meta ads, Skool, Launch Kit Drive folder, Slack channel name, plus a **Please review** block (website, legal notice, prospecting / live-transfer numbers, virtual card, Facebook). Every URL must be a full `http(s)` link or explicitly marked *Not part of this account* / declined (funnel and CRM can never be N/A). Review fields prefill from `clients` but never write back. `[TO FILL]` is rejected at generate.
+1. **Variant** — product, who works leads, contact first name, company / DBA, go-live date, plus on-file snapshot (NMLS, states licensed). Company, contact, go-live, NMLS, and states licensed fill from the client file when those columns are already set. NMLS and states licensed do not write back.
+2. **What's live** — WM Apex Funnel, CRM, Launch Kit Drive folder, Slack channel name, plus a **Please review** block (legal notice, Go High Level number, live transfer number, optional notification number, virtual business card, Facebook page). Every URL must be a full `http(s)` link or explicitly marked *Not part of this account* / declined (funnel and CRM can never be N/A). The notification number can be left blank when it is the same as the live transfer number. Client-file columns fill the form when they are already set, and they win over an older kit draft. Generate writes back funnel, CRM, the three phone numbers, and the virtual business card. Legal notice and Facebook stay on the kit. `[TO FILL]` is rejected at generate.
 3. **Operator setup** — CSM name, who works leads (sentence subject), speed standard *as sold* (blank → kit says "as sold on your Kickoff" instead of inventing a number), internal notes.
-4. **Review & generate** — intake table, blocking errors, version list with **Download** and **Send to client**.
+4. **Resources** — lead logging form, plus client playbooks from the Resource Library (`client_playbook` only). Manual links stay available for a file that is not in the library yet.
+5. **Review & generate** — intake table, blocking errors, version list with **Download** and **Send to client**.
 
 **Save draft** stores a `client_form_submissions` row with `status: draft`; reopening the wizard resumes from it. Drafts are dismissed once a kit is generated.
 
@@ -328,7 +329,8 @@ The PDF is deterministic — no AI, no free-form copy. Only per-client fields ar
 
 - Renders with `@react-pdf/renderer` (server-side, Node — no Chromium). Template copy lives in `src/lib/launch-kit/copy/` with `TEMPLATE_VERSION`; edit Wm-os first, then mirror here and bump the version.
 - Uploads to the private bucket **`client-launch-kits`** at `{client_id}/{slug}-launch-kit-v{n}.pdf`. Every generate is a new version; nothing is overwritten.
-- Inserts `client_form_submissions` (`form_type: launch_kit`, `status: applied`) with the intake, `storage_path`, `version`, `template_version`, `variant`. Changed funnel / CRM URLs are written back to `clients` (`applied_patch`).
+- Inserts `client_form_submissions` (`form_type: launch_kit`, `status: applied`) with the intake, `storage_path`, `version`, `template_version`, and `variant`.
+- Changed funnel, CRM, Go High Level number, live transfer number, notification number, and virtual business card values are written back to `clients` (`applied_patch`).
 - Posts to the **ops** team channel (`SLACK_OPS_CHANNEL_SLUG`) with an app link + 7-day signed download URL, and to the `mrwaiz` activity feed.
 - Does **not** post to the client. Drive upload is manual: CSM downloads → drops into `{Client Drive}/Launch Kit/01-Launch-PDF/`.
 

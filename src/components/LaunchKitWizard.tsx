@@ -116,52 +116,29 @@ export default function LaunchKitWizard({ clientId, fallbackName, onClose, onGen
     setResourceOptionsLoading(true);
     (async () => {
       try {
-        const [resourcesRes, libraryRes] = await Promise.all([
-          fetch("/api/resources"),
-          fetch("/api/library"),
-        ]);
-        const [resourcesJson, libraryJson] = await Promise.all([
-          resourcesRes.ok ? resourcesRes.json() : Promise.resolve([]),
-          libraryRes.ok ? libraryRes.json() : Promise.resolve([]),
-        ]);
+        const resourcesRes = await fetch("/api/resources");
+        const resourcesJson = resourcesRes.ok ? await resourcesRes.json() : [];
         if (cancelled) return;
 
         const resources = Array.isArray(resourcesJson) ? resourcesJson : [];
-        const libraryDocs = Array.isArray(libraryJson) ? libraryJson : [];
         const origin = window.location.origin;
         const absoluteUrl = (url: string) => url.startsWith("/") ? `${origin}${url}` : url;
-        const options: ResourceOption[] = [
-          ...resources.map((row: Record<string, unknown>): ResourceOption | null => {
-            const id = typeof row.id === "string" ? row.id : "";
-            const title = typeof row.title === "string" ? row.title : "";
-            const url = typeof row.url === "string" ? row.url : "";
-            if (!id || !title || !url) return null;
-            if (row.category !== "client_playbook") return null;
-            const description = typeof row.description === "string" ? row.description : "";
-            return {
-              id,
-              source: "resources",
-              title,
-              description,
-              url: absoluteUrl(url),
-              label: `Client playbook: ${title}`,
-            };
-          }),
-          ...libraryDocs.map((row: Record<string, unknown>): ResourceOption | null => {
-            const slug = typeof row.slug === "string" ? row.slug : "";
-            const title = typeof row.title === "string" ? row.title : "";
-            if (!slug || !title) return null;
-            const description = typeof row.description === "string" ? row.description : "";
-            return {
-              id: slug,
-              source: "library",
-              title,
-              description,
-              url: `${origin}/library/${slug}`,
-              label: `Library: ${title}`,
-            };
-          }),
-        ].filter((option): option is ResourceOption => !!option);
+        const options: ResourceOption[] = resources.map((row: Record<string, unknown>): ResourceOption | null => {
+          const id = typeof row.id === "string" ? row.id : "";
+          const title = typeof row.title === "string" ? row.title : "";
+          const url = typeof row.url === "string" ? row.url : "";
+          if (!id || !title || !url) return null;
+          if (row.category !== "client_playbook") return null;
+          const description = typeof row.description === "string" ? row.description : "";
+          return {
+            id,
+            source: "resources",
+            title,
+            description,
+            url: absoluteUrl(url),
+            label: title,
+          };
+        }).filter((option): option is ResourceOption => !!option);
         options.sort((a, b) => a.title.localeCompare(b.title));
         setResourceOptions(options);
       } catch {
@@ -466,9 +443,6 @@ function VariantStep({ draft, patch }: { draft: LaunchKitDraft; patch: PatchFn }
           <Field label="Go-live date">
             <TextInput type="date" value={draft.go_live_date} onChange={e => patch("go_live_date", e.target.value)} />
           </Field>
-          <Field label="Market / geo" hint="States or metro, as sold.">
-            <TextInput value={draft.market} onChange={e => patch("market", e.target.value)} placeholder="Florida" />
-          </Field>
         </div>
 
         <div className="pt-2" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
@@ -545,7 +519,7 @@ function LiveStep({
         <div className="px-4 py-3" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
           <h3 className="text-sm font-semibold text-slate-200">What&apos;s live</h3>
           <p className="text-xs mt-0.5 text-slate-500">
-            Every URL here is clicked on the Launch Call. Fill it or mark N/A — never ship a guessed link. Funnel and CRM write back to the client file.
+            Every URL here is clicked on the Launch Call. Fill it or mark N/A. WM Apex Funnel and CRM write back to the client file. If the client file already has a value, it fills in here.
           </p>
         </div>
         <div className="px-4 py-4 space-y-4">
@@ -570,6 +544,7 @@ function LiveStep({
                   placeholder="https://…"
                   className={na ? "opacity-40" : ""}
                 />
+                {p.hint && <p className="text-xs text-slate-500">{p.hint}</p>}
                 {p.key === "launch_kit_folder_url" && (
                   <p className="text-xs text-slate-500">
                     The client&apos;s <code>Launch Kit/</code> Drive folder (01-Launch-PDF, 02-Links, 03-Swipe-and-Ads, 04-Recordings).
@@ -596,7 +571,7 @@ function LiveStep({
         <div className="px-4 py-3" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
           <h3 className="text-sm font-semibold text-slate-200">Please review</h3>
           <p className="text-xs mt-0.5 text-slate-500">
-            Snapshot for this kit only. Prefills from the client file but does not write back if you change it here.
+            Filled from the client file when those fields are already saved. Go High Level number, live transfer number, notification number, and the virtual business card write back when you generate. Legal notice and Facebook page stay on this kit only.
           </p>
         </div>
         <div className="px-4 py-4 space-y-4">
@@ -619,6 +594,7 @@ function LiveStep({
                   placeholder={p.kind === "url" ? "https://…" : p.key.startsWith("phone") ? "+1 …" : undefined}
                   className={na ? "opacity-40" : ""}
                 />
+                {p.hint && <p className="text-xs text-slate-500">{p.hint}</p>}
               </div>
             );
           })}
@@ -734,7 +710,7 @@ function ResourcesStep({
           <div>
             <h3 className="text-sm font-semibold text-slate-200">Client resources</h3>
             <p className="text-xs mt-0.5 text-slate-500">
-              Add Google Drive PDFs, library playbooks, or one-off links. The generated kit saves a snapshot of these titles, descriptions, and URLs.
+              Only client playbooks from the Resource Library. Add a manual link when the file is not in the library yet. The kit saves a snapshot of the titles, descriptions, and URLs you select.
             </p>
           </div>
           <button
@@ -776,7 +752,7 @@ function ResourcesStep({
 
           {draft.resources.length === 0 ? (
             <p className="text-sm text-slate-500 rounded-lg px-3 py-3" style={{ background: "#0f2040" }}>
-              No extra resources selected yet. The PDF can still use the default product appendix, but selected rows give the client direct playbook links with your descriptions.
+              No client resources selected yet. The PDF will say your CSM will share the playbooks for this account until you add one.
             </p>
           ) : (
             <div className="space-y-3">
@@ -851,11 +827,10 @@ function ReviewStep({
     ["Who works leads", draft.who_works_leads || "—"],
     ["Go-live", draft.go_live_date || "—"],
     ["CSM", draft.csm_name || "—"],
-    ["Market", draft.market || "—"],
     ["NMLS", draft.nmls || "—"],
     ["States licensed", draft.states_licensed || "—"],
     ["Lead logging form", draft.lead_logging_form_url || "—"],
-    ["Selected resources", draft.resources.length ? draft.resources.map(r => r.title || "Untitled resource").join(", ") : "Default product appendix"],
+    ["Selected resources", draft.resources.length ? draft.resources.map(r => r.title || "Untitled resource").join(", ") : "CSM will share playbooks"],
     ...LAUNCH_KIT_PROPERTIES.map<[string, string]>(p => [
       p.label,
       draft.property_na[p.key] ? "N/A" : draft[p.key] || "—",

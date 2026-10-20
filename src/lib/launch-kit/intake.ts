@@ -1,11 +1,12 @@
 /**
  * Launch Kit intake — draft shape, prefill from `clients` + last kit, validation, variant resolution.
  *
- * No `clients` columns are added for the kit. Kit-only fields live in
- * `client_form_submissions.responses` (form_type = 'launch_kit'); URLs that already have a
- * column are written back via `clientPatchFromDraft` (funnel + CRM only).
+ * Kit-only fields live in `client_form_submissions.responses` (form_type = 'launch_kit').
+ * Columns the client file already owns are written back via `clientPatchFromDraft`
+ * (funnel, CRM, the three phone numbers, and the virtual business card).
  */
 
+import { toDateInputValue } from '@/lib/client-dates';
 import { normalizeReportingType } from '@/lib/reporting-types';
 import { normalizeServiceProgram } from '@/lib/service-program';
 import type { KitDialOwner, KitProduct, KitVariant } from './types';
@@ -14,68 +15,92 @@ export const TO_FILL = '[TO FILL]';
 
 /** "What's live" properties, in PDF order. */
 export const LAUNCH_KIT_PROPERTIES = [
-  { key: 'funnel_url', label: 'Perspective funnel', kind: 'url', clientColumn: 'funnel_url', naAllowed: false },
-  { key: 'crm_url', label: 'CRM', kind: 'url', clientColumn: 'ghl_subaccount_url', naAllowed: false },
-  { key: 'calendar_url', label: 'Calendar', kind: 'url', clientColumn: null, naAllowed: true },
-  { key: 'ads_url', label: 'Meta ads', kind: 'url', clientColumn: null, naAllowed: true },
-  { key: 'skool_url', label: 'Skool / training', kind: 'url', clientColumn: null, naAllowed: true },
-  { key: 'launch_kit_folder_url', label: 'Launch Kit folder', kind: 'url', clientColumn: null, naAllowed: true },
+  {
+    key: 'funnel_url',
+    label: 'WM Apex Funnel',
+    kind: 'url',
+    clientColumn: 'funnel_url',
+    naAllowed: false,
+    hint: 'Landing page our team built for this client.',
+  },
+  { key: 'crm_url', label: 'CRM', kind: 'url', clientColumn: 'ghl_subaccount_url', naAllowed: false, hint: '' },
+  {
+    key: 'launch_kit_folder_url',
+    label: 'Launch Kit folder',
+    kind: 'url',
+    clientColumn: null,
+    naAllowed: true,
+    hint: '',
+  },
 ] as const;
 
 export type LaunchKitPropertyKey = (typeof LAUNCH_KIT_PROPERTIES)[number]['key'];
 
 /**
- * Client-facing review checklist. Prefills from `clients` but is kit-snapshot only —
- * never written back via `clientPatchFromDraft`.
+ * Client-facing review checklist. Prefills from `clients` when that column is filled.
+ * Phone numbers and the virtual business card write back on generate. Legal notice and
+ * Facebook page stay on the kit snapshot.
  */
 export const LAUNCH_KIT_REVIEW_FIELDS = [
-  {
-    key: 'website_url',
-    label: 'Website',
-    kind: 'url' as const,
-    naAllowed: true,
-    naLabel: 'Not part of this account',
-    pdfLabel: 'Website',
-  },
   {
     key: 'legal_notice_url',
     label: 'Legal notice',
     kind: 'url' as const,
+    optional: false,
     naAllowed: true,
     naLabel: 'Declined / not needed',
     pdfLabel: 'Legal notice (compliance approve)',
+    hint: '',
   },
   {
     key: 'phone_prospecting',
-    label: 'Prospecting number',
+    label: 'Go High Level number',
     kind: 'text' as const,
+    optional: false,
     naAllowed: true,
     naLabel: 'Not part of this account',
-    pdfLabel: 'Number we use to contact leads',
+    pdfLabel: 'Go High Level number',
+    hint: 'The number we use to text and call leads. This is also the number the client sees when we text them or live-transfer a call. They should save it in their contacts so they know who is calling.',
   },
   {
     key: 'phone_live_transfer',
-    label: 'Live-transfer number',
+    label: 'Live transfer number',
     kind: 'text' as const,
+    optional: false,
     naAllowed: true,
     naLabel: 'Not part of this account',
-    pdfLabel: 'Number we use for live transfers',
+    pdfLabel: 'Live transfer number',
+    hint: "The client's phone number. This is the number we call to live-transfer a lead to them.",
+  },
+  {
+    key: 'phone_notifications',
+    label: 'Notification number',
+    kind: 'text' as const,
+    optional: true,
+    naAllowed: true,
+    naLabel: 'Same as live transfer',
+    pdfLabel: 'Notification number',
+    hint: 'A client number we send notifications to, when that is different from the live transfer number. Leave blank if notifications go to the live transfer number.',
   },
   {
     key: 'virtual_card_url',
     label: 'Virtual business card',
     kind: 'url' as const,
+    optional: false,
     naAllowed: true,
     naLabel: 'Not part of this account',
     pdfLabel: 'Virtual business card',
+    hint: 'Published loanofficer.me card for this client.',
   },
   {
     key: 'facebook_page',
     label: 'Facebook page',
     kind: 'text' as const,
+    optional: false,
     naAllowed: true,
     naLabel: 'Not part of this account',
     pdfLabel: 'Facebook page',
+    hint: '',
   },
 ] as const;
 
@@ -101,20 +126,16 @@ export type LaunchKitDraft = {
   go_live_date: string;
   csm_name: string;
   slack_channel_name: string;
-  market: string;
   who_works_leads: string;
   speed_standard: string;
   funnel_url: string;
   crm_url: string;
-  calendar_url: string;
-  ads_url: string;
-  skool_url: string;
   launch_kit_folder_url: string;
-  /** Kit-snapshot review fields (prefill from clients; never write back). */
-  website_url: string;
+  /** Kit-snapshot review fields. Client-owned columns prefill from the client file. */
   legal_notice_url: string;
   phone_prospecting: string;
   phone_live_transfer: string;
+  phone_notifications: string;
   virtual_card_url: string;
   facebook_page: string;
   /** Client-specific form where qualified/disqualified lead outcomes are logged. */
@@ -145,16 +166,16 @@ export type LaunchKitClient = {
   drive_folder_url: string | null;
   states_licensed: string[] | null;
   ghl_location_id: string | null;
-  website: string | null;
   nmls: string | null;
   phone_ghl: string | null;
   phone_live_transfer: string | null;
+  phone_notifications: string | null;
   virtual_business_card_url: string | null;
   facebook_page_name: string | null;
 };
 
 export const LAUNCH_KIT_CLIENT_FIELDS =
-  'id, name, lifecycle_status, primary_contact_name, brokerage_name, legal_business_name, reporting_type, service_program, launch_date, slack_id, funnel_url, ghl_subaccount_url, drive_folder_url, states_licensed, ghl_location_id, website, nmls, phone_ghl, phone_live_transfer, virtual_business_card_url, facebook_page_name';
+  'id, name, lifecycle_status, primary_contact_name, brokerage_name, legal_business_name, reporting_type, service_program, launch_date, slack_id, funnel_url, ghl_subaccount_url, drive_folder_url, states_licensed, ghl_location_id, nmls, phone_ghl, phone_live_transfer, phone_notifications, virtual_business_card_url, facebook_page_name';
 
 export function emptyLaunchKitDraft(): LaunchKitDraft {
   return {
@@ -165,19 +186,15 @@ export function emptyLaunchKitDraft(): LaunchKitDraft {
     go_live_date: '',
     csm_name: '',
     slack_channel_name: '',
-    market: '',
     who_works_leads: '',
     speed_standard: '',
     funnel_url: '',
     crm_url: '',
-    calendar_url: '',
-    ads_url: '',
-    skool_url: '',
     launch_kit_folder_url: '',
-    website_url: '',
     legal_notice_url: '',
     phone_prospecting: '',
     phone_live_transfer: '',
+    phone_notifications: '',
     virtual_card_url: '',
     facebook_page: '',
     lead_logging_form_url: '',
@@ -265,7 +282,13 @@ function statesLicensedLabel(states: string[] | null | undefined): string {
   return (states ?? []).map(s => String(s).trim()).filter(Boolean).join(', ');
 }
 
-/** Prefill: last kit submission wins for kit-only fields; `clients` columns win for URLs they own. */
+/** Client-file value when it is filled; otherwise the last kit draft. */
+function fromClientOrDraft(clientValue: string | null | undefined, draftValue: string): string {
+  const fromClient = (clientValue ?? '').trim();
+  return fromClient || draftValue.trim();
+}
+
+/** Prefill: client-file columns win when filled. Last kit fills only the blanks and kit-only fields. */
 export function draftFromClient(
   client: LaunchKitClient,
   lastResponses?: Record<string, unknown> | null,
@@ -275,32 +298,31 @@ export function draftFromClient(
 
   const product = productFromReportingType(client.reporting_type) || base.product;
   const dialOwner = dialOwnerFromClient(client.reporting_type, client.service_program) || base.dial_owner;
-  const contact = base.contact_first_name || firstName(client.primary_contact_name);
+  const contact = firstName(client.primary_contact_name) || base.contact_first_name;
   const variant = resolveVariant({ product, dial_owner: dialOwner });
   const clientStates = statesLicensedLabel(client.states_licensed);
+  const companyFromClient =
+    client.brokerage_name?.trim() || client.legal_business_name?.trim() || client.name.trim();
 
   return {
     ...base,
     product,
     dial_owner: dialOwner,
     contact_first_name: contact,
-    company_name:
-      base.company_name || client.brokerage_name?.trim() || client.legal_business_name?.trim() || client.name,
-    go_live_date: client.launch_date ?? base.go_live_date,
-    market: base.market || clientStates,
+    company_name: companyFromClient || base.company_name,
+    go_live_date: toDateInputValue(client.launch_date) || base.go_live_date.trim(),
     who_works_leads: base.who_works_leads || defaultWhoWorksLeads(variant, contact),
-    funnel_url: client.funnel_url?.trim() || base.funnel_url,
-    crm_url: client.ghl_subaccount_url?.trim() || base.crm_url,
+    funnel_url: fromClientOrDraft(client.funnel_url, base.funnel_url),
+    crm_url: fromClientOrDraft(client.ghl_subaccount_url, base.crm_url),
     launch_kit_folder_url: base.launch_kit_folder_url || client.drive_folder_url?.trim() || '',
-    // Review + receipt: last kit wins when present; otherwise prefill from client (never write back).
-    website_url: base.website_url || client.website?.trim() || '',
     legal_notice_url: base.legal_notice_url,
-    phone_prospecting: base.phone_prospecting || client.phone_ghl?.trim() || '',
-    phone_live_transfer: base.phone_live_transfer || client.phone_live_transfer?.trim() || '',
-    virtual_card_url: base.virtual_card_url || client.virtual_business_card_url?.trim() || '',
-    facebook_page: base.facebook_page || client.facebook_page_name?.trim() || '',
-    nmls: base.nmls || client.nmls?.trim() || '',
-    states_licensed: base.states_licensed || clientStates,
+    phone_prospecting: fromClientOrDraft(client.phone_ghl, base.phone_prospecting),
+    phone_live_transfer: fromClientOrDraft(client.phone_live_transfer, base.phone_live_transfer),
+    phone_notifications: fromClientOrDraft(client.phone_notifications, base.phone_notifications),
+    virtual_card_url: fromClientOrDraft(client.virtual_business_card_url, base.virtual_card_url),
+    facebook_page: fromClientOrDraft(client.facebook_page_name, base.facebook_page),
+    nmls: fromClientOrDraft(client.nmls, base.nmls),
+    states_licensed: clientStates || base.states_licensed,
   };
 }
 
@@ -315,7 +337,6 @@ export function draftFromResponses(responses: Record<string, unknown>): LaunchKi
   d.go_live_date = str(responses.go_live_date);
   d.csm_name = str(responses.csm_name);
   d.slack_channel_name = str(responses.slack_channel_name);
-  d.market = str(responses.market);
   d.who_works_leads = str(responses.who_works_leads);
   d.speed_standard = str(responses.speed_standard);
   d.notes = str(responses.notes);
@@ -354,7 +375,6 @@ export function launchKitClientFileNoteSections(draft: LaunchKitDraft): { label:
   add('Go-live', draft.go_live_date);
   add('CSM', draft.csm_name);
   add('Slack channel', draft.slack_channel_name);
-  add('Market', draft.market);
   add('Who works new leads', draft.who_works_leads);
   add('Speed standard', draft.speed_standard);
   for (const property of LAUNCH_KIT_PROPERTIES) {
@@ -386,7 +406,6 @@ export function draftToResponses(draft: LaunchKitDraft): Record<string, unknown>
     go_live_date: draft.go_live_date.trim(),
     csm_name: draft.csm_name.trim(),
     slack_channel_name: draft.slack_channel_name.trim(),
-    market: draft.market.trim(),
     who_works_leads: draft.who_works_leads.trim(),
     speed_standard: draft.speed_standard.trim(),
     notes: draft.notes.trim(),
@@ -467,6 +486,7 @@ export function validateForGenerate(draft: LaunchKitDraft): string[] {
     const value = draft[p.key].trim();
     const na = isPropertyNa(draft, p.key);
     if (na) continue;
+    if (p.optional && !value) continue;
     if (!value) {
       errors.push(
         p.kind === 'url'
@@ -488,7 +508,6 @@ export function validateForGenerate(draft: LaunchKitDraft): string[] {
     ['contact_first_name', 'Contact first name'],
     ['company_name', 'Company / DBA'],
     ['csm_name', 'CSM'],
-    ['market', 'Market'],
     ['who_works_leads', 'Who works leads'],
     ['speed_standard', 'Speed standard'],
     ['slack_channel_name', 'Slack channel'],
@@ -520,20 +539,36 @@ export function validateForGenerate(draft: LaunchKitDraft): string[] {
   return errors;
 }
 
-/** URL write-backs to `clients` for columns the kit intake owns a copy of. Funnel + CRM only. */
+/** Write changed client-owned values back to `clients`. Blank and N/A values are left alone. */
 export function clientPatchFromDraft(
   draft: LaunchKitDraft,
-  client: Pick<LaunchKitClient, 'funnel_url' | 'ghl_subaccount_url'>,
+  client: Pick<
+    LaunchKitClient,
+    | 'funnel_url'
+    | 'ghl_subaccount_url'
+    | 'phone_ghl'
+    | 'phone_live_transfer'
+    | 'phone_notifications'
+    | 'virtual_business_card_url'
+  >,
 ): Record<string, string> {
   const patch: Record<string, string> = {};
-  const funnel = draft.funnel_url.trim();
-  if (funnel && !isPropertyNa(draft, 'funnel_url') && funnel !== (client.funnel_url ?? '').trim()) {
-    patch.funnel_url = funnel;
-  }
-  const crm = draft.crm_url.trim();
-  if (crm && !isPropertyNa(draft, 'crm_url') && crm !== (client.ghl_subaccount_url ?? '').trim()) {
-    patch.ghl_subaccount_url = crm;
-  }
+  const set = (
+    column: string,
+    value: string,
+    current: string | null | undefined,
+    na: boolean,
+  ) => {
+    const next = value.trim();
+    if (!next || na) return;
+    if (next !== (current ?? '').trim()) patch[column] = next;
+  };
+  set('funnel_url', draft.funnel_url, client.funnel_url, isPropertyNa(draft, 'funnel_url'));
+  set('ghl_subaccount_url', draft.crm_url, client.ghl_subaccount_url, isPropertyNa(draft, 'crm_url'));
+  set('phone_ghl', draft.phone_prospecting, client.phone_ghl, isPropertyNa(draft, 'phone_prospecting'));
+  set('phone_live_transfer', draft.phone_live_transfer, client.phone_live_transfer, isPropertyNa(draft, 'phone_live_transfer'));
+  set('phone_notifications', draft.phone_notifications, client.phone_notifications, isPropertyNa(draft, 'phone_notifications'));
+  set('virtual_business_card_url', draft.virtual_card_url, client.virtual_business_card_url, isPropertyNa(draft, 'virtual_card_url'));
   return patch;
 }
 

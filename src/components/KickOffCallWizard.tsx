@@ -516,13 +516,13 @@ export default function KickOffCallWizard({ clientId, fallbackName, onClose, onC
                         </Field>
                       )}
                       {visible("phone_notifications") && (
-                        <Field label="Phone number to receive texts" shareMode={shareMode} status={fieldStatus("phone_notifications")} helper="Typically cell or Bonzo number.">
+                        <Field label="Notification number" shareMode={shareMode} status={fieldStatus("phone_notifications")} helper="A client number we send notifications to, when that is different from the live transfer number.">
                           <input type="tel" value={draft.phone_notifications} disabled={saving} onChange={e => patch("phone_notifications", e.target.value)} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={fieldStyle(shareMode, fieldStatus("phone_notifications"))} />
                         </Field>
                       )}
                       {visible("phone_live_transfer") && (
                         <>
-                          <Field label="Phone Number to Receive Live Transfers (Ring Central)" shareMode={shareMode} status={fieldStatus("phone_live_transfer")}>
+                          <Field label="Live transfer number" shareMode={shareMode} status={fieldStatus("phone_live_transfer")} helper="The client's phone. This is the number we call to live-transfer a lead to them.">
                             <input type="tel" value={draft.phone_live_transfer} disabled={saving} onChange={e => patch("phone_live_transfer", e.target.value)} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={fieldStyle(shareMode, fieldStatus("phone_live_transfer"))} />
                           </Field>
                           <Field label="Live Transfer Approved?" shareMode={shareMode} status={fieldStatus("live_transfer_approved")}>

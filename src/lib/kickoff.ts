@@ -417,10 +417,10 @@ export function kickoffClientFileNote(
     add('Facebook page', draft.facebook_page_name);
   }
   if (isKickoffFieldVisible('phone_notifications', profile, includeRevenue)) {
-    add('Phone number to receive texts', draft.phone_notifications);
+    add('Notification number', draft.phone_notifications);
   }
   if (isKickoffFieldVisible('phone_live_transfer', profile, includeRevenue)) {
-    add('Live transfer phone', draft.phone_live_transfer);
+    add('Live transfer number', draft.phone_live_transfer);
     add('Live transfer approved', yesNoLabel(draft.live_transfer_approved));
   }
 

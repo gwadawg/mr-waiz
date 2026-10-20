@@ -142,6 +142,7 @@ type FileClient = {
   ghl_location_id: string | null;
   phone_ghl: string | null;
   phone_live_transfer: string | null;
+  phone_notifications: string | null;
   live_transfer_approved: boolean | null;
   appointment_watch: boolean | null;
   brand_subject?: string | null;
@@ -1686,6 +1687,7 @@ export default function ClientFile({
                   label="Go High Level number"
                   value={client?.phone_ghl}
                   missing={!client?.phone_ghl}
+                  hint="The number we use to text and call leads. The client sees this when we text them or live-transfer a call. They should save it in their contacts."
                 />
                 <Detail
                   label="Accepts live transfers"
@@ -1697,7 +1699,17 @@ export default function ClientFile({
                   value={client?.appointment_watch === true ? "Yes" : client?.appointment_watch === false ? "No" : null}
                   missing={client?.appointment_watch == null}
                 />
-                <Detail label="Live transfer phone" value={client?.phone_live_transfer} missing={!client?.phone_live_transfer} />
+                <Detail
+                  label="Live transfer number"
+                  value={client?.phone_live_transfer}
+                  missing={!client?.phone_live_transfer}
+                  hint="The client's phone. This is the number we call to live-transfer a lead to them."
+                />
+                <Detail
+                  label="Notification number"
+                  value={client?.phone_notifications}
+                  hint="A client number we send notifications to, when it is different from the live transfer number."
+                />
                 <Detail
                   label="Drive folder"
                   value={client?.drive_folder_url ? (
@@ -1838,7 +1850,7 @@ export default function ClientFile({
 
             <Section title="Websites & funnels">
               <p className="text-xs mb-3" style={{ color: "#64748b" }}>
-                Personal site, agency-built lander, Perspective entry, and thank-you page.
+                Personal site, agency-built lander, WM Apex Funnel, and thank-you page.
               </p>
               <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-4">
                 <Detail
@@ -1874,7 +1886,7 @@ export default function ClientFile({
                   wide
                 />
                 <Detail
-                  label="Perspective funnel"
+                  label="WM Apex Funnel"
                   value={client?.funnel_url ? (
                     <a
                       href={/^https?:\/\//i.test(client.funnel_url) ? client.funnel_url : `https://${client.funnel_url}`}
@@ -2306,12 +2318,13 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
-function Detail({ label, value, wide, missing }: { label: string; value: ReactNode; wide?: boolean; missing?: boolean }) {
+function Detail({ label, value, wide, missing, hint }: { label: string; value: ReactNode; wide?: boolean; missing?: boolean; hint?: string }) {
   const display = value === null || value === undefined || value === "" || value === "—" ? "—" : value;
   return (
     <div className={wide ? "col-span-2 md:col-span-3" : undefined}>
       <p className="text-xs uppercase tracking-wider mb-0.5" style={{ color: missing ? "#f59e0b" : "#475569" }}>{label}{missing ? " · missing" : ""}</p>
       <p className="text-sm" style={{ color: display === "—" ? "#334155" : "#e2e8f0" }}>{display}</p>
+      {hint && <p className="text-xs mt-1" style={{ color: "#64748b" }}>{hint}</p>}
     </div>
   );
 }

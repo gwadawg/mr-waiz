@@ -44,7 +44,7 @@ export function welcomeBlocks(p: { contactFirstName: string; productPhrase: stri
       headers: ['', 'Section', 'The question it answers'],
       col_widths: [0.08, 0.34, 0.58],
       rows: [
-        ['01', "What's live", 'Where are my pages, my CRM, my calendar, my ads? What should I review, and what do you have on file?'],
+        ['01', "What's live", 'Where are my pages and my CRM? What should I review, and what do you have on file?'],
         ['02', 'How the engine works', 'What happens to a person between the first ad and a held appointment?'],
         ['03', 'Week 1 operator checklist', 'What do I do when a lead hits?'],
         ['04', 'Resource index', 'Where are the playbooks behind the rules?'],
@@ -81,6 +81,11 @@ export const PLEASE_REVIEW_INTRO: KitBlock = {
   text: 'Open every link and confirm every number on the launch call. If something is wrong, say so before we treat the account as live.',
 };
 
+export const PHONE_NUMBERS_NOTE: KitBlock = {
+  type: 'body',
+  text: 'Save the Go High Level number in your contacts. That is the number we use to text and call your leads, and the number you will see when we text you or live-transfer a call. The live transfer number is your phone: the number we call to connect a lead to you. The notification number, when listed, is a separate line where we send account notifications.',
+};
+
 export const ON_FILE_HEADING: KitBlock = { type: 'h2', text: 'On file with us' };
 
 export const ON_FILE_INTRO: KitBlock = {
@@ -95,12 +100,12 @@ export const ON_FILE_NOTE: KitBlock = {
 
 export const WHATS_LIVE_CALLOUT: KitBlock = {
   type: 'callout',
-  text: 'Bookmark the CRM and the calendar on your phone today. Speed-to-lead starts with not hunting for the login.',
+  text: 'Bookmark the CRM on your phone today. Speed-to-lead starts with not hunting for the login.',
 };
 
 export const WHATS_LIVE_CALLOUT_WAIZ_DIALS: KitBlock = {
   type: 'callout',
-  text: 'Bookmark the CRM and the calendar on your phone today. When an appointment lands, you should be one tap from the notes.',
+  text: 'Bookmark the CRM on your phone today. When an appointment lands, you should be one tap from the notes.',
 };
 
 // ---------------------------------------------------------------------------

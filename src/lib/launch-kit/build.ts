@@ -17,6 +17,7 @@ import {
   ON_FILE_HEADING,
   ON_FILE_INTRO,
   ON_FILE_NOTE,
+  PHONE_NUMBERS_NOTE,
   PLEASE_REVIEW_HEADING,
   PLEASE_REVIEW_INTRO,
   RESOURCE_INDEX_INTRO,
@@ -33,6 +34,7 @@ import {
 } from './copy';
 import {
   isPropertyNa,
+  LAUNCH_KIT_PROPERTIES,
   LAUNCH_KIT_REVIEW_FIELDS,
   resolveVariant,
   TO_FILL,
@@ -84,32 +86,36 @@ function slackChannelLabel(draft: LaunchKitDraft): string {
   return s.startsWith('#') ? s : `#${s}`;
 }
 
-/** 01 property list. Slack sits between ads and Skool, as in the sample. */
+/** 01 property list. Lead logging and Slack sit before the Drive folder. */
 function whatsLiveRows(draft: LaunchKitDraft): string[][] {
   const rows: string[][] = [];
-  const add = (key: 'funnel_url' | 'crm_url' | 'calendar_url' | 'ads_url' | 'skool_url' | 'launch_kit_folder_url', label: string) => {
-    if (isPropertyNa(draft, key)) return;
-    rows.push([label, orFill(draft[key])]);
-  };
-  add('funnel_url', 'Perspective funnel');
-  add('crm_url', 'CRM');
-  add('calendar_url', 'Booking calendar');
-  if (draft.lead_logging_form_url.trim()) rows.push(['Lead logging form', draft.lead_logging_form_url.trim()]);
-  add('ads_url', 'Meta ads account');
-  if (draft.slack_channel_name.trim()) rows.push(['Slack channel', slackChannelLabel(draft)]);
-  add('skool_url', 'Training (Skool)');
-  add('launch_kit_folder_url', 'Launch Kit folder (Drive)');
+  for (const property of LAUNCH_KIT_PROPERTIES) {
+    if (property.key === 'launch_kit_folder_url') {
+      if (draft.lead_logging_form_url.trim()) rows.push(['Lead logging form', draft.lead_logging_form_url.trim()]);
+      if (draft.slack_channel_name.trim()) rows.push(['Slack channel', slackChannelLabel(draft)]);
+    }
+    if (isPropertyNa(draft, property.key)) continue;
+    rows.push([property.label, orFill(draft[property.key])]);
+  }
   return rows;
 }
 
 const REVIEW_NA_LABEL = 'Declined / not part of this account';
 
-/** Client-facing review checklist. Always list every row so declines are visible. */
+/** Client-facing review checklist. Optional blanks are omitted. Declines stay visible. */
 function pleaseReviewRows(draft: LaunchKitDraft): string[][] {
-  return LAUNCH_KIT_REVIEW_FIELDS.map(field => {
-    if (isPropertyNa(draft, field.key)) return [field.pdfLabel, REVIEW_NA_LABEL];
-    return [field.pdfLabel, orFill(draft[field.key])];
-  });
+  const rows: string[][] = [];
+  for (const field of LAUNCH_KIT_REVIEW_FIELDS) {
+    const value = draft[field.key].trim();
+    const na = isPropertyNa(draft, field.key);
+    if (field.optional && (!value || na)) continue;
+    if (na) {
+      rows.push([field.pdfLabel, REVIEW_NA_LABEL]);
+      continue;
+    }
+    rows.push([field.pdfLabel, orFill(value)]);
+  }
+  return rows;
 }
 
 function onFileRows(draft: LaunchKitDraft, company: string): string[][] {
@@ -190,7 +196,6 @@ export function buildLaunchKitBlocks(
       rows: [
         ['Client', `${contact}, ${company}`],
         ['Product line', productLabel],
-        ['Market', orFill(draft.market)],
         ['Go-live', formatWeekdayDate(draft.go_live_date)],
         ['Who works new leads', whoWorks],
         ['Client Success Manager', csm],
@@ -201,6 +206,7 @@ export function buildLaunchKitBlocks(
     // 01 continued. The confirmation page: what the client ticks off, and the receipt of what we hold
     PLEASE_REVIEW_HEADING,
     PLEASE_REVIEW_INTRO,
+    PHONE_NUMBERS_NOTE,
     {
       type: 'table',
       variant: 'checklist',
@@ -231,7 +237,7 @@ export function buildLaunchKitBlocks(
     // 04 + 05 on one page
     ...RESOURCE_INDEX_INTRO,
     ...leadLoggingBlocks(draft),
-    resourceTable(variant, draft.resources),
+    resourceTable(draft.resources),
     ...creativeBlocks(launchKitFolderValue(draft), variant),
     { type: 'pagebreak' },
 

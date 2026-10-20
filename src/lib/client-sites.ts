@@ -9,7 +9,7 @@ export const CLIENT_SITE_DEFS: {
 }[] = [
   { key: 'personal', label: 'Personal website', short: 'Personal' },
   { key: 'landing', label: 'Built landing page', short: 'Landing' },
-  { key: 'perspective', label: 'Perspective funnel', short: 'Perspective' },
+  { key: 'perspective', label: 'WM Apex Funnel', short: 'Apex' },
   { key: 'thank_you', label: 'Thank-you page', short: 'TY' },
 ];
 
