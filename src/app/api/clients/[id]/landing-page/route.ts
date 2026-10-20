@@ -357,9 +357,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     ];
     await attachBrandFile(files, ready.slug, client.headshot_url, "headshot");
     await attachBrandFile(files, ready.slug, client.logo_url, "logo");
-    // Vercel applies vercel.json redirects before the factory build runs, so the
-    // quiz URL must land in that file on merge — not only in the client YAML.
-    if (ready.applyUrl) {
+    // Reverse/HomeSafe still hop through vercel.json (read before build).
+    // DSCR serves apply.html built from YAML, so it must not reintroduce
+    // stale vercel.json apply routes.
+    if (ready.applyUrl && product !== "DSCR") {
       files.push(...(await applyRedirectFiles(product, ready.slug, ready.applyUrl)));
     }
 
@@ -372,11 +373,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     if (product === "DSCR") {
       bodyLines.push(`Search indexing: ${ready.preview ? "hidden (preview)" : "on"}`);
     }
-    bodyLines.push(
-      "",
-      "Updates clients/{slug}.yaml plus the apply redirects in vercel.json.",
-      "Vercel builds the HTML. Do not hand-edit generated pages.",
-    );
+    if (product !== "DSCR") {
+      bodyLines.push("Also updates the apply redirects in vercel.json.");
+    }
+    bodyLines.push("", "Vercel builds the HTML. Do not hand-edit generated pages.");
 
     const opened = await openLandingPull({
       product,
