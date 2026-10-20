@@ -658,6 +658,9 @@ export default function LandingPageForm({ clientId, fallbackName, onClose, onPub
                 placeholder="https://"
                 onChange={e => patch({ applyUrl: e.target.value })}
               />
+              <p className="mt-1 text-[11px] text-slate-500">
+                The designated quiz page in Perspective for this offer.
+              </p>
             </Field>
           </section>
 
@@ -686,6 +689,9 @@ export default function LandingPageForm({ clientId, fallbackName, onClose, onPub
             </Field>
             <Field label="Phone">
               <input className={inputClass} style={fieldStyle} disabled={disabled} value={draft.phone} onChange={e => patch({ phone: e.target.value })} />
+              <p className="mt-1 text-[11px] text-slate-500">
+                The client&apos;s GHL number — the one leads and texting use.
+              </p>
             </Field>
             <Field label="Email">
               <input className={inputClass} style={fieldStyle} disabled={disabled} value={draft.email} onChange={e => patch({ email: e.target.value })} />
@@ -693,6 +699,9 @@ export default function LandingPageForm({ clientId, fallbackName, onClose, onPub
             {equity ? null : (
               <Field label="Booking URL">
                 <input className={inputClass} style={fieldStyle} disabled={disabled} value={draft.bookingUrl} placeholder="Optional" onChange={e => patch({ bookingUrl: e.target.value })} />
+                <p className="mt-1 text-[11px] text-slate-500">
+                  GHL calendar link for Self-Scheduled Consultation.
+                </p>
               </Field>
             )}
           </section>
