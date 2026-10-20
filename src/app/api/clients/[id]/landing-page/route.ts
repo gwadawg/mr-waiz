@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getAuthContext, isAuthError, requireAnyPermission } from "@/lib/api-auth";
 import { uploadBrandAsset, downloadBrandAsset, type BrandAssetKind } from "@/lib/landing-page/assets";
-import { yamlExistsOnMain, openLandingPull } from "@/lib/landing-page/github";
+import { applyRedirectFiles, yamlExistsOnMain, openLandingPull } from "@/lib/landing-page/github";
 import { headshotRepoFile, logoRepoFile } from "@/lib/landing-page/headshot";
 import {
   draftForPublish,
@@ -357,6 +357,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     ];
     await attachBrandFile(files, ready.slug, client.headshot_url, "headshot");
     await attachBrandFile(files, ready.slug, client.logo_url, "logo");
+    // Vercel applies vercel.json redirects before the factory build runs, so the
+    // quiz URL must land in that file on merge — not only in the client YAML.
+    if (ready.applyUrl) {
+      files.push(...(await applyRedirectFiles(product, ready.slug, ready.applyUrl)));
+    }
 
     const bodyLines = [
       "Published from Mr. Waiz.",
@@ -367,7 +372,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     if (product === "DSCR") {
       bodyLines.push(`Search indexing: ${ready.preview ? "hidden (preview)" : "on"}`);
     }
-    bodyLines.push("", "Vercel builds the HTML. Do not hand-edit generated pages.");
+    bodyLines.push(
+      "",
+      "Updates clients/{slug}.yaml plus the apply redirects in vercel.json.",
+      "Vercel builds the HTML. Do not hand-edit generated pages.",
+    );
 
     const opened = await openLandingPull({
       product,

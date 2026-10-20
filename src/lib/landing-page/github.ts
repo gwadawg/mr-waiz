@@ -1,4 +1,9 @@
 import { landingRepo, landingTokenEnv, yamlPath, type LandingProduct } from "./products";
+import {
+  patchRedirectManifest,
+  patchVercelApplyRedirects,
+  redirectManifestPath,
+} from "./redirects";
 
 type GhResult<T> = { status: number; data: T };
 
@@ -48,13 +53,56 @@ export async function yamlExistsOnMain(product: LandingProduct, slug: string): P
 }
 
 type RefData = { object?: { sha?: string }; message?: string };
-type ContentData = { sha?: string; message?: string };
+type ContentData = { sha?: string; content?: string; encoding?: string; message?: string };
 type PullData = {
   number?: number;
   html_url?: string;
   head?: { sha?: string };
   message?: string;
 };
+
+async function readTextFileOnMain(
+  product: LandingProduct,
+  path: string,
+): Promise<string | null> {
+  const { status, data } = await gh<ContentData>(product, `/contents/${path}?ref=main`);
+  if (status === 404) return null;
+  if (status !== 200 || typeof data.content !== "string") {
+    throw new Error(data.message || `Could not read ${path}`);
+  }
+  return Buffer.from(data.content.replace(/\n/g, ""), data.encoding === "base64" ? "base64" : "utf8").toString(
+    "utf8",
+  );
+}
+
+/**
+ * Vercel reads vercel.json before the factory build, so a YAML-only PR leaves
+ * /{slug}/apply pointed at the previous quiz URL. Patch those routes in the PR.
+ */
+export async function applyRedirectFiles(
+  product: LandingProduct,
+  slug: string,
+  applyUrl: string,
+): Promise<{ path: string; bytes: Buffer }[]> {
+  const vercelPath = "vercel.json";
+  const manifestPath = redirectManifestPath(product);
+  const [vercelRaw, manifestRaw] = await Promise.all([
+    readTextFileOnMain(product, vercelPath),
+    readTextFileOnMain(product, manifestPath),
+  ]);
+  if (!vercelRaw) throw new Error("vercel.json is missing on main");
+  const files: { path: string; bytes: Buffer }[] = [
+    {
+      path: vercelPath,
+      bytes: Buffer.from(patchVercelApplyRedirects(vercelRaw, slug, applyUrl), "utf8"),
+    },
+  ];
+  files.push({
+    path: manifestPath,
+    bytes: Buffer.from(patchRedirectManifest(manifestRaw, slug, applyUrl), "utf8"),
+  });
+  return files;
+}
 
 export type OpenedPull = {
   prUrl: string;

@@ -16,6 +16,7 @@ import { HS_STOCK_HERO, RM_STOCK_HERO } from "./products";
 import { emptyPublish, toLandingResponses } from "./responses";
 import { verifyGithubSignature } from "./signature";
 import { groupLandingSites, shouldWritePrimaryUrl } from "./sites";
+import { patchRedirectManifest, patchVercelApplyRedirects } from "./redirects";
 import { landingEditSource } from "./storage";
 import type { LandingClient, LandingDraft } from "./types";
 import { draftToYaml } from "./yaml";
@@ -449,6 +450,65 @@ describe("landing headshot", () => {
       logoRepoFile("jane-doe", { filename: "mark.webp" }).path,
       "brand_assets/clients/jane-doe/logo.webp",
     );
+  });
+});
+
+describe("landing apply redirects", () => {
+  it("updates only this slug in vercel.json and keeps other routes", () => {
+    const before = JSON.stringify(
+      {
+        redirects: [
+          { source: "/favicon.ico", destination: "/brand_assets/favicon.ico", permanent: true },
+          {
+            source: "/jon-meer/apply",
+            destination: "https://hecm.homequityhacks.com/heath-ramsey/",
+            permanent: false,
+          },
+          {
+            source: "/jon-meer/apply.html",
+            destination: "https://hecm.homequityhacks.com/heath-ramsey/",
+            permanent: false,
+          },
+          {
+            source: "/nick-donlon/apply",
+            destination: "https://quiz.dscrexperts.com/nicholas-donlon/1stpage",
+            permanent: false,
+          },
+        ],
+      },
+      null,
+      2,
+    );
+    const patched = JSON.parse(
+      patchVercelApplyRedirects(before, "jon-meer", "https://quiz.dscrexperts.com/jonmeer/"),
+    ) as {
+      redirects: { source: string; destination: string; permanent?: boolean }[];
+    };
+    assert.deepEqual(
+      patched.redirects.map(row => [row.source, row.destination, row.permanent ?? false]),
+      [
+        ["/favicon.ico", "/brand_assets/favicon.ico", true],
+        ["/nick-donlon/apply", "https://quiz.dscrexperts.com/nicholas-donlon/1stpage", false],
+        ["/jon-meer/apply", "https://quiz.dscrexperts.com/jonmeer/", false],
+        ["/jon-meer/apply.html", "https://quiz.dscrexperts.com/jonmeer/", false],
+      ],
+    );
+  });
+
+  it("upserts the factory redirect manifest for a slug", () => {
+    const patched = JSON.parse(
+      patchRedirectManifest(
+        JSON.stringify({
+          "/jon-meer/apply": "https://hecm.homequityhacks.com/heath-ramsey/",
+          "/nick-donlon/apply": "https://quiz.dscrexperts.com/nicholas-donlon/1stpage",
+        }),
+        "jon-meer",
+        "https://quiz.dscrexperts.com/jonmeer/",
+      ),
+    ) as Record<string, string>;
+    assert.equal(patched["/jon-meer/apply"], "https://quiz.dscrexperts.com/jonmeer/");
+    assert.equal(patched["/jon-meer/apply.html"], "https://quiz.dscrexperts.com/jonmeer/");
+    assert.equal(patched["/nick-donlon/apply"], "https://quiz.dscrexperts.com/nicholas-donlon/1stpage");
   });
 });
 
