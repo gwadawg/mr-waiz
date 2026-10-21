@@ -13,54 +13,59 @@ import type { KitDialOwner, KitProduct, KitVariant } from './types';
 
 export const TO_FILL = '[TO FILL]';
 
-/** "What's live" properties, in PDF order. */
+/** Slack desktop download page. Same URL on every kit. */
+export const SLACK_DOWNLOAD_URL = 'https://slack.com/downloads';
+
+/**
+ * Account links collected in the wizard. Funnel + CRM are required; the Drive folder may be N/A.
+ * In the PDF: funnel sits in Review; CRM and folder sit in Save before launch.
+ */
 export const LAUNCH_KIT_PROPERTIES = [
   {
     key: 'funnel_url',
-    label: 'WM Apex Funnel',
+    label: 'Apex funnel',
     kind: 'url',
     clientColumn: 'funnel_url',
     naAllowed: false,
-    hint: 'Landing page our team built for this client.',
+    hint: 'Landing page leads see when they opt in. Client confirms it on Review.',
   },
-  { key: 'crm_url', label: 'CRM', kind: 'url', clientColumn: 'ghl_subaccount_url', naAllowed: false, hint: '' },
+  {
+    key: 'crm_url',
+    label: 'CRM',
+    kind: 'url',
+    clientColumn: 'ghl_subaccount_url',
+    naAllowed: false,
+    hint: 'Go High Level sub-account. Client bookmarks this on Save before launch.',
+  },
   {
     key: 'launch_kit_folder_url',
     label: 'Launch Kit folder',
     kind: 'url',
     clientColumn: null,
     naAllowed: true,
-    hint: '',
+    hint: "Client's Launch Kit Drive folder. Shown on Save before launch.",
   },
 ] as const;
 
 export type LaunchKitPropertyKey = (typeof LAUNCH_KIT_PROPERTIES)[number]['key'];
 
 /**
- * Client-facing review checklist. Prefills from `clients` when that column is filled.
- * Phone numbers and the virtual business card write back on generate. Legal notice and
- * Facebook page stay on the kit snapshot.
+ * Client-facing review checklist (plus WM Number, which the PDF places on Save).
+ * Prefills from `clients` when that column is filled. Phones and the virtual card write
+ * back on generate. Legal notice and Facebook page stay on the kit snapshot.
  */
 export const LAUNCH_KIT_REVIEW_FIELDS = [
   {
-    key: 'legal_notice_url',
-    label: 'Legal notice',
-    kind: 'url' as const,
-    optional: false,
-    naAllowed: true,
-    naLabel: 'Declined / not needed',
-    pdfLabel: 'Legal notice (compliance approve)',
-    hint: '',
-  },
-  {
     key: 'phone_prospecting',
-    label: 'Go High Level number',
+    label: 'WM Number',
     kind: 'text' as const,
     optional: false,
     naAllowed: true,
     naLabel: 'Not part of this account',
-    pdfLabel: 'Go High Level number',
-    hint: 'The number we use to text and call leads. This is also the number the client sees when we text them or live-transfer a call. They should save it in their contacts so they know who is calling.',
+    pdfLabel: 'WM Number',
+    pdfDescription:
+      'The number leads see, and the number you see when we text or connect a transfer. Save it as Waizmedia.',
+    hint: 'Waiz / GHL number. Client saves it as "Waizmedia". PDF puts this on Save before launch.',
   },
   {
     key: 'phone_live_transfer',
@@ -70,7 +75,9 @@ export const LAUNCH_KIT_REVIEW_FIELDS = [
     naAllowed: true,
     naLabel: 'Not part of this account',
     pdfLabel: 'Live transfer number',
-    hint: "The client's phone number. This is the number we call to live-transfer a lead to them.",
+    pdfDescription:
+      'Your number. When we have a live prospect on the phone, we call you here from the WM Number.',
+    hint: "Client's phone. We call it from the WM Number with a live prospect on the line.",
   },
   {
     key: 'phone_notifications',
@@ -80,17 +87,9 @@ export const LAUNCH_KIT_REVIEW_FIELDS = [
     naAllowed: true,
     naLabel: 'Same as live transfer',
     pdfLabel: 'Notification number',
-    hint: 'A client number we send notifications to, when that is different from the live transfer number. Leave blank if notifications go to the live transfer number.',
-  },
-  {
-    key: 'virtual_card_url',
-    label: 'Virtual business card',
-    kind: 'url' as const,
-    optional: false,
-    naAllowed: true,
-    naLabel: 'Not part of this account',
-    pdfLabel: 'Virtual business card',
-    hint: 'Published loanofficer.me card for this client.',
+    pdfDescription:
+      'Where you receive our notifications. Same as your live transfer line, or a separate one.',
+    hint: 'Leave blank when notifications go to the live transfer number. The PDF still shows the row.',
   },
   {
     key: 'facebook_page',
@@ -100,7 +99,31 @@ export const LAUNCH_KIT_REVIEW_FIELDS = [
     naAllowed: true,
     naLabel: 'Not part of this account',
     pdfLabel: 'Facebook page',
-    hint: '',
+    pdfDescription: 'The page we run your ads from.',
+    hint: 'Page name. Add a URL in the value when you have one.',
+  },
+  {
+    key: 'virtual_card_url',
+    label: 'Virtual business card',
+    kind: 'url' as const,
+    optional: false,
+    naAllowed: true,
+    naLabel: 'Not part of this account',
+    pdfLabel: 'Virtual business card',
+    pdfDescription: 'The card we send leads so they can confirm who you are.',
+    hint: 'Published loanofficer.me card for this client.',
+  },
+  {
+    key: 'legal_notice_url',
+    label: 'Legal notice',
+    kind: 'url' as const,
+    optional: false,
+    naAllowed: true,
+    naLabel: 'Declined / not needed',
+    pdfLabel: 'Legal notice',
+    pdfDescription:
+      'This sits in the footer of the landing pages we use. Spot-check it for compliance.',
+    hint: 'Compliance footer on the landing pages. Client spot-checks it.',
   },
 ] as const;
 
@@ -138,11 +161,13 @@ export type LaunchKitDraft = {
   phone_notifications: string;
   virtual_card_url: string;
   facebook_page: string;
+  /** Daily ad spend from the client file, shown as e.g. "$150 per day". */
+  daily_adspend: string;
   /** Client-specific form where qualified/disqualified lead outcomes are logged. */
   lead_logging_form_url: string;
   /** Client-facing resource snapshot for this kit version. */
   resources: LaunchKitResource[];
-  /** On-file receipt (kit snapshot). */
+  /** On-file receipt fields (also listed on Review in the PDF). */
   nmls: string;
   states_licensed: string;
   /** Property / review keys the CSM has explicitly marked as not part of this account. */
@@ -172,10 +197,20 @@ export type LaunchKitClient = {
   phone_notifications: string | null;
   virtual_business_card_url: string | null;
   facebook_page_name: string | null;
+  daily_adspend: number | string | null;
 };
 
 export const LAUNCH_KIT_CLIENT_FIELDS =
-  'id, name, lifecycle_status, primary_contact_name, brokerage_name, legal_business_name, reporting_type, service_program, launch_date, slack_id, funnel_url, ghl_subaccount_url, drive_folder_url, states_licensed, ghl_location_id, nmls, phone_ghl, phone_live_transfer, phone_notifications, virtual_business_card_url, facebook_page_name';
+  'id, name, lifecycle_status, primary_contact_name, brokerage_name, legal_business_name, reporting_type, service_program, launch_date, slack_id, funnel_url, ghl_subaccount_url, drive_folder_url, states_licensed, ghl_location_id, nmls, phone_ghl, phone_live_transfer, phone_notifications, virtual_business_card_url, facebook_page_name, daily_adspend';
+
+/** Format client daily_adspend for the PDF / draft field. */
+export function formatDailyAdspendLabel(value: number | string | null | undefined): string {
+  if (value == null || value === '') return '';
+  if (typeof value === 'string' && /per\s*day/i.test(value)) return value.trim();
+  const n = typeof value === 'number' ? value : Number(String(value).replace(/[^0-9.]/g, ''));
+  if (!Number.isFinite(n)) return String(value).trim();
+  return `$${Math.round(n)} per day`;
+}
 
 export function emptyLaunchKitDraft(): LaunchKitDraft {
   return {
@@ -197,6 +232,7 @@ export function emptyLaunchKitDraft(): LaunchKitDraft {
     phone_notifications: '',
     virtual_card_url: '',
     facebook_page: '',
+    daily_adspend: '',
     lead_logging_form_url: '',
     resources: [],
     nmls: '',
@@ -321,6 +357,7 @@ export function draftFromClient(
     phone_notifications: fromClientOrDraft(client.phone_notifications, base.phone_notifications),
     virtual_card_url: fromClientOrDraft(client.virtual_business_card_url, base.virtual_card_url),
     facebook_page: fromClientOrDraft(client.facebook_page_name, base.facebook_page),
+    daily_adspend: formatDailyAdspendLabel(client.daily_adspend) || base.daily_adspend,
     nmls: fromClientOrDraft(client.nmls, base.nmls),
     states_licensed: clientStates || base.states_licensed,
   };
@@ -342,6 +379,7 @@ export function draftFromResponses(responses: Record<string, unknown>): LaunchKi
   d.notes = str(responses.notes);
   d.nmls = str(responses.nmls);
   d.states_licensed = str(responses.states_licensed);
+  d.daily_adspend = str(responses.daily_adspend);
   d.lead_logging_form_url = str(responses.lead_logging_form_url);
   d.resources = resourcesFromUnknown(responses.resources);
   for (const p of LAUNCH_KIT_PROPERTIES) d[p.key] = str(responses[p.key]);
@@ -389,6 +427,7 @@ export function launchKitClientFileNoteSections(draft: LaunchKitDraft): { label:
   }
   add('NMLS', draft.nmls);
   add('States licensed', draft.states_licensed);
+  add('Daily ad spend', draft.daily_adspend);
   add('Internal notes', draft.notes);
   return sections;
 }
@@ -411,6 +450,7 @@ export function draftToResponses(draft: LaunchKitDraft): Record<string, unknown>
     notes: draft.notes.trim(),
     nmls: draft.nmls.trim(),
     states_licensed: draft.states_licensed.trim(),
+    daily_adspend: draft.daily_adspend.trim(),
     lead_logging_form_url: draft.lead_logging_form_url.trim(),
     resources: draft.resources.map(resource => ({
       ...(resource.id?.trim() ? { id: resource.id.trim() } : {}),
@@ -533,8 +573,10 @@ export function validateForGenerate(draft: LaunchKitDraft): string[] {
     }
   });
 
-  if (!draft.nmls.trim()) errors.push('NMLS is required for the on-file receipt.');
-  if (!draft.states_licensed.trim()) errors.push('States licensed is required for the on-file receipt.');
+  if (!draft.nmls.trim()) errors.push('NMLS is required for the review list.');
+  if (!draft.states_licensed.trim()) errors.push('States licensed is required for the review list.');
+  if (!draft.daily_adspend.trim()) errors.push('Daily ad spend is required for the review list.');
+  if (draft.daily_adspend.includes(TO_FILL)) errors.push(`Daily ad spend still contains ${TO_FILL}.`);
 
   return errors;
 }

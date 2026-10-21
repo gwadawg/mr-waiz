@@ -1,5 +1,5 @@
 /**
- * Launch Kit — 04 Resource index.
+ * Launch Kit — 06 Resource playbook table.
  *
  * Only the client resources the team selected for this kit. Internal playbooks are not
  * listed as a fallback.
@@ -11,7 +11,7 @@ import type { LaunchKitResource } from '../intake';
 const EMPTY_RESOURCES =
   'Your CSM will share the playbooks that apply to this account.';
 
-export function resourceTable(resources: LaunchKitResource[] = []): KitBlock {
+export function resourceTable(resources: LaunchKitResource[] = []): KitBlock[] {
   const selectedRows = resources
     .map(resource => {
       const title = resource.title.trim();
@@ -24,14 +24,17 @@ export function resourceTable(resources: LaunchKitResource[] = []): KitBlock {
     .filter((row): row is string[] => !!row);
 
   if (!selectedRows.length) {
-    return { type: 'body', text: EMPTY_RESOURCES };
+    return [{ type: 'body', text: EMPTY_RESOURCES }];
   }
 
-  return {
-    type: 'table',
-    variant: 'kv',
-    headers: ['When you need', 'Open'],
-    col_widths: [0.44, 0.56],
-    rows: selectedRows,
-  };
+  return [
+    { type: 'h2', text: 'Playbooks' },
+    {
+      type: 'table',
+      variant: 'kv',
+      headers: ['When you need', 'Open'],
+      col_widths: [0.44, 0.56],
+      rows: selectedRows,
+    },
+  ];
 }

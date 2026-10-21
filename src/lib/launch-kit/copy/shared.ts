@@ -1,9 +1,8 @@
 /**
  * Launch Kit — copy shared by every variant.
  *
- * SOURCE OF TRUTH: Wm-os `docs/templates/client-launch-kit-template.md` and the sample
- * `docs/client-fulfillment/onboarding/assets/launch-kit-sample/content.json`. Edit copy
- * there first, then mirror here and bump TEMPLATE_VERSION in `./index.ts`.
+ * SOURCE OF TRUTH: mirrored here for PDF generation. Bump TEMPLATE_VERSION in `./index.ts`
+ * whenever copy in this folder changes.
  * Client-safe (`paying-client`) copy only — no SOPs, pricing, KPI targets, CRM/bot specs,
  * or internal doc names.
  */
@@ -15,7 +14,7 @@ import type { KitBlock, KitVariant } from '../types';
 // ---------------------------------------------------------------------------
 
 export function coverLead(productPhrase: string): string {
-  return `Your ${productPhrase} acquisition engine is built and checked. This kit is the map for launch day and the first 30 days: what is live, what to confirm, how to run Week 1, and who to reach.`;
+  return `Your ${productPhrase} acquisition engine is built and checked. This kit is the map for launch day and the first 30 days: what to review, what to save, how to run Week 1, and who to reach.`;
 }
 
 // ---------------------------------------------------------------------------
@@ -27,7 +26,7 @@ export function welcomeBlocks(p: { contactFirstName: string; productPhrase: stri
     { type: 'h1', text: `Welcome to Waiz, ${p.contactFirstName}` },
     {
       type: 'body',
-      text: `Your ${p.productPhrase} acquisition engine is built, checked, and ready to go live. This kit is the leave-behind from your launch call. It is not homework. It is the map: what is live, what to review, how to run Week 1, where every file lives, and who to reach when something needs attention.`,
+      text: `Your ${p.productPhrase} acquisition engine is built, checked, and ready to go live. This kit is the leave-behind from your launch call. It is not homework. It is the map: what to review, what to save, how to run Week 1, where every file lives, and who to reach when something needs attention.`,
     },
     {
       type: 'body',
@@ -44,75 +43,106 @@ export function welcomeBlocks(p: { contactFirstName: string; productPhrase: stri
       headers: ['', 'Section', 'The question it answers'],
       col_widths: [0.08, 0.34, 0.58],
       rows: [
-        ['01', "What's live", 'Where are my pages and my CRM? What should I review, and what do you have on file?'],
-        ['02', 'How the engine works', 'What happens to a person between the first ad and a held appointment?'],
-        ['03', 'Week 1 operator checklist', 'What do I do when a lead hits?'],
-        ['04', 'Resource index', 'Where are the playbooks behind the rules?'],
-        ['05', 'Creative and swipe files', 'What can I see, use, and remix?'],
-        ['06', 'First 30 days', 'What should I expect, and what should I ignore?'],
-        ['07', 'Who to ping', 'Slack now, or bring it to the weekly call?'],
+        ['01', 'Review before we launch', 'What to confirm before go-live, and how the numbers work'],
+        ['02', 'Save before launch', 'What to put on your phone and bookmarks'],
+        ['03', 'Lead logging form', 'Why filling it in matters, and how to use it'],
+        ['04', 'How the engine works', 'What happens from the first ad to a held appointment'],
+        ['05', 'Week 1 operator checklist', 'What do I do when a lead hits?'],
+        ['06', 'Resources and creative files', 'Where are the playbooks and the Drive folder?'],
+        ['07', 'First 30 days', 'What should I expect, and what should I ignore?'],
+        ['08', 'Who to ping', 'Slack now, or bring it to the weekly call?'],
       ],
     },
     {
       type: 'body',
-      text: 'Read it once end to end. Then keep it open on launch day. Sections 01 and 03 are the ones you will come back to most.',
+      text: 'Read it once end to end. Then keep it open on launch day. Sections 01, 02, and 05 are the ones you will come back to most.',
     },
   ];
 }
 
 // ---------------------------------------------------------------------------
-// 01 What's live
+// 01 Review before we launch
 // ---------------------------------------------------------------------------
 
-export const WHATS_LIVE_INTRO: KitBlock[] = [
-  { type: 'h1', text: "01  What's live" },
+export const REVIEW_INTRO: KitBlock[] = [
   {
-    type: 'body',
-    text: 'These are your properties. We click every one of them on the launch call. If a link does not open or a login fails, we fix it before we treat the account as live. Access first. Volume second.',
+    type: 'spot',
+    heading: '01  Review before we launch',
+    bodies: [
+      'Check every item below. When everything looks right, send us written notice in Slack that you have reviewed it. That is our green light to use this material as shown.',
+      'Everything goes live on your go-live date unless you ask for a change.',
+    ],
+    image: 'review-checklist',
   },
 ];
 
-export const AT_A_GLANCE_HEADING: KitBlock = { type: 'h2', text: 'Your account at a glance' };
+export const PHONE_FLOW_HEADING: KitBlock = { type: 'h2', text: 'How the three numbers work together' };
 
-export const PLEASE_REVIEW_HEADING: KitBlock = { type: 'h2', text: 'Please review' };
+export const PHONE_FLOW_DIAGRAM: KitBlock = { type: 'diagram', kind: 'phone_flow' };
 
-export const PLEASE_REVIEW_INTRO: KitBlock = {
-  type: 'body',
-  text: 'Open every link and confirm every number on the launch call. If something is wrong, say so before we treat the account as live.',
-};
-
-export const PHONE_NUMBERS_NOTE: KitBlock = {
-  type: 'body',
-  text: 'Save the Go High Level number in your contacts. That is the number we use to text and call your leads, and the number you will see when we text you or live-transfer a call. The live transfer number is your phone: the number we call to connect a lead to you. The notification number, when listed, is a separate line where we send account notifications.',
-};
-
-export const ON_FILE_HEADING: KitBlock = { type: 'h2', text: 'On file with us' };
-
-export const ON_FILE_INTRO: KitBlock = {
-  type: 'body',
-  text: 'A receipt of what we have on file for you. Ads, compliance copy, and call scripts are built from these three details, so check them closely.',
-};
-
-export const ON_FILE_NOTE: KitBlock = {
+export const PHONE_FLOW_CAPTION: KitBlock = {
   type: 'caption',
-  text: 'If any detail is inaccurate, tell your CSM before launch so we can correct it. Keep this page: it is the record you can point back to.',
+  text: 'Every text and call to a lead goes out from the WM Number. When a lead is ready, we call your live transfer line from that same number.',
 };
 
-export const WHATS_LIVE_CALLOUT: KitBlock = {
-  type: 'callout',
-  text: 'Bookmark the CRM on your phone today. Speed-to-lead starts with not hunting for the login.',
-};
+export const REVIEW_LIST_HEADING: KitBlock = { type: 'h2', text: 'Your review list' };
 
-export const WHATS_LIVE_CALLOUT_WAIZ_DIALS: KitBlock = {
-  type: 'callout',
-  text: 'Bookmark the CRM on your phone today. When an appointment lands, you should be one tap from the notes.',
-};
+export function reviewWrittenNotice(slackChannelLabel: string): KitBlock {
+  return {
+    type: 'callout',
+    text: `When you are done, send written notice in Slack (${slackChannelLabel}) that you have reviewed everything and we can continue.`,
+  };
+}
 
 // ---------------------------------------------------------------------------
-// 02 How the engine works
+// 02 Save before launch
 // ---------------------------------------------------------------------------
 
-const ENGINE_H1: KitBlock = { type: 'h1', text: '02  How the engine works' };
+export const SAVE_INTRO: KitBlock[] = [
+  {
+    type: 'spot',
+    heading: '02  Save before launch',
+    bodies: [
+      'Put these on your phone and bookmarks before go-live day. Nothing should be a hunt once the leads start.',
+    ],
+    image: 'save-before-launch',
+  },
+];
+
+// ---------------------------------------------------------------------------
+// 03 Lead logging form
+// ---------------------------------------------------------------------------
+
+export function leadLoggingBlocks(formUrl: string): KitBlock[] {
+  return [
+    { type: 'h1', text: '03  Lead logging form' },
+    {
+      type: 'body',
+      text: 'Filling this form is how we learn faster on the back end. It feeds better data into the campaign, shows which ad angles are working, and gives you cleaner reporting. Bookmark it on the Save page. Use it every time.',
+    },
+    { type: 'image', key: 'lead-logging-loop', width: 500, height: 150, fit: 'cover' },
+    { type: 'h2', text: 'How to use it' },
+    { type: 'numbered', text: `Open the form: ${formUrl}. Keep it bookmarked on your phone and desktop.` },
+    {
+      type: 'numbered',
+      text: 'Log every outcome. Qualified or disqualified. A short note on why keeps the data honest.',
+    },
+    {
+      type: 'numbered',
+      text: 'We use it the same day. Better learning on the ads, clearer analytics for you, faster fixes.',
+    },
+    {
+      type: 'callout',
+      text: 'Your reporting depends on those outcomes. When the form is current, lead quality, qualification rate, and follow-up visibility stay accurate.',
+    },
+  ];
+}
+
+// ---------------------------------------------------------------------------
+// 04 How the engine works
+// ---------------------------------------------------------------------------
+
+const ENGINE_H1: KitBlock = { type: 'h1', text: '04  How the engine works' };
 
 function engineIntro(prospectNoun: string): KitBlock {
   return {
@@ -120,6 +150,14 @@ function engineIntro(prospectNoun: string): KitBlock {
     text: `We are not a lead vendor. We built an acquisition engine around you. You do not need to know how we build it. You do need to know what happens to ${prospectNoun} from the first ad to a held appointment, and where you come in.`,
   };
 }
+
+const ENGINE_JOURNEY_IMAGE: KitBlock = {
+  type: 'image',
+  key: 'engine-journey',
+  width: 500,
+  height: 140,
+  fit: 'cover',
+};
 
 const ENGINE_REPETITION: KitBlock = {
   type: 'body',
@@ -165,6 +203,7 @@ export function engineBlocks(p: { product: 'rm' | 'dscr'; dialOwner: 'waiz' | 'c
   return [
     ENGINE_H1,
     engineIntro(prospectNoun),
+    ENGINE_JOURNEY_IMAGE,
     {
       type: 'table',
       variant: 'steps',
@@ -173,19 +212,20 @@ export function engineBlocks(p: { product: 'rm' | 'dscr'; dialOwner: 'waiz' | 'c
       rows,
     },
     ENGINE_REPETITION,
+    { type: 'pagebreak' },
     ...ENGINE_DIFFERENT,
   ];
 }
 
 // ---------------------------------------------------------------------------
-// 04 Resource index + 05 Creative and swipe files (same page)
+// 06 Resources and creative
 // ---------------------------------------------------------------------------
 
 export const RESOURCE_INDEX_INTRO: KitBlock[] = [
-  { type: 'h1', text: '04  Resource index' },
+  { type: 'h1', text: '06  Resources and creative files' },
   {
     type: 'body',
-    text: 'The playbooks behind the rules in Section 03. Use them when you are in the work, not on the launch call. If one is not in your Drive yet, your CSM sends it.',
+    text: 'The playbooks behind the rules in Section 05. Use them when you are in the work. The files that change live in Drive, not in this PDF.',
   },
 ];
 
@@ -196,7 +236,7 @@ export function creativeBlocks(
   const rows: string[][] = [
     ['Launch Kit (root)', launchKitFolderValue],
     ['01-Launch-PDF', 'This document'],
-    ['02-Links', 'Shortcuts to every page in Section 01'],
+    ['02-Links', 'Shortcuts to every page in Sections 01 and 02'],
     ['03-Swipe-and-Ads', 'Your live ads plus approved examples you can reference or remix'],
     ['04-Recordings', 'Launch-call recording, posted after the call'],
   ];
@@ -207,8 +247,7 @@ export function creativeBlocks(
     ]);
   }
   return [
-    { type: 'h1', text: '05  Creative and swipe files' },
-    { type: 'body', text: 'The files that change live in Drive, not in this PDF.' },
+    { type: 'h2', text: 'Drive folder map' },
     {
       type: 'table',
       variant: 'kv',
@@ -231,11 +270,11 @@ export function creativeBlocks(
 }
 
 // ---------------------------------------------------------------------------
-// 06 First 30 days
+// 07 First 30 days
 // ---------------------------------------------------------------------------
 
 export const FIRST_30_DAYS: KitBlock[] = [
-  { type: 'h1', text: '06  First 30 days' },
+  { type: 'h1', text: '07  First 30 days' },
   {
     type: 'body',
     text: 'Weeks 1 to 4 are a test. We are collecting data across ads, audiences, and angles. No single combination has earned the whole budget yet. That is the work, not a delay.',
@@ -302,7 +341,7 @@ export const FIRST_30_DAYS_JOB_WAIZ_DIALS: KitBlock[] = [
 ];
 
 // ---------------------------------------------------------------------------
-// 07 Who to ping
+// 08 Who to ping
 // ---------------------------------------------------------------------------
 
 export type WhoToPing = {
@@ -314,10 +353,13 @@ export type WhoToPing = {
 
 export function whoToPingBlocks(p: WhoToPing): KitBlock[] {
   return [
-    { type: 'h1', text: '07  Who to ping' },
     {
-      type: 'body',
-      text: 'Two channels. Slack for anything that is broken or time-sensitive. The weekly check-in for everything you want to think through together.',
+      type: 'spot',
+      heading: '08  Who to ping',
+      bodies: [
+        'Two channels. Slack for anything that is broken or time-sensitive. The weekly check-in for everything you want to think through together.',
+      ],
+      image: 'who-to-ping',
     },
     {
       type: 'table',
@@ -355,12 +397,5 @@ export function whoToPingBlocks(p: WhoToPing): KitBlock[] {
           ? `Welcome aboard, ${p.contactFirstName}. The engine is live. Your job this month is simple: be on the phone when the leads come in.`
           : `Welcome aboard, ${p.contactFirstName}. The engine is live. Your job this month is simple: show up ready for every appointment we put on your calendar.`,
     },
-  ];
-}
-
-export function footerBlocks(p: { companyName: string; monthYear: string }): KitBlock[] {
-  return [
-    { type: 'divider' },
-    { type: 'caption', text: `Waiz Media. Client Launch Kit for ${p.companyName}, ${p.monthYear}.` },
   ];
 }

@@ -44,7 +44,7 @@ type LoadResponse = {
 type Step = "variant" | "live" | "operator" | "resources" | "review";
 const STEPS: { id: Step; label: string }[] = [
   { id: "variant", label: "Variant" },
-  { id: "live", label: "What's live" },
+  { id: "live", label: "Links & review" },
   { id: "operator", label: "Operator setup" },
   { id: "resources", label: "Resources" },
   { id: "review", label: "Review & generate" },
@@ -446,9 +446,9 @@ function VariantStep({ draft, patch }: { draft: LaunchKitDraft; patch: PatchFn }
         </div>
 
         <div className="pt-2" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
-          <h4 className="text-sm font-semibold text-slate-200 mb-1">On file with us</h4>
+          <h4 className="text-sm font-semibold text-slate-200 mb-1">Review list (license + spend)</h4>
           <p className="text-xs text-slate-500 mb-3">
-            Snapshot for this kit only. Editing here does not change the client file.
+            Shown on the PDF Review page. NMLS and states come from the client file when filled. Daily ad spend prefills from the client file.
           </p>
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="NMLS #">
@@ -456,6 +456,9 @@ function VariantStep({ draft, patch }: { draft: LaunchKitDraft; patch: PatchFn }
             </Field>
             <Field label="States licensed" hint="Comma-separated, e.g. FL, TX, CA">
               <TextInput value={draft.states_licensed} onChange={e => patch("states_licensed", e.target.value)} placeholder="FL, TX" />
+            </Field>
+            <Field label="Daily ad spend" hint='Shown as e.g. "$150 per day". Average; we may start lower to warm the account.'>
+              <TextInput value={draft.daily_adspend} onChange={e => patch("daily_adspend", e.target.value)} placeholder="$150 per day" />
             </Field>
           </div>
         </div>
@@ -517,9 +520,9 @@ function LiveStep({
     <div className="space-y-4">
       <section className="rounded-lg overflow-hidden" style={panelStyle}>
         <div className="px-4 py-3" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-          <h3 className="text-sm font-semibold text-slate-200">What&apos;s live</h3>
+          <h3 className="text-sm font-semibold text-slate-200">Account links</h3>
           <p className="text-xs mt-0.5 text-slate-500">
-            Every URL here is clicked on the Launch Call. Fill it or mark N/A. WM Apex Funnel and CRM write back to the client file. If the client file already has a value, it fills in here.
+            Apex funnel goes on Review in the PDF; CRM and the Launch Kit folder go on Save. Funnel and CRM write back to the client file when filled.
           </p>
         </div>
         <div className="px-4 py-4 space-y-4">
@@ -569,9 +572,9 @@ function LiveStep({
 
       <section className="rounded-lg overflow-hidden" style={panelStyle}>
         <div className="px-4 py-3" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-          <h3 className="text-sm font-semibold text-slate-200">Please review</h3>
+          <h3 className="text-sm font-semibold text-slate-200">Review before launch</h3>
           <p className="text-xs mt-0.5 text-slate-500">
-            Filled from the client file when those fields are already saved. Go High Level number, live transfer number, notification number, and the virtual business card write back when you generate. Legal notice and Facebook page stay on this kit only.
+            WM Number sits on Save in the PDF; the rest sit on Review. Phones and the virtual card write back when you generate. Legal notice and Facebook page stay on this kit only.
           </p>
         </div>
         <div className="px-4 py-4 space-y-4">
@@ -829,6 +832,7 @@ function ReviewStep({
     ["CSM", draft.csm_name || "—"],
     ["NMLS", draft.nmls || "—"],
     ["States licensed", draft.states_licensed || "—"],
+    ["Daily ad spend", draft.daily_adspend || "—"],
     ["Lead logging form", draft.lead_logging_form_url || "—"],
     ["Selected resources", draft.resources.length ? draft.resources.map(r => r.title || "Untitled resource").join(", ") : "CSM will share playbooks"],
     ...LAUNCH_KIT_PROPERTIES.map<[string, string]>(p => [

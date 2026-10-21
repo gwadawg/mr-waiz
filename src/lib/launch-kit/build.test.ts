@@ -41,6 +41,7 @@ const client: LaunchKitClient = {
   phone_notifications: '+1 (555) 010-2002',
   virtual_business_card_url: 'https://loanofficer.me/jordan-hale',
   facebook_page_name: 'Hale Capital Lending',
+  daily_adspend: 150,
 };
 
 function completeDraft(overrides: Partial<LaunchKitDraft> = {}): LaunchKitDraft {
@@ -63,6 +64,7 @@ function completeDraft(overrides: Partial<LaunchKitDraft> = {}): LaunchKitDraft 
     phone_live_transfer: '+1 (555) 010-2001',
     virtual_card_url: 'https://loanofficer.me/jordan-hale',
     facebook_page: 'Hale Capital Lending',
+    daily_adspend: '$150 per day',
     lead_logging_form_url: 'https://forms.example.com/hale-leads',
     nmls: '1987654',
     states_licensed: 'FL',
@@ -88,7 +90,6 @@ const FORBIDDEN = [
   'CPL target',
   'kickoff form',
   'QA checklist',
-  '$',
 ];
 
 describe('variant resolution', () => {
@@ -133,6 +134,7 @@ describe('prefill', () => {
     assert.equal(d.facebook_page, 'Hale Capital Lending');
     assert.equal(d.nmls, '1987654');
     assert.equal(d.states_licensed, 'FL');
+    assert.equal(d.daily_adspend, '$150 per day');
   });
 
   it('normalizes a timestamp go-live date from the client file', () => {
@@ -201,7 +203,7 @@ describe('validateForGenerate', () => {
 
   it('funnel and CRM can never be N/A', () => {
     const errs = validateForGenerate(completeDraft({ property_na: { funnel_url: true, crm_url: true } }));
-    assert.ok(errs.some(e => e.includes('WM Apex Funnel cannot be marked N/A')));
+    assert.ok(errs.some(e => e.includes('Apex funnel cannot be marked N/A')));
     assert.ok(errs.some(e => e.includes('CRM cannot be marked N/A')));
   });
 
@@ -215,10 +217,11 @@ describe('validateForGenerate', () => {
     assert.deepEqual(validateForGenerate(completeDraft({ phone_notifications: '' })), []);
   });
 
-  it('requires NMLS and states licensed for the receipt', () => {
-    const errs = validateForGenerate(completeDraft({ nmls: '', states_licensed: '' }));
+  it('requires NMLS, states licensed, and daily ad spend for the review list', () => {
+    const errs = validateForGenerate(completeDraft({ nmls: '', states_licensed: '', daily_adspend: '' }));
     assert.ok(errs.some(e => e.startsWith('NMLS is required')));
     assert.ok(errs.some(e => e.startsWith('States licensed is required')));
+    assert.ok(errs.some(e => e.startsWith('Daily ad spend is required')));
   });
 
   it('requires the lead logging form URL', () => {
@@ -239,7 +242,7 @@ describe('validateForGenerate', () => {
   it('rejects [TO FILL] anywhere and non-http URLs', () => {
     const errs = validateForGenerate(completeDraft({ slack_channel_name: TO_FILL, funnel_url: 'notaurl' }));
     assert.ok(errs.some(e => e.includes(`Slack channel still contains ${TO_FILL}`)));
-    assert.ok(errs.some(e => e.includes('WM Apex Funnel must be a full http(s) URL')));
+    assert.ok(errs.some(e => e.includes('Apex funnel must be a full http(s) URL')));
   });
 
   it('requires both axes and the operator fields', () => {
@@ -255,7 +258,9 @@ describe('buildLaunchKitBlocks', () => {
     it(`${variant.product}/${variant.dialOwner}: fixed section order, no internal copy, no placeholders`, () => {
       const draft = completeDraft({ product: variant.product, dial_owner: variant.dialOwner });
       const { blocks, cover } = buildLaunchKitBlocks(draft, { version: 1, clientName: client.name });
-      const h1s = blocks.filter(b => b.type === 'h1').map(b => ('text' in b ? b.text : ''));
+      const h1s = blocks
+        .filter(b => b.type === 'h1' || b.type === 'spot')
+        .map(b => (b.type === 'spot' ? b.heading : b.type === 'h1' ? b.text : ''));
       assert.equal(h1s.length, EXPECTED_H1_ORDER.length);
       assert.ok(h1s[0].startsWith(EXPECTED_H1_ORDER[0]), `welcome heading: ${h1s[0]}`);
       assert.deepEqual(h1s.slice(1), [...EXPECTED_H1_ORDER.slice(1)]);
@@ -272,17 +277,21 @@ describe('buildLaunchKitBlocks', () => {
     });
   }
 
-  it('includes Please review and On file sections', () => {
+  it('includes Review, Save, and lead logging sections', () => {
     const { blocks, cover } = buildLaunchKitBlocks(completeDraft(), { version: 1, clientName: client.name });
     const text = flattenBlockText(blocks).join('\n');
-    assert.ok(text.includes('Please review'));
-    assert.ok(text.includes('On file with us'));
-    assert.ok(text.includes('Legal notice (compliance approve)'));
-    assert.ok(text.includes('Go High Level number'));
+    assert.ok(text.includes('Review before we launch'));
+    assert.ok(text.includes('Save before launch'));
+    assert.ok(text.includes('Legal notice'));
+    assert.ok(text.includes('WM Number'));
     assert.ok(text.includes('Live transfer number'));
-    assert.ok(text.includes('Save the Go High Level number in your contacts'));
+    assert.ok(text.includes('Waizmedia'));
     assert.ok(text.includes('Virtual business card'));
-    assert.equal(text.includes('Notification number'), false);
+    assert.ok(text.includes('Notification number'));
+    assert.ok(text.includes('Same as live transfer number'));
+    assert.ok(text.includes('Apex funnel'));
+    assert.ok(text.includes('Daily ad spend'));
+    assert.ok(text.includes('$150 per day'));
     assert.equal(text.includes('Market'), false);
     assert.equal(text.includes('Training (Skool)'), false);
     assert.equal(text.includes('Perspective'), false);
@@ -290,7 +299,8 @@ describe('buildLaunchKitBlocks', () => {
     assert.ok(text.includes('https://forms.example.com/hale-leads'));
     assert.ok(text.includes('https://loanofficer.me/jordan-hale'));
     assert.ok(text.includes('1987654'));
-    assert.ok(text.includes('States licensed'));
+    assert.ok(text.includes('Licensed states'));
+    assert.ok(text.includes('slack.com/downloads'));
     assert.equal(cover.welcomeName, 'Jordan');
   });
 
@@ -303,7 +313,7 @@ describe('buildLaunchKitBlocks', () => {
     assert.ok(text.includes('Declined / not part of this account'));
   });
 
-  it('lists a filled notification number and omits it when blank', () => {
+  it('always lists notification number; blank means same as live transfer', () => {
     const filled = flattenBlockText(
       buildLaunchKitBlocks(completeDraft({ phone_notifications: '+1 (555) 010-2002' }), { version: 1, clientName: 'x' }).blocks,
     ).join('\n');
@@ -312,7 +322,8 @@ describe('buildLaunchKitBlocks', () => {
     const blank = flattenBlockText(
       buildLaunchKitBlocks(completeDraft({ phone_notifications: '' }), { version: 1, clientName: 'x' }).blocks,
     ).join('\n');
-    assert.equal(blank.includes('Notification number'), false);
+    assert.ok(blank.includes('Notification number'));
+    assert.ok(blank.includes('Same as live transfer number'));
   });
 
   it('client-dials variants list the Drive playbook folder; waiz-dials variants do not', () => {
@@ -369,17 +380,19 @@ describe('buildLaunchKitBlocks', () => {
 
   it('speed standard is only stated when sold', () => {
     const none = flattenBlockText(buildLaunchKitBlocks(completeDraft(), { version: 1, clientName: 'x' }).blocks).join('\n');
-    assert.ok(none.includes('We never invent a number in this kit'));
+    assert.ok(none.includes('as agreed on your kickoff'));
+    assert.equal(none.includes('We never invent a number in this kit'), false);
     const sold = flattenBlockText(
       buildLaunchKitBlocks(completeDraft({ speed_standard: 'call within 5 minutes during business hours' }), { version: 1, clientName: 'x' }).blocks,
     ).join('\n');
     assert.ok(sold.includes('as agreed on your kickoff: call within 5 minutes'));
   });
 
-  it('go-live renders with weekday in the at-a-glance table', () => {
-    const text = flattenBlockText(buildLaunchKitBlocks(completeDraft(), { version: 1, clientName: 'x' }).blocks).join('\n');
-    assert.ok(text.includes('Tuesday, 15 September 2026'));
+  it('slack channel and go-live appear on cover metadata path', () => {
+    const { blocks, cover } = buildLaunchKitBlocks(completeDraft(), { version: 1, clientName: 'x' });
+    const text = flattenBlockText(blocks).join('\n');
     assert.ok(text.includes('#hale-capital'));
+    assert.equal(cover.goLiveLabel, '15 September 2026');
   });
 });
 

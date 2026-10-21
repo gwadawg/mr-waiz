@@ -14,11 +14,18 @@
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import {
+  Circle,
   Document,
   Font,
+  Image,
+  Line,
   Link,
   Page,
+  Path,
+  Polygon,
+  Rect,
   StyleSheet,
+  Svg,
   Text,
   View,
   renderToBuffer,
@@ -26,16 +33,21 @@ import {
 import type { Style } from '@react-pdf/stylesheet';
 import type { ReactElement, ReactNode } from 'react';
 import { WAIZ } from '@/lib/waiz-brand';
-import type { KitBlock, KitCoverMeta, KitTableVariant } from './types';
+import type { KitBlock, KitCoverMeta, KitImageKey, KitTableVariant } from './types';
 
 // ---------------------------------------------------------------------------
 // Fonts
 // ---------------------------------------------------------------------------
 
 const FONT_DIR = path.join(process.cwd(), 'src', 'lib', 'launch-kit', 'fonts');
+const IMAGE_DIR = path.join(process.cwd(), 'src', 'lib', 'launch-kit', 'images');
 
 function fontPath(file: string): string {
   return path.join(FONT_DIR, file);
+}
+
+function imagePath(key: KitImageKey): string {
+  return path.join(IMAGE_DIR, `${key}.png`);
 }
 
 const GEIST_FILES = {
@@ -99,7 +111,6 @@ const s = StyleSheet.create({
     paddingTop: 52,
     paddingBottom: 48,
     ...w(400),
-    justifyContent: 'space-between',
   },
   coverTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   coverBrand: { fontSize: 10, letterSpacing: 2.2, color: WAIZ.accent, textTransform: 'uppercase', ...w(500) },
@@ -141,14 +152,14 @@ const s = StyleSheet.create({
   footerBrand: { fontSize: 8, ...w(500), color: WAIZ.navy },
 
   // Type -------------------------------------------------------------------
-  h1: { fontSize: 26, color: WAIZ.navy, ...w(600), letterSpacing: -0.5, lineHeight: 1.15, marginBottom: 8 },
+  h1: { fontSize: 28, color: WAIZ.navy, ...w(600), letterSpacing: -0.5, lineHeight: 1.12, marginBottom: 8 },
   h1Num: { color: WAIZ.accent, ...w(500) },
   h1Rule: { height: 0.75, backgroundColor: RULE, marginBottom: 14 },
-  h2: { fontSize: 13.5, color: WAIZ.navy, ...w(600), marginTop: 16, marginBottom: 7, letterSpacing: -0.2 },
+  h2: { fontSize: 14, color: WAIZ.navy, ...w(600), marginTop: 16, marginBottom: 7, letterSpacing: -0.2 },
   h2First: { marginTop: 0 },
   h3: { fontSize: 11, color: WAIZ.royal, ...w(600), marginTop: 12, marginBottom: 4 },
-  body: { marginBottom: 8, color: INK_SOFT },
-  caption: { fontSize: 8.5, color: MUTED, lineHeight: 1.45, marginBottom: 6 },
+  body: { marginBottom: 8, color: INK_SOFT, fontSize: 11, lineHeight: 1.5 },
+  caption: { fontSize: 9, color: MUTED, lineHeight: 1.45, marginBottom: 6 },
   divider: { height: 0.6, backgroundColor: HAIR, marginVertical: 14 },
   spacer: { height: 12 },
 
@@ -179,12 +190,29 @@ const s = StyleSheet.create({
   cell: { fontSize: 10, color: INK_SOFT, paddingRight: 10, lineHeight: 1.45 },
   link: { fontSize: 10, color: WAIZ.royal, textDecoration: 'none', ...w(500) },
 
-  // kv / checklist ---------------------------------------------------------
-  kvLabel: { fontSize: 9.5, color: MUTED, ...w(500), paddingRight: 12, paddingTop: 0.5 },
-  kvValue: { fontSize: 10, color: INK, lineHeight: 1.4 },
+  // kv / checklist / review / save -----------------------------------------
+  kvLabel: { fontSize: 10, color: WAIZ.navy, ...w(500), paddingRight: 12, paddingTop: 0.5 },
+  kvValue: { fontSize: 10.5, color: INK, lineHeight: 1.4 },
   kvMuted: { color: MUTED },
-  tickBox: { width: 10, height: 10, borderWidth: 1, borderColor: WAIZ.navy, marginRight: 12, marginTop: 2.5 },
+  tickBox: { width: 11, height: 11, borderWidth: 1, borderColor: WAIZ.navy, marginRight: 12, marginTop: 2 },
   tickBoxOff: { borderColor: RULE },
+  reviewDesc: { fontSize: 8.5, color: MUTED, lineHeight: 1.4, marginTop: 1 },
+  saveTile: {
+    width: '48.5%',
+    backgroundColor: TINT,
+    borderWidth: 0.6,
+    borderColor: HAIR,
+    padding: 14,
+    marginBottom: 12,
+  },
+  saveAction: { fontSize: 8, letterSpacing: 1.2, color: WAIZ.accent, ...w(600), marginBottom: 6 },
+  saveTitle: { fontSize: 13, ...w(600), color: WAIZ.navy, marginBottom: 4 },
+  saveBody: { fontSize: 9.5, color: INK_SOFT, lineHeight: 1.4, marginBottom: 8 },
+  saveLink: { fontSize: 10, color: WAIZ.navy, ...w(500) },
+  spotRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
+  spotCopy: { width: 340 },
+  spotImage: { width: 130, height: 130, marginTop: -4 },
+  bandImage: { width: 500, marginTop: 6, marginBottom: 8 },
 
   // receipt ----------------------------------------------------------------
   receipt: { flexDirection: 'row', backgroundColor: TINT, borderWidth: 0.6, borderColor: HAIR, marginTop: 6, marginBottom: 10 },
@@ -377,6 +405,150 @@ function Checklist({ rows, col_widths }: TableProps) {
   );
 }
 
+/** Review checklist: checkbox + label + description + value. Rows may wrap across pages. */
+function ReviewList({ rows }: TableProps) {
+  return (
+    <View style={s.block}>
+      {rows.map((row, ri) => {
+        const off = DECLINED_RE.test((row[2] ?? '').trim());
+        return (
+          <View key={ri} wrap={false} style={[s.row, ri === rows.length - 1 ? s.rowLast : {}]}>
+            <View style={[s.tickBox, off ? s.tickBoxOff : {}]} />
+            <View style={{ width: 210, paddingRight: 12 }}>
+              <Text style={[s.cellKey, off ? s.kvMuted : {}]}>{row[0] ?? ''}</Text>
+              <Text style={s.reviewDesc}>{row[1] ?? ''}</Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Value text={row[2] ?? ''} muted={off} style={{ fontSize: 11, ...w(500) }} />
+            </View>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
+/** Save tiles: [action, title, description, link]. */
+function SaveTiles({ rows }: TableProps) {
+  return (
+    <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginTop: 8, marginBottom: 8 }}>
+      {rows.map((row, ri) => (
+        <View key={ri} wrap={false} style={s.saveTile}>
+          <Text style={s.saveAction}>{row[0] ?? ''}</Text>
+          <Text style={s.saveTitle}>{row[1] ?? ''}</Text>
+          <Text style={s.saveBody}>{row[2] ?? ''}</Text>
+          <Value text={row[3] ?? ''} style={s.saveLink} />
+        </View>
+      ))}
+    </View>
+  );
+}
+
+/** Three-number diagram — labels only, no client phone values. */
+function PhoneFlowDiagram() {
+  const W = 500;
+  const H = 170;
+  return (
+    <View style={{ marginTop: 8, marginBottom: 6 }} wrap={false}>
+      <Svg width={W} height={H} viewBox={`0 0 ${W} ${H}`}>
+        <Rect x={0} y={20} width={120} height={130} fill={TINT} stroke={HAIR} strokeWidth={0.8} />
+        <Circle cx={60} cy={62} r={15} fill={HAIR} />
+        <Circle cx={60} cy={57} r={5.5} fill={WAIZ.navy} />
+        <Path d="M49 72 a11 11 0 0 1 22 0 Z" fill={WAIZ.navy} />
+        <Rect x={170} y={0} width={180} height={H} fill={WAIZ.navy} />
+        <Rect x={186} y={92} width={148} height={0.6} fill="#22386E" />
+        <Rect x={186} y={120} width={78} height={22} fill={WAIZ.accent} />
+        <Rect x={400} y={0} width={100} height={78} fill={TINT} stroke={HAIR} strokeWidth={0.8} />
+        <Rect x={400} y={92} width={100} height={78} fill={TINT} stroke={HAIR} strokeWidth={0.8} />
+        <Line x1={122} y1={70} x2={166} y2={70} stroke={WAIZ.accent} strokeWidth={1.2} strokeDasharray="3 3" />
+        <Polygon points="166,67 171,70 166,73" fill={WAIZ.accent} />
+        <Line x1={168} y1={100} x2={124} y2={100} stroke={WAIZ.accent} strokeWidth={1.2} strokeDasharray="3 3" />
+        <Polygon points="124,97 119,100 124,103" fill={WAIZ.accent} />
+        <Line x1={352} y1={39} x2={396} y2={39} stroke={WAIZ.accent} strokeWidth={1.2} />
+        <Polygon points="396,36 401,39 396,42" fill={WAIZ.accent} />
+        <Line x1={352} y1={131} x2={396} y2={131} stroke={WAIZ.accent} strokeWidth={1.2} />
+        <Polygon points="396,128 401,131 396,134" fill={WAIZ.accent} />
+      </Svg>
+      <View style={{ position: 'absolute', left: 0, top: 0, width: W, height: H }}>
+        <Text style={{ position: 'absolute', left: 0, top: 84, width: 120, textAlign: 'center', fontSize: 11, ...w(600), color: WAIZ.navy }}>
+          Your lead
+        </Text>
+        <Text style={{ position: 'absolute', left: 10, top: 102, width: 100, textAlign: 'center', fontSize: 8.5, color: MUTED, lineHeight: 1.35 }}>
+          Sees your ad, opts in, gets our texts and calls
+        </Text>
+        <Text style={{ position: 'absolute', left: 186, top: 16, fontSize: 8, letterSpacing: 1.4, color: WAIZ.accent, ...w(600) }}>
+          WM NUMBER
+        </Text>
+        <Text style={{ position: 'absolute', left: 186, top: 32, width: 150, fontSize: 9.5, color: '#DCE6FF', lineHeight: 1.4 }}>
+          The one number your leads see, and the number you see when we reach you.
+        </Text>
+        <Text style={{ position: 'absolute', left: 186, top: 101, fontSize: 8.5, color: WAIZ.white, ...w(500) }}>
+          Save it in your phone as
+        </Text>
+        <Text style={{ position: 'absolute', left: 186, top: 125, width: 78, textAlign: 'center', fontSize: 10, ...w(600), color: WAIZ.navy }}>
+          Waizmedia
+        </Text>
+        <Text style={{ position: 'absolute', left: 410, top: 11, fontSize: 8, letterSpacing: 1.2, color: MUTED, ...w(600) }}>
+          LIVE TRANSFER
+        </Text>
+        <Text style={{ position: 'absolute', left: 410, top: 26, width: 84, fontSize: 8.5, color: INK_SOFT, lineHeight: 1.35 }}>
+          Your phone. We call it from the WM Number with a lead on the line.
+        </Text>
+        <Text style={{ position: 'absolute', left: 410, top: 103, fontSize: 8, letterSpacing: 1.2, color: MUTED, ...w(600) }}>
+          NOTIFICATIONS
+        </Text>
+        <Text style={{ position: 'absolute', left: 410, top: 118, width: 84, fontSize: 8.5, color: INK_SOFT, lineHeight: 1.35 }}>
+          Where our alerts land. Same phone, or a separate line.
+        </Text>
+        <Text style={{ position: 'absolute', left: 118, top: 57, width: 56, textAlign: 'center', fontSize: 7.5, color: MUTED }}>
+          texts, calls
+        </Text>
+        <Text style={{ position: 'absolute', left: 118, top: 103, width: 56, textAlign: 'center', fontSize: 7.5, color: MUTED }}>
+          replies
+        </Text>
+        <Text style={{ position: 'absolute', left: 348, top: 26, width: 56, textAlign: 'center', fontSize: 7.5, color: MUTED }}>
+          transfer
+        </Text>
+        <Text style={{ position: 'absolute', left: 348, top: 118, width: 56, textAlign: 'center', fontSize: 7.5, color: MUTED }}>
+          alerts
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+function KitImage({ keyName, width, height, fit }: { keyName: KitImageKey; width: number; height: number; fit?: 'contain' | 'cover' }) {
+  const src = imagePath(keyName);
+  if (!existsSync(src)) return null;
+  const isSpot = width <= 140;
+  return (
+    <Image
+      src={src}
+      style={[
+        isSpot ? s.spotImage : s.bandImage,
+        { width, height, objectFit: fit ?? (isSpot ? 'contain' : 'cover') },
+      ]}
+    />
+  );
+}
+
+function SpotIntro({ heading, bodies, image }: { heading: string; bodies: string[]; image: KitImageKey }) {
+  const src = imagePath(image);
+  return (
+    <View style={s.spotRow} wrap={false}>
+      <View style={s.spotCopy}>
+        <Heading1 text={heading} first />
+        {bodies.map((t, i) => (
+          <Text key={i} style={s.body}>
+            {inline(t)}
+          </Text>
+        ))}
+      </View>
+      {existsSync(src) ? <Image src={src} style={s.spotImage} /> : null}
+    </View>
+  );
+}
+
 const MONO_LABEL_RE = /nmls|phone|number|#/i;
 
 /** One row of large-value tiles. Numeric identifiers set in mono so they read like a receipt. */
@@ -520,6 +692,10 @@ function Table(props: TableProps) {
       return <Kv {...props} />;
     case 'checklist':
       return <Checklist {...props} />;
+    case 'review':
+      return <ReviewList {...props} />;
+    case 'save':
+      return <SaveTiles {...props} />;
     case 'receipt':
       return <Receipt {...props} />;
     case 'steps':
@@ -633,6 +809,17 @@ function renderPage(blocks: KitBlock[]): ReactNode[] {
       case 'table':
         out.push(<Table key={i} headers={b.headers} rows={b.rows} col_widths={b.col_widths} variant={b.variant} />);
         break;
+      case 'image':
+        out.push(
+          <KitImage key={i} keyName={b.key} width={b.width} height={b.height} fit={b.fit} />,
+        );
+        break;
+      case 'spot':
+        out.push(<SpotIntro key={i} heading={b.heading} bodies={b.bodies} image={b.image} />);
+        break;
+      case 'diagram':
+        if (b.kind === 'phone_flow') out.push(<PhoneFlowDiagram key={i} />);
+        break;
       case 'divider':
         out.push(<View key={i} style={s.divider} />);
         break;
@@ -651,24 +838,42 @@ function renderPage(blocks: KitBlock[]): ReactNode[] {
 // ---------------------------------------------------------------------------
 
 function Cover({ cover }: { cover: KitCoverMeta }) {
+  const coverArt = imagePath('cover-engine');
+  const hasArt = existsSync(coverArt);
   return (
-    <Page size="LETTER" style={s.cover}>
+    <Page size="LETTER" style={[s.cover, { justifyContent: 'flex-start' }]}>
       <View style={s.coverTop}>
         <Text style={s.coverBrand}>{WAIZ.brandName}</Text>
         <Text style={s.coverDocType}>{cover.title}</Text>
       </View>
 
-      <View style={s.coverHero}>
+      <View style={[s.coverHero, { marginTop: 72 }]}>
         <View style={s.coverBar} />
         <View>
           <Text style={s.coverWelcome}>Welcome,</Text>
           <Text style={s.coverName}>{cover.welcomeName}</Text>
           <Text style={s.coverCompany}>{cover.subtitle}</Text>
-          <Text style={s.coverLead}>{cover.lead}</Text>
+          <Text style={[s.coverLead, { fontSize: 13, maxWidth: 380 }]}>{cover.lead}</Text>
         </View>
       </View>
 
-      <View>
+      <View style={{ flexGrow: 1, minHeight: 24 }} />
+
+      {hasArt ? (
+        <Image
+          src={coverArt}
+          style={{
+            width: 612,
+            height: 220,
+            marginHorizontal: -PAGE_X,
+            objectFit: 'cover',
+          }}
+        />
+      ) : (
+        <View style={{ height: 40 }} />
+      )}
+
+      <View style={{ marginTop: 18 }}>
         <View style={s.coverMetaRule} />
         <View style={s.coverMetaRow}>
           <View style={s.coverMetaCell}>
@@ -682,10 +887,6 @@ function Cover({ cover }: { cover: KitCoverMeta }) {
           <View style={s.coverMetaCell}>
             <Text style={s.coverMetaLabel}>Prepared</Text>
             <Text style={s.coverMetaValue}>{cover.dateLabel}</Text>
-          </View>
-          <View style={{ width: '16%' }}>
-            <Text style={s.coverVersion}>Kit v{cover.version}</Text>
-            <Text style={s.coverVersion}>{cover.templateVersion}</Text>
           </View>
         </View>
       </View>

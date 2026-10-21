@@ -1,42 +1,40 @@
 /**
- * Launch Kit — pure block builder. Fixed section order from the Wm-os template:
- *   00 Welcome → 01 What's live → 02 How the engine works → 03 Week 1 →
- *   04 Resource index + 05 Creative (same page) → 06 First 30 days → 07 Who to ping.
+ * Launch Kit — pure block builder. Section order:
+ *   00 Welcome → 01 Review → 02 Save → 03 Lead logging → 04 Engine →
+ *   05 Week 1 → 06 Resources + creative → 07 First 30 days → 08 Who to ping.
  *
  * Only client fields are substituted. All copy comes from ./copy.
  */
 
 import {
-  AT_A_GLANCE_HEADING,
   coverLead,
   creativeBlocks,
   engineBlocks,
   FIRST_30_DAYS,
   FIRST_30_DAYS_JOB_CLIENT_DIALS,
   FIRST_30_DAYS_JOB_WAIZ_DIALS,
-  ON_FILE_HEADING,
-  ON_FILE_INTRO,
-  ON_FILE_NOTE,
-  PHONE_NUMBERS_NOTE,
-  PLEASE_REVIEW_HEADING,
-  PLEASE_REVIEW_INTRO,
+  leadLoggingBlocks,
+  PHONE_FLOW_CAPTION,
+  PHONE_FLOW_DIAGRAM,
+  PHONE_FLOW_HEADING,
   RESOURCE_INDEX_INTRO,
   resourceTable,
+  REVIEW_INTRO,
+  REVIEW_LIST_HEADING,
+  reviewWrittenNotice,
+  SAVE_INTRO,
   TEMPLATE_VERSION,
   week1Blocks,
   weekByWeekTable,
   welcomeBlocks,
-  WHATS_LIVE_CALLOUT,
-  WHATS_LIVE_CALLOUT_WAIZ_DIALS,
-  WHATS_LIVE_INTRO,
   whoToPingBlocks,
   YOUR_JOB_HEADING,
 } from './copy';
 import {
   isPropertyNa,
-  LAUNCH_KIT_PROPERTIES,
   LAUNCH_KIT_REVIEW_FIELDS,
   resolveVariant,
+  SLACK_DOWNLOAD_URL,
   TO_FILL,
   type LaunchKitDraft,
 } from './intake';
@@ -86,44 +84,63 @@ function slackChannelLabel(draft: LaunchKitDraft): string {
   return s.startsWith('#') ? s : `#${s}`;
 }
 
-/** 01 property list. Lead logging and Slack sit before the Drive folder. */
-function whatsLiveRows(draft: LaunchKitDraft): string[][] {
-  const rows: string[][] = [];
-  for (const property of LAUNCH_KIT_PROPERTIES) {
-    if (property.key === 'launch_kit_folder_url') {
-      if (draft.lead_logging_form_url.trim()) rows.push(['Lead logging form', draft.lead_logging_form_url.trim()]);
-      if (draft.slack_channel_name.trim()) rows.push(['Slack channel', slackChannelLabel(draft)]);
-    }
-    if (isPropertyNa(draft, property.key)) continue;
-    rows.push([property.label, orFill(draft[property.key])]);
-  }
-  return rows;
-}
-
 const REVIEW_NA_LABEL = 'Declined / not part of this account';
+const NOTIFICATION_SAME = 'Same as live transfer number';
 
-/** Client-facing review checklist. Optional blanks are omitted. Declines stay visible. */
-function pleaseReviewRows(draft: LaunchKitDraft): string[][] {
+/** Review checklist rows: [label, description, value]. WM Number is on Save, not here. */
+function reviewRows(draft: LaunchKitDraft, company: string): string[][] {
   const rows: string[][] = [];
-  for (const field of LAUNCH_KIT_REVIEW_FIELDS) {
+  const reviewKeys = LAUNCH_KIT_REVIEW_FIELDS.filter(f => f.key !== 'phone_prospecting');
+
+  for (const field of reviewKeys) {
     const value = draft[field.key].trim();
     const na = isPropertyNa(draft, field.key);
-    if (field.optional && (!value || na)) continue;
-    if (na) {
-      rows.push([field.pdfLabel, REVIEW_NA_LABEL]);
+    if (field.key === 'phone_notifications') {
+      if (na) {
+        rows.push([field.pdfLabel, field.pdfDescription, NOTIFICATION_SAME]);
+      } else {
+        rows.push([field.pdfLabel, field.pdfDescription, value || NOTIFICATION_SAME]);
+      }
       continue;
     }
-    rows.push([field.pdfLabel, orFill(value)]);
+    if (field.optional && (!value || na)) continue;
+    if (na) {
+      rows.push([field.pdfLabel, field.pdfDescription, REVIEW_NA_LABEL]);
+      continue;
+    }
+    rows.push([field.pdfLabel, field.pdfDescription, orFill(value)]);
   }
-  return rows;
-}
 
-function onFileRows(draft: LaunchKitDraft, company: string): string[][] {
-  return [
-    ['Company name', orFill(company)],
-    ['NMLS #', orFill(draft.nmls)],
-    ['States licensed', orFill(draft.states_licensed)],
-  ];
+  if (!isPropertyNa(draft, 'funnel_url')) {
+    rows.push([
+      'Apex funnel',
+      'The page and information a lead sees when they opt in. Confirm it is what you want.',
+      orFill(draft.funnel_url),
+    ]);
+  }
+
+  rows.push([
+    'Daily ad spend',
+    'The average daily amount. We may start lower to warm the account up.',
+    orFill(draft.daily_adspend),
+  ]);
+  rows.push([
+    'Licensed states',
+    'The states we have you licensed in.',
+    orFill(draft.states_licensed),
+  ]);
+  rows.push([
+    'Company name',
+    'The business name on your ads and pages.',
+    orFill(company),
+  ]);
+  rows.push([
+    'NMLS',
+    'The license number we use on your ads and pages.',
+    orFill(draft.nmls),
+  ]);
+
+  return rows;
 }
 
 function launchKitFolderValue(draft: LaunchKitDraft): string {
@@ -131,21 +148,47 @@ function launchKitFolderValue(draft: LaunchKitDraft): string {
   return orFill(draft.launch_kit_folder_url);
 }
 
-function leadLoggingBlocks(draft: LaunchKitDraft): KitBlock[] {
-  return [
-    { type: 'h2', text: 'Lead logging form' },
-    {
-      type: 'body',
-      text: 'Use this form to log qualified and disqualified leads. Your reporting depends on those outcomes: when the form is current, lead quality, qualification rate, and follow-up visibility stay accurate.',
-    },
-    {
-      type: 'table',
-      variant: 'kv',
-      headers: ['Use this for', 'Open'],
-      col_widths: [0.44, 0.56],
-      rows: [['Qualified and disqualified lead outcomes', orFill(draft.lead_logging_form_url)]],
-    },
-  ];
+/** Save tiles: [action, title, description, link]. */
+function saveRows(draft: LaunchKitDraft): string[][] {
+  const rows: string[][] = [];
+  const wm = LAUNCH_KIT_REVIEW_FIELDS.find(f => f.key === 'phone_prospecting');
+  if (wm && !isPropertyNa(draft, 'phone_prospecting')) {
+    rows.push(['SAVE AS CONTACT', wm.pdfLabel, wm.pdfDescription, orFill(draft.phone_prospecting)]);
+  } else if (wm && isPropertyNa(draft, 'phone_prospecting')) {
+    rows.push(['SAVE AS CONTACT', wm.pdfLabel, wm.pdfDescription, REVIEW_NA_LABEL]);
+  }
+
+  if (!isPropertyNa(draft, 'crm_url')) {
+    rows.push([
+      'BOOKMARK',
+      'CRM',
+      'Your Go High Level login. Bookmark it on your phone so speed-to-lead is one tap.',
+      orFill(draft.crm_url),
+    ]);
+  }
+
+  rows.push([
+    'BOOKMARK',
+    'Lead logging form',
+    'Where you log qualified and disqualified outcomes. Bookmark it. Section 03 explains why.',
+    orFill(draft.lead_logging_form_url),
+  ]);
+
+  rows.push([
+    'BOOKMARK',
+    'Launch kit folder',
+    'The place to come back to for this kit, swipe files, and recordings.',
+    launchKitFolderValue(draft),
+  ]);
+
+  rows.push([
+    'DOWNLOAD',
+    'Slack desktop app',
+    'Install the desktop app. That is how we get faster communication when something needs attention.',
+    SLACK_DOWNLOAD_URL,
+  ]);
+
+  return rows;
 }
 
 export type BuiltLaunchKit = {
@@ -171,92 +214,71 @@ export function buildLaunchKitBlocks(
   const monthYear = formatMonthYear(draft.go_live_date, opts.now);
   const csm = orFill(draft.csm_name);
   const whoWorks = orFill(draft.who_works_leads);
+  const slackLabel = slackChannelLabel(draft);
 
   const blocks: KitBlock[] = [
-    // 00 Welcome
     ...welcomeBlocks({ contactFirstName: contact, productPhrase }),
     { type: 'pagebreak' },
 
-    // 01 What's live: the properties we click on the call, then the account summary
-    ...WHATS_LIVE_INTRO,
+    // 01 Review
+    ...REVIEW_INTRO,
+    PHONE_FLOW_HEADING,
+    PHONE_FLOW_DIAGRAM,
+    PHONE_FLOW_CAPTION,
+    REVIEW_LIST_HEADING,
     {
       type: 'table',
-      variant: 'kv',
-      headers: ['Property', 'Where to find it'],
-      col_widths: [0.3, 0.7],
-      rows: whatsLiveRows(draft),
+      variant: 'review',
+      headers: ['Item', 'What it means', 'Value'],
+      col_widths: [0.28, 0.4, 0.32],
+      rows: reviewRows(draft, company),
     },
-    variant.dialOwner === 'waiz' ? WHATS_LIVE_CALLOUT_WAIZ_DIALS : WHATS_LIVE_CALLOUT,
-    AT_A_GLANCE_HEADING,
+    reviewWrittenNotice(slackLabel),
+    { type: 'pagebreak' },
+
+    // 02 Save
+    ...SAVE_INTRO,
     {
       type: 'table',
-      variant: 'kv',
-      headers: ['Account', 'Detail'],
-      col_widths: [0.3, 0.7],
-      rows: [
-        ['Client', `${contact}, ${company}`],
-        ['Product line', productLabel],
-        ['Go-live', formatWeekdayDate(draft.go_live_date)],
-        ['Who works new leads', whoWorks],
-        ['Client Success Manager', csm],
-      ],
+      variant: 'save',
+      headers: ['Action', 'Item', 'Why', 'Open'],
+      col_widths: [0.2, 0.2, 0.35, 0.25],
+      rows: saveRows(draft),
     },
     { type: 'pagebreak' },
 
-    // 01 continued. The confirmation page: what the client ticks off, and the receipt of what we hold
-    PLEASE_REVIEW_HEADING,
-    PLEASE_REVIEW_INTRO,
-    PHONE_NUMBERS_NOTE,
-    {
-      type: 'table',
-      variant: 'checklist',
-      headers: ['Item', 'Open / confirm'],
-      col_widths: [0.36, 0.64],
-      rows: pleaseReviewRows(draft),
-    },
-    ON_FILE_HEADING,
-    ON_FILE_INTRO,
-    {
-      type: 'table',
-      variant: 'receipt',
-      headers: ['Detail', 'On file'],
-      col_widths: [0.3, 0.7],
-      rows: onFileRows(draft, company),
-    },
-    ON_FILE_NOTE,
+    // 03 Lead logging
+    ...leadLoggingBlocks(orFill(draft.lead_logging_form_url)),
     { type: 'pagebreak' },
 
-    // 02 How the engine works
+    // 04 Engine
     ...engineBlocks(variant),
     { type: 'pagebreak' },
 
-    // 03 Week 1
+    // 05 Week 1
     ...week1Blocks({ variant, whoWorksLeads: whoWorks, speedStandard: draft.speed_standard }),
     { type: 'pagebreak' },
 
-    // 04 + 05 on one page
+    // 06 Resources + creative
     ...RESOURCE_INDEX_INTRO,
-    ...leadLoggingBlocks(draft),
-    resourceTable(draft.resources),
+    ...resourceTable(draft.resources),
     ...creativeBlocks(launchKitFolderValue(draft), variant),
     { type: 'pagebreak' },
 
-    // 06 First 30 days
+    // 07 First 30 days
     ...FIRST_30_DAYS,
     weekByWeekTable(variant.dialOwner),
     YOUR_JOB_HEADING,
     ...(variant.dialOwner === 'waiz' ? FIRST_30_DAYS_JOB_WAIZ_DIALS : FIRST_30_DAYS_JOB_CLIENT_DIALS),
     { type: 'pagebreak' },
 
-    // 07 Who to ping
+    // 08 Who to ping
     ...whoToPingBlocks({
-      slackChannelLabel: slackChannelLabel(draft),
+      slackChannelLabel: slackLabel,
       csmName: csm,
       contactFirstName: contact,
       dialOwner: variant.dialOwner,
     }),
-    // The running page footer carries "Waiz Media / Client Launch Kit for {company}",
-    // so the closing caption from the Wm-os template is not repeated here.
   ];
 
   const cover: KitCoverMeta = {
@@ -282,6 +304,10 @@ export function flattenBlockText(blocks: KitBlock[]): string[] {
   for (const b of blocks) {
     if (b.type === 'table') {
       out.push(...b.headers, ...b.rows.flat());
+    } else if (b.type === 'spot') {
+      out.push(b.heading, ...b.bodies);
+    } else if (b.type === 'image' || b.type === 'diagram') {
+      // no text
     } else if ('text' in b) {
       out.push(b.text);
     }
@@ -292,11 +318,12 @@ export function flattenBlockText(blocks: KitBlock[]): string[] {
 /** Section order check: h1 titles in the order the template fixes. */
 export const EXPECTED_H1_ORDER = [
   'Welcome to Waiz',
-  "01  What's live",
-  '02  How the engine works',
-  '03  Week 1 operator checklist',
-  '04  Resource index',
-  '05  Creative and swipe files',
-  '06  First 30 days',
-  '07  Who to ping',
+  '01  Review before we launch',
+  '02  Save before launch',
+  '03  Lead logging form',
+  '04  How the engine works',
+  '05  Week 1 operator checklist',
+  '06  Resources and creative files',
+  '07  First 30 days',
+  '08  Who to ping',
 ] as const;

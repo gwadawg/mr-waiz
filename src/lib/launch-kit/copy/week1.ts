@@ -21,7 +21,7 @@ export type Week1Params = {
   speedStandard: string;
 };
 
-const H1: KitBlock = { type: 'h1', text: '03  Week 1 operator checklist' };
+const H1: KitBlock = { type: 'h1', text: '05  Week 1 operator checklist' };
 const IF_THEN: KitBlock = { type: 'h2', text: 'If / then' };
 const DAILY_RHYTHM: KitBlock = { type: 'h2', text: 'Daily rhythm' };
 
@@ -32,7 +32,7 @@ function speedCallout(speedStandard: string): KitBlock {
   }
   return {
     type: 'callout',
-    text: 'Speed standard: as agreed on your kickoff. We never invent a number in this kit. If you are unsure what you committed to, ask on the call.',
+    text: 'Speed standard: as agreed on your kickoff. If you are unsure what you committed to, ask on the call.',
   };
 }
 
@@ -65,7 +65,7 @@ function rmClient(p: Week1Params): KitBlock[] {
     },
     { type: 'numbered', text: 'When a lead hits, work it. Do not batch until tonight.' },
     { type: 'numbered', text: 'Call first. Text if you miss. Leave a short voicemail, then move on.' },
-    { type: 'numbered', text: 'Never end a live conversation without the next step on the calendar (BAMFAM).' },
+    { type: 'numbered', text: 'Never end a live conversation without the next step on the calendar.' },
     { type: 'numbered', text: 'Update the disposition before you touch the next name.' },
     { type: 'numbered', text: 'If they text back, call. Do not write a novel in the thread.' },
     { type: 'numbered', text: 'Stay in Slack. If something looks broken, say so the same day.' },
@@ -119,7 +119,7 @@ function dscrClient(p: Week1Params): KitBlock[] {
     },
     { type: 'numbered', text: 'You or your VA work every lead. Do not also run our assistant as the daily owner.' },
     { type: 'numbered', text: 'The first 48 hours decide the file. When they text back, call.' },
-    { type: 'numbered', text: 'Never end a live conversation without the next step on the calendar (BAMFAM).' },
+    { type: 'numbered', text: 'Never end a live conversation without the next step on the calendar.' },
     { type: 'numbered', text: 'Update the disposition before you touch the next name.' },
     { type: 'numbered', text: 'Do not quote a rate, LTV, or payment over text. Run their numbers on the call.' },
     { type: 'numbered', text: 'Stay in Slack. If something looks broken, say so the same day.' },

@@ -15,6 +15,8 @@ export type KitTextBlockType = 'h1' | 'h2' | 'h3' | 'body' | 'bullet' | 'numbere
  *   grid       default; refined table with small header labels and hairline rows
  *   kv         label / value rows, no header; http(s) values render as clickable links
  *   checklist  kv with a tick box per row (client confirms each item on the launch call)
+ *   review     checkbox + label + description + value (Review before launch)
+ *   save       action tile: action, title, description, link (Save before launch)
  *   receipt    large-value tiles in one row (what we have on file)
  *   steps      vertical stepper: [stage, what they experience, what you do]
  *   compare    two-panel contrast: [everyone else, Waiz]
@@ -26,6 +28,8 @@ export type KitTableVariant =
   | 'grid'
   | 'kv'
   | 'checklist'
+  | 'review'
+  | 'save'
   | 'receipt'
   | 'steps'
   | 'compare'
@@ -33,9 +37,22 @@ export type KitTableVariant =
   | 'rhythm'
   | 'toc';
 
+/** Bundled illustration keys under `src/lib/launch-kit/images/`. */
+export type KitImageKey =
+  | 'cover-engine'
+  | 'review-checklist'
+  | 'save-before-launch'
+  | 'lead-logging-loop'
+  | 'engine-journey'
+  | 'who-to-ping';
+
 export type KitBlock =
   | { type: KitTextBlockType; text: string }
   | { type: 'table'; headers: string[]; rows: string[][]; col_widths?: number[]; variant?: KitTableVariant }
+  | { type: 'image'; key: KitImageKey; width: number; height: number; fit?: 'contain' | 'cover' }
+  /** Numbered section head with intro copy beside a spot illustration. */
+  | { type: 'spot'; heading: string; bodies: string[]; image: KitImageKey }
+  | { type: 'diagram'; kind: 'phone_flow' }
   | { type: 'pagebreak' }
   | { type: 'spacer' }
   | { type: 'divider' };
