@@ -616,7 +616,8 @@
     </div>
     <a
       class="btn btn-primary"
-      href="https://link.waizmedia.net/widget/survey/HiOfLpmFqA5vL3AfpesG?notrack=true"
+      data-apply
+      href="https://link.waizmedia.net/widget/survey/HiOfLpmFqA5vL3AfpesG"
       target="_blank"
       rel="noopener noreferrer"
     >Fill Out Application</a>
@@ -846,7 +847,8 @@
       <div class="close-actions">
         <a
           class="btn btn-navy"
-          href="https://link.waizmedia.net/widget/survey/HiOfLpmFqA5vL3AfpesG?notrack=true"
+          data-apply
+          href="https://link.waizmedia.net/widget/survey/HiOfLpmFqA5vL3AfpesG"
           target="_blank"
           rel="noopener noreferrer"
         >Fill Out Application</a>
@@ -860,6 +862,24 @@
   <strong>Waiz Media</strong><br>
   Ops VA
 </footer>
+
+<script>
+  // GHL survey "3. VA Application" stores attribution from its own URL.
+  // url_params on the contact session receives every query key on that URL
+  // (utm_source, utm_medium, utm_campaign, utm_content, utm_term, fbclid, and
+  // the rest). utm_campaign maps to campaign, utm_term maps to keyword.
+  // notrack must not be forwarded: the survey skips the attribution session
+  // and the pixel (PageView / SubmitApplication) when that flag is present.
+  (function () {
+    var base = "https://link.waizmedia.net/widget/survey/HiOfLpmFqA5vL3AfpesG";
+    var incoming = new URLSearchParams(window.location.search);
+    incoming.delete("notrack");
+    var qs = incoming.toString();
+    var href = qs ? base + "?" + qs : base;
+    var links = document.querySelectorAll("[data-apply]");
+    for (var i = 0; i < links.length; i++) links[i].href = href;
+  })();
+</script>
 
 </body>
 </html>
