@@ -35,7 +35,7 @@ export type StateLookerClient = {
   landing_page_url: string | null;
   thank_you_page_url: string | null;
   second_landing_page_url: string | null;
-  /** Present only when the viewer can see revenue. */
+  /** Operating budget on the client file. Shown on the Media Buying directory. */
   daily_adspend: number | null;
 };
 
@@ -77,7 +77,7 @@ export type RawStateLookerClientRow = {
   landing_page_url?: string | null;
   thank_you_page_url?: string | null;
   second_landing_page_url?: string | null;
-  daily_adspend?: number | null;
+  daily_adspend?: number | string | null;
 };
 
 function trimOrNull(value: string | null | undefined): string | null {
@@ -117,12 +117,36 @@ export function resolveOfferBlurb(
   return REPORTING_TYPE_META[normalizeReportingType(reportingType)].description;
 }
 
+/** Coerce a client daily_adspend into a finite number, or null when unset. */
+export function finiteDailyAdspend(value: number | string | null | undefined): number | null {
+  if (value == null || value === '') return null;
+  const n = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** Sum of daily adspend budgets, plus how many listed clients have none. */
+export function rollupDailyAdspend(
+  clients: { daily_adspend: number | null }[],
+): { total: number; withBudget: number; missing: number } {
+  let total = 0;
+  let withBudget = 0;
+  let missing = 0;
+  for (const client of clients) {
+    const amount = finiteDailyAdspend(client.daily_adspend);
+    if (amount == null) {
+      missing += 1;
+      continue;
+    }
+    total += amount;
+    withBudget += 1;
+  }
+  return { total, withBudget, missing };
+}
+
 export function buildStateLookerResult(
   rows: RawStateLookerClientRow[],
   accountGroups: Record<string, { display_name: string }>,
-  opts: { includeRevenue?: boolean } = {},
 ): StateLookerResult {
-  const includeRevenue = opts.includeRevenue === true;
   const clients: StateLookerClient[] = rows.map(row => {
     const account_display_name = row.account_group_id
       ? accountGroups[row.account_group_id]?.display_name ?? null
@@ -165,7 +189,7 @@ export function buildStateLookerResult(
       landing_page_url: trimOrNull(row.landing_page_url),
       thank_you_page_url: trimOrNull(row.thank_you_page_url),
       second_landing_page_url: trimOrNull(row.second_landing_page_url),
-      daily_adspend: includeRevenue && row.daily_adspend != null ? Number(row.daily_adspend) : null,
+      daily_adspend: finiteDailyAdspend(row.daily_adspend),
     };
   });
 

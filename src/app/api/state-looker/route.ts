@@ -45,6 +45,8 @@ export async function GET() {
     );
   }
 
-  const result = buildStateLookerResult(rows, accountGroups, { includeRevenue });
+  // Daily adspend is the media-buying operating budget, not client revenue.
+  // The Media Buying directory always includes it so the buyer can check the rollup.
+  const result = buildStateLookerResult(rows, accountGroups);
   return NextResponse.json({ ...result, can_view_revenue: includeRevenue });
 }

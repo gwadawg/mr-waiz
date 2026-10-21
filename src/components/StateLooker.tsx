@@ -6,7 +6,7 @@ import ClientSitesCell from "@/components/ClientSitesCell";
 import { lifecycleStatusLabel } from "@/lib/client-feedback";
 import { normalizeReportingType, type ReportingType } from "@/lib/kpi-layouts";
 import { REPORTING_TYPE_META, REPORTING_TYPES } from "@/lib/reporting-types";
-import type { StateLookerClient, StateLookerResult } from "@/lib/state-looker";
+import { rollupDailyAdspend, type StateLookerClient, type StateLookerResult } from "@/lib/state-looker";
 import { US_STATES } from "@/lib/us-states";
 
 type LifecycleFilter = "active" | "all";
@@ -486,18 +486,22 @@ function MediaLinkCell({
   );
 }
 
+function formatDailyAdspend(amount: number | null | undefined): string {
+  if (amount == null || !Number.isFinite(amount)) return "—";
+  return `$${Math.round(amount).toLocaleString()}/day`;
+}
+
 function MediaBuyingTable({
   clients,
   emptyMessage,
-  showAdSpend,
   selectedState,
 }: {
   clients: StateLookerClient[];
   emptyMessage: string;
-  showAdSpend: boolean;
   selectedState?: string | null;
 }) {
   const [openStatesId, setOpenStatesId] = useState<string | null>(null);
+  const rollup = useMemo(() => rollupDailyAdspend(clients), [clients]);
 
   // Sheet-aligned media ops + compact Sites group for the four web URLs.
   const headers = [
@@ -507,7 +511,7 @@ function MediaBuyingTable({
     { key: "ig", label: "Instagram" },
     { key: "ad_name", label: "Ad account name" },
     { key: "ad_link", label: "Ad account link" },
-    ...(showAdSpend ? [{ key: "spend", label: "Daily adspend" }] : []),
+    { key: "spend", label: "Daily adspend" },
     { key: "broker", label: "Company / broker" },
     { key: "nmls", label: "Company NMLS" },
     { key: "states", label: "States" },
@@ -597,16 +601,24 @@ function MediaBuyingTable({
                     title={client.ad_account_url}
                   />
                 </td>
-                {showAdSpend && (
-                  <td
-                    className="px-3 py-1.5 align-middle whitespace-nowrap text-xs"
-                    style={{ color: client.daily_adspend != null ? "#cbd5e1" : "#334155" }}
-                  >
-                    {client.daily_adspend != null
-                      ? `$${Math.round(client.daily_adspend).toLocaleString()}/day`
-                      : "—"}
-                  </td>
-                )}
+                <td
+                  className="px-3 py-1.5 align-middle whitespace-nowrap text-xs"
+                  style={{ color: client.daily_adspend != null ? "#cbd5e1" : "#334155" }}
+                >
+                  {client.daily_adspend != null ? (
+                    formatDailyAdspend(client.daily_adspend)
+                  ) : client.lifecycle_status === "active" ? (
+                    <span
+                      className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded"
+                      style={{ color: "#fbbf24", background: "rgba(251,191,36,0.14)" }}
+                      title="No daily adspend on file, so this client is left out of the rollup"
+                    >
+                      Not set
+                    </span>
+                  ) : (
+                    "—"
+                  )}
+                </td>
                 <td className="px-3 py-1.5 align-middle">
                   <span
                     className="block text-xs truncate max-w-[10rem]"
@@ -645,6 +657,28 @@ function MediaBuyingTable({
               </tr>
             ))}
           </tbody>
+          <tfoot>
+            <tr style={{ background: "rgba(255,255,255,0.03)" }}>
+              <td
+                colSpan={6}
+                className="px-3 py-2 text-xs"
+                style={{ color: "#94a3b8", borderTop: "1px solid rgba(255,255,255,0.08)" }}
+              >
+                Rolled up across {clients.length} client{clients.length === 1 ? "" : "s"}
+                {rollup.missing > 0
+                  ? ` · ${rollup.missing} ${rollup.missing === 1 ? "has" : "have"} no budget`
+                  : ""}
+              </td>
+              <td
+                className="px-3 py-2 whitespace-nowrap text-xs font-semibold"
+                style={{ color: "#e2e8f0", borderTop: "1px solid rgba(255,255,255,0.08)" }}
+                title="Sum of each listed client's daily adspend"
+              >
+                {formatDailyAdspend(rollup.total)}
+              </td>
+              <td colSpan={4} style={{ borderTop: "1px solid rgba(255,255,255,0.08)" }} />
+            </tr>
+          </tfoot>
         </table>
       </div>
     </div>
@@ -800,7 +834,6 @@ export default function StateLooker() {
   const [offerFilter, setOfferFilter] = useState<ReportingType | "all">("all");
   const [liveOnly, setLiveOnly] = useState(false);
   const [liveTransferOnly, setLiveTransferOnly] = useState(false);
-  const [canViewRevenue, setCanViewRevenue] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -818,9 +851,6 @@ export default function StateLooker() {
       .then(result => {
         if (!cancelled) {
           setData(result);
-          if (typeof result.can_view_revenue === "boolean") {
-            setCanViewRevenue(result.can_view_revenue);
-          }
         }
       })
       .catch(err => {
@@ -906,7 +936,7 @@ export default function StateLooker() {
         </h1>
         <p className="text-sm mt-0.5" style={{ color: "#64748b" }}>
           {tab === "media_buying"
-            ? "Meta pages, ad accounts, landers, and licensed states for media buying — no billing emails or confidential CRM fields."
+            ? "Meta pages, ad accounts, daily adspend, landers, and licensed states for media buying — no billing emails or confidential CRM fields."
             : tab === "state_lookup"
               ? "Find which clients are licensed in each state."
               : "Company, offer, website, location, and live-transfer details for the team — no billing or confidential CRM fields."}
@@ -982,7 +1012,6 @@ export default function StateLooker() {
           <MediaBuyingTable
             clients={directoryClients}
             emptyMessage="No clients match the current filters."
-            showAdSpend={canViewRevenue}
           />
         </div>
       ) : (

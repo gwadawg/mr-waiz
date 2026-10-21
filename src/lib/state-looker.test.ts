@@ -2,9 +2,11 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
   buildStateLookerResult,
+  finiteDailyAdspend,
   resolveCompanyName,
   resolveGhlSubaccountUrl,
   resolveOfferBlurb,
+  rollupDailyAdspend,
 } from '@/lib/state-looker';
 
 describe('state-looker directory fields', () => {
@@ -57,6 +59,7 @@ describe('state-looker directory fields', () => {
           city: 'Austin',
           state: 'TX',
           ghl_location_id: 'loc_c1',
+          daily_adspend: '75',
         },
         {
           id: 'c2',
@@ -98,12 +101,35 @@ describe('state-looker directory fields', () => {
     assert.equal(c1.city, 'Austin');
     assert.equal(c1.state, 'TX');
     assert.equal(c1.ghl_subaccount_url, 'https://app.gohighlevel.com/v2/location/loc_c1');
+    assert.equal(c1.daily_adspend, 75);
 
     const c2 = result.clients.find(c => c.id === 'c2')!;
+    assert.equal(c2.daily_adspend, null);
     assert.equal(c2.company_name, 'Same Name');
     assert.equal(c2.brokerage_name, null, 'duplicate company/brokerage should collapse');
     assert.equal(c2.nmls, null);
     assert.match(c2.offer_blurb, /DSCR/i);
     assert.equal(c2.ghl_subaccount_url, 'https://app.gohighlevel.com/v2/location/stored');
+  });
+});
+
+describe('daily adspend rollup', () => {
+  it('coerces numeric strings and rejects blanks', () => {
+    assert.equal(finiteDailyAdspend('120.4'), 120.4);
+    assert.equal(finiteDailyAdspend(0), 0);
+    assert.equal(finiteDailyAdspend(''), null);
+    assert.equal(finiteDailyAdspend('nope'), null);
+  });
+
+  it('sums set budgets and counts clients left out', () => {
+    assert.deepEqual(
+      rollupDailyAdspend([
+        { daily_adspend: 100 },
+        { daily_adspend: 50 },
+        { daily_adspend: null },
+        { daily_adspend: 0 },
+      ]),
+      { total: 150, withBudget: 3, missing: 1 },
+    );
   });
 });
