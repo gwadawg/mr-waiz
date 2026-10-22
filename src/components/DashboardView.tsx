@@ -1199,9 +1199,7 @@ export default function DashboardView({
             />
           )}
 
-          {view === "client_compare" && (
-            <ClientCompareDashboard directory={clients} />
-          )}
+          {view === "client_compare" && <ClientCompareDashboard />}
 
           {view === "team_dashboard" && (
             <TeamCommandDashboard

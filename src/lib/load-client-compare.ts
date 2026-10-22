@@ -1,16 +1,13 @@
 /**
  * Load per-client KPI snapshots for Client Compare.
  * Calendar window only — no matured-grading clamp.
+ * Table-only: no cost-history / timeline series.
  */
 
 import {
-  compareCostGranularity,
   compareRowFromMetrics,
-  costHistoryFromDailySeries,
-  costHistoryFromSqlBuckets,
   isDefaultRosterClient,
   type ClientCompareRow,
-  type CompareClientCostSeries,
 } from '@/lib/client-compare';
 import {
   groupEventsByClient,
@@ -19,7 +16,7 @@ import {
   type ClientKpiBenchmarks,
 } from '@/lib/client-health';
 import { normalizeReportingType } from '@/lib/kpi-layouts';
-import type { EventRow, TrendEventRow } from '@/lib/metrics';
+import type { EventRow } from '@/lib/metrics';
 import {
   emptySqlKpiCounts,
   metricsFromSqlCounts,
@@ -48,24 +45,11 @@ type ClientRow = {
 
 type DatedSpend = { client_id: string; spend_date: string; amount: number; platform?: string };
 
-type SqlTimelineByClientRow = {
-  client_id: string;
-  date: string;
-  leads: number;
-  qualified_leads: number;
-  conversations: number;
-};
-
 function isoBound(start: string, end: string) {
   return {
     p_start: `${start}T00:00:00.000Z`,
     p_end: `${end}T23:59:59.999Z`,
   };
-}
-
-function n(value: unknown): number {
-  const x = Number(value ?? 0);
-  return Number.isFinite(x) ? x : 0;
 }
 
 async function fetchCountsByClient(
@@ -107,44 +91,6 @@ async function fetchMetaSpend(
   }));
 }
 
-async function fetchTimelineByClient(
-  service: ServiceClient,
-  start: string,
-  end: string,
-  granularity: 'day' | 'week',
-): Promise<SqlTimelineByClientRow[] | null> {
-  const { data, error } = await service.rpc('dashboard_kpi_timeline_by_client', {
-    p_client_ids: null,
-    p_start: start,
-    p_end: end,
-    p_granularity: granularity,
-  });
-  if (error) {
-    if (/dashboard_kpi_timeline_by_client|Could not find the function|schema cache/i.test(error.message)) {
-      return null;
-    }
-    throw new Error(error.message);
-  }
-  if (!Array.isArray(data)) return [];
-  return data.map(row => {
-    const o = row as Record<string, unknown>;
-    const dateRaw = o.bucket_date;
-    const date =
-      typeof dateRaw === 'string'
-        ? dateRaw.slice(0, 10)
-        : dateRaw instanceof Date
-          ? dateRaw.toISOString().slice(0, 10)
-          : String(dateRaw ?? '').slice(0, 10);
-    return {
-      client_id: String(o.client_id ?? ''),
-      date,
-      leads: n(o.leads),
-      qualified_leads: n(o.qualified_leads),
-      conversations: n(o.unique_conversation_leads),
-    };
-  }).filter(r => r.client_id);
-}
-
 function includeClient(c: ClientRow, extraIds: Set<string>): boolean {
   if (extraIds.has(c.id)) return true;
   return isDefaultRosterClient({
@@ -155,21 +101,14 @@ function includeClient(c: ClientRow, extraIds: Set<string>): boolean {
 
 export type ClientCompareBundle = {
   period: { start: string; end: string };
-  granularity: 'day' | 'week';
   clients: ClientCompareRow[];
-  costHistory: CompareClientCostSeries[];
 };
-
-function historyClients(rows: ClientCompareRow[]) {
-  return rows.map(r => ({ id: r.id, name: r.name, is_call_center: r.is_call_center }));
-}
 
 export async function loadClientCompareBundle(
   service: ServiceClient,
   opts: { start: string; end: string; extraIds?: string[] },
 ): Promise<ClientCompareBundle> {
   const extraIds = new Set((opts.extraIds ?? []).filter(Boolean));
-  const granularity = compareCostGranularity(opts.start, opts.end);
 
   const { data: clients, error: clientsError } = await service
     .from('clients')
@@ -179,16 +118,14 @@ export async function loadClientCompareBundle(
 
   const roster = ((clients ?? []) as ClientRow[]).filter(c => includeClient(c, extraIds));
 
-  const [countsMap, spendRows, timelineRows] = await Promise.all([
+  const [countsMap, spendRows] = await Promise.all([
     fetchCountsByClient(service, opts.start, opts.end),
     fetchMetaSpend(service, opts.start, opts.end),
-    fetchTimelineByClient(service, opts.start, opts.end, granularity),
   ]);
 
   const spendByClient = groupSpendByClient(spendRows);
 
   let rows: ClientCompareRow[];
-  let events: ClientEventWithDate[] | null = null;
 
   if (countsMap) {
     rows = roster.map(c => {
@@ -213,7 +150,7 @@ export async function loadClientCompareBundle(
       .lte('occurred_at', `${opts.end}T23:59:59.999Z`)
       .limit(COMPARE_EVENTS_ROW_LIMIT);
     if (eventsRes.error) throw new Error(eventsRes.error.message);
-    events = (eventsRes.data ?? []) as ClientEventWithDate[];
+    const events = (eventsRes.data ?? []) as ClientEventWithDate[];
     enforceRowCap(events.length, COMPARE_EVENTS_ROW_LIMIT, 'client-compare events fallback');
     const byClient = groupEventsByClient(events);
     const { calculateMetrics } = await import('@/lib/metrics');
@@ -233,50 +170,8 @@ export async function loadClientCompareBundle(
     });
   }
 
-  let costHistory: CompareClientCostSeries[];
-  if (timelineRows) {
-    costHistory = costHistoryFromSqlBuckets(
-      historyClients(rows),
-      timelineRows,
-      spendRows,
-      opts.start,
-      opts.end,
-      granularity,
-    );
-  } else {
-    if (!events) {
-      const eventsRes = await service
-        .from('events')
-        .select(EVENT_SELECT)
-        .gte('occurred_at', `${opts.start}T00:00:00.000Z`)
-        .lte('occurred_at', `${opts.end}T23:59:59.999Z`)
-        .limit(COMPARE_EVENTS_ROW_LIMIT);
-      if (eventsRes.error) throw new Error(eventsRes.error.message);
-      events = (eventsRes.data ?? []) as ClientEventWithDate[];
-      enforceRowCap(events.length, COMPARE_EVENTS_ROW_LIMIT, 'client-compare timeline events fallback');
-    }
-    const byClient = groupEventsByClient(events);
-    const eventsByClient = new Map<string, TrendEventRow[]>();
-    for (const [id, list] of byClient) {
-      eventsByClient.set(
-        id,
-        (list as EventRow[]).filter((e): e is EventRow & { occurred_at: string } => Boolean(e.occurred_at)),
-      );
-    }
-    costHistory = costHistoryFromDailySeries(
-      historyClients(rows),
-      eventsByClient,
-      spendRows,
-      opts.start,
-      opts.end,
-      granularity,
-    );
-  }
-
   return {
     period: { start: opts.start, end: opts.end },
-    granularity,
     clients: rows,
-    costHistory,
   };
 }

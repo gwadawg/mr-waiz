@@ -4,7 +4,7 @@
 export type HeatmapTab = "show_rate" | "pickup_rate" | "new_leads";
 export type DataExplorerTab = "leads" | "dials" | "appointments" | "speed_to_lead" | "meta_ads";
 /** Level-1 tabs inside the unified Client Workspace. */
-export type ClientWorkspaceTab = "kpis" | "compare" | "dials" | "explorer" | "heatmaps";
+export type ClientWorkspaceTab = "kpis" | "dials" | "explorer" | "heatmaps";
 export type AcquisitionTab = "appointments" | "credit_queue" | "sales_calls" | "pending_closes" | "log_close" | "call_examples";
 export type AcquisitionDataExplorerTab = "leads" | "appointments" | "offers" | "dials" | "closes" | "ads";
 export type AcquisitionKpiTab = "overview" | "setters" | "closers" | "costs";
@@ -90,7 +90,6 @@ export type HubTabDef<T extends string> = { key: T; label: string };
 
 export const CLIENT_WORKSPACE_TABS: HubTabDef<ClientWorkspaceTab>[] = [
   { key: "kpis", label: "KPIs" },
-  { key: "compare", label: "Compare" },
   { key: "dials", label: "Dials" },
   { key: "explorer", label: "Explorer" },
   { key: "heatmaps", label: "Heat Maps" },
@@ -102,8 +101,6 @@ export const CLIENT_WORKSPACE_TABS: HubTabDef<ClientWorkspaceTab>[] = [
  */
 export const CLIENT_WORKSPACE_TAB_PERMISSIONS: Record<ClientWorkspaceTab, string> = {
   kpis: "dashboard",
-  // Same grant as the standalone Client Compare page — no new access handed out.
-  compare: "client_compare",
   dials: "dial_analytics",
   explorer: "data_explorer",
   heatmaps: "heatmaps",
@@ -406,6 +403,14 @@ export function resolveViewFromParams(
     const valid = tabs.some(t => t.key === candidate);
     return { view, tab: valid ? (candidate as string) : defaultTabForHub(view) };
   };
+
+  // Brief Workspace › Compare tab → standalone Client Compare (table-only).
+  if (
+    tabParam === "compare" &&
+    (!viewParam || viewParam === "client_workspace" || viewParam === "dashboard")
+  ) {
+    return { view: "client_compare", tab: null };
+  }
 
   // No view param is the default workspace — still honor an explicit tab so a
   // sub-tab click that only writes `?tab=` isn't snapped back.
