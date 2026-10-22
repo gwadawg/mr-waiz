@@ -25,6 +25,7 @@ const HeatMap = dynamic(() => import("../HeatMap"));
 const RawDataTable = dynamic(() => import("../RawDataTable"));
 const AppointmentsTable = dynamic(() => import("../AppointmentsTable"));
 const LeadProfilesTable = dynamic(() => import("../LeadProfilesTable"));
+const ClientCompareTable = dynamic(() => import("./ClientCompareTable"));
 
 type Props = {
   tab: ClientWorkspaceTab;
@@ -92,16 +93,20 @@ export default function ClientWorkspaceHub({
 
   return (
     <div className="flex flex-col min-h-0">
-      <WorkspaceFilterBar
-        filters={filters}
-        clients={clients}
-        showCompare={
-          activeTab === "kpis" && filters.preset !== "all_time" && filters.preset !== "since_launch"
-        }
-        railOpen={railOpen}
-        onToggleRail={onToggleRail}
-        onLogWork={selected ? () => setLogOpen(true) : undefined}
-      />
+      {/* The Compare tab is all-clients and carries its own date / offer
+          controls, so the per-client filter bar is hidden there. */}
+      {activeTab !== "compare" && (
+        <WorkspaceFilterBar
+          filters={filters}
+          clients={clients}
+          showCompare={
+            activeTab === "kpis" && filters.preset !== "all_time" && filters.preset !== "since_launch"
+          }
+          railOpen={railOpen}
+          onToggleRail={onToggleRail}
+          onLogWork={selected ? () => setLogOpen(true) : undefined}
+        />
+      )}
 
       <div className="flex gap-6 pt-6 min-w-0">
         <div className="flex-1 min-w-0 space-y-6">
@@ -134,6 +139,8 @@ export default function ClientWorkspaceHub({
                 onOpenConversionLeads={onOpenConversionLeads}
               />
             )}
+
+            {activeTab === "compare" && <ClientCompareTable />}
 
             {activeTab === "dials" && (
               <DialAnalytics
