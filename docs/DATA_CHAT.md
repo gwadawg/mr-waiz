@@ -73,6 +73,8 @@ Deterministic APIs (no LLM) for the sibling **wm-csm-kit**:
 - Auth: session **or** user-scoped Bearer (`profiles.csm_api_token_hash`)
 - Blocked: MRR, billing, expenses, CEO revenue
 
+The media-buyer kit is a different token and a different route set: [`docs/MB_BRIEF_API.md`](MB_BRIEF_API.md). Do not send that kit to `/api/csm`.
+
 ---
 
 ## Code map
