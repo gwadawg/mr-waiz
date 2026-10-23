@@ -16,12 +16,13 @@ The brief is that client's account. Company KPIs are not on this API. The only d
 | GET | `/api/mb/ads?clientId=&start_date=&end_date=` | Same. Omit `clientId` for every client's ads. |
 | GET | `/api/mb/library` | Same. Every ad name and alias. No spend and no client. |
 | GET | `/api/mb/ads?library_id=` or `?ad=` | Same. One creative, split per client. |
+| GET | `/api/mb/ad-diagnosis?clientId=&start_date=&end_date=` | Same. Deep diagnosis for one client (required `clientId`). |
 | GET | `/api/mb/activity?clientId=&kind=leads\|dials\|appointments\|closes` | Same |
 | GET | `/api/mb/calls?clientId=` | Same. Onboarding and launch only. |
 | GET | `/api/mb/changes?clientId=` | Same. L1 and L2 only. |
 | GET | `/api/mb/landing?clientId=` | Same. Read only. |
 
-Dates are `YYYY-MM-DD`. The default window is the last 30 days. Activity defaults to `kind=dials`, `limit=200`, max `500`.
+Dates are `YYYY-MM-DD`. The default window is the last 30 days, except **ad-diagnosis**, which defaults to that client's launch date through today. Activity defaults to `kind=dials`, `limit=200`, max `500`.
 
 **Gate:** `media_buyer`. `client_health` alone is not enough. A `csm_…` token does not match this API.
 
@@ -51,6 +52,10 @@ The creative catalog used to name a new ad: `ad_name`, aliases, product, format,
 **Ads** (`/api/mb/ads`)
 
 Spend, impressions, clicks, CTR, CPC, CPM, opt-in, the funnel counts above, DQ reasons, and the library entry (name, summary, visual notes, tags, product, format, Drive link to the creative). A drilldown adds the same numbers per client.
+
+**Ad diagnosis** (`/api/mb/ad-diagnosis`)
+
+One client's ads ranked on what their leads became downstream — quality-weighted conversations, proposals, submissions, and fundings — not CPL. Leads are grouped by the date they came in and followed forward. The payload includes evidence tiers, shrunk rank costs, stage owners (ad vs page vs setters vs loan officer), same-product peer medians with **no peer names**, angles by tag and format, and front-vs-back disagreements. Optional: `mature_days`, `qualify_switch`, `qualify_before=yes|no`. Large accounts can take about a minute. Kit skill: `client-ad-diagnosis` in `wm-mb-kit`.
 
 **Activity** (`/api/mb/activity`)
 
@@ -99,9 +104,11 @@ src/app/api/mb/client/route.ts
 src/app/api/mb/performance/route.ts
 src/app/api/mb/ads/route.ts
 src/app/api/mb/library/route.ts
+src/app/api/mb/ad-diagnosis/route.ts
 src/app/api/mb/activity/route.ts
 src/app/api/mb/calls/route.ts
 src/app/api/mb/changes/route.ts
 src/app/api/mb/landing/route.ts
+src/lib/client-ad-diagnosis.ts
 scripts/issue-mb-api-token.ts
 ```

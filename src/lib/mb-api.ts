@@ -31,6 +31,10 @@ import { groupLandingSites, siteIdFromResponses, type LandingSiteRow } from '@/l
 import { listLandingRows } from '@/lib/landing-page/storage';
 import type { LandingDraft } from '@/lib/landing-page/types';
 import { tagsByLibraryId } from '@/lib/ad-tags-db';
+import {
+  runClientAdDiagnosis,
+  type ClientAdDiagnosisOptions,
+} from '@/lib/client-ad-diagnosis';
 import { resolveUserLabels } from '@/lib/user-resolver';
 
 /** Named in every payload. These values are never selected. */
@@ -803,6 +807,51 @@ export async function getMbLanding(service: Service, clientId: string) {
     clientId,
     read_only: true,
     pages,
+    exclusions: [...MB_API_EXCLUSIONS],
+  };
+}
+
+/**
+ * Deep ad diagnosis for one client: cohorted proposals / submissions /
+ * fundings, weighted conversations, angles, and stage owners.
+ * Peer medians are same-product rates only — no peer names, no company money.
+ */
+export async function getMbAdDiagnosis(
+  service: Service,
+  clientId: string,
+  opts: {
+    startDate?: string | null;
+    endDate?: string | null;
+    matureDays?: number | null;
+    qualifySwitch?: string | null;
+    qualifyBefore?: 'yes' | 'no' | null;
+  } = {},
+) {
+  if (opts.startDate && !DAY.test(opts.startDate)) throw new Error('start_date must be YYYY-MM-DD');
+  if (opts.endDate && !DAY.test(opts.endDate)) throw new Error('end_date must be YYYY-MM-DD');
+  if (opts.qualifySwitch && !DAY.test(opts.qualifySwitch)) {
+    throw new Error('qualify_switch must be YYYY-MM-DD');
+  }
+  if (opts.startDate && opts.endDate && opts.startDate > opts.endDate) {
+    throw new Error('start_date must be on or before end_date');
+  }
+  if (opts.matureDays != null && (!Number.isFinite(opts.matureDays) || opts.matureDays < 1)) {
+    throw new Error('mature_days must be a positive number');
+  }
+
+  const options: ClientAdDiagnosisOptions = {
+    client: clientId,
+    requireId: true,
+    start: opts.startDate || undefined,
+    end: opts.endDate || undefined,
+    matureDays: opts.matureDays ?? undefined,
+    qualifySwitch: opts.qualifySwitch || undefined,
+    qualifyBefore: opts.qualifyBefore || undefined,
+  };
+
+  const diagnosis = await runClientAdDiagnosis(service, options);
+  return {
+    ...diagnosis,
     exclusions: [...MB_API_EXCLUSIONS],
   };
 }

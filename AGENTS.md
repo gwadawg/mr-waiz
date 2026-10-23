@@ -8,7 +8,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 | Task | Load |
 |------|------|
-| Diagnose one client's ads on proposals, submissions, and fundings (not CPL) | `.cursor/skills/client-ad-diagnosis/SKILL.md` — script `scripts/client-ad-diagnosis.ts` in that folder. Chat only |
+| Diagnose one client's ads on proposals, submissions, and fundings (not CPL) | `.cursor/skills/client-ad-diagnosis/SKILL.md` — script in that folder; media-buyer kit uses `GET /api/mb/ad-diagnosis`. Chat only |
 | Which client-ad messages are working | `.cursor/skills/ad-performance-learnings/SKILL.md` — scorecard in this repo; learnings file in Wm-os `docs/client-fulfillment/media-buying/performance-learnings.md` |
 | Grade a DSCR Meta export: which test ads to graduate, extend, or turn off | `.cursor/skills/dscr-testing-level1/SKILL.md` — Stage 1 only (DSCR-Testing-Level1). Both stages: `docs/CREATIVE_TESTING.md`. Later gates: `docs/AD_TESTING_RULEBOOK.md` |
 | Label / name a new Meta ad (Mr. Waiz) | `.cursor/skills/ad-naming/SKILL.md` — lookup via `scripts/ad-name-lookup.ts` (live `ad_library` only) |

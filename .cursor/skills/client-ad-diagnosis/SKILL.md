@@ -21,6 +21,10 @@ explains a result. It never decides one.
 Cross-client "which messages work" is `ad-performance-learnings`. New
 DSCR test ads are `dscr-testing-level1`. This skill is one client.
 
+The media-buyer kit runs the same engine through
+`GET /api/mb/ad-diagnosis` (no Supabase key). Logic lives in
+`src/lib/client-ad-diagnosis.ts`.
+
 ## Step 1 — Run the script
 
 ```bash
