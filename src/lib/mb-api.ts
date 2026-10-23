@@ -30,6 +30,7 @@ import { fieldsFromResponses } from '@/lib/landing-page/responses';
 import { groupLandingSites, siteIdFromResponses, type LandingSiteRow } from '@/lib/landing-page/sites';
 import { listLandingRows } from '@/lib/landing-page/storage';
 import type { LandingDraft } from '@/lib/landing-page/types';
+import { tagsByLibraryId } from '@/lib/ad-tags-db';
 import { resolveUserLabels } from '@/lib/user-resolver';
 
 /** Named in every payload. These values are never selected. */
@@ -77,6 +78,12 @@ export const MB_CHANGE_LAYERS = ['L1', 'L2'] as const;
 
 export const MB_CHANGE_SELECT =
   'id, client_id, title, layer, constraint_label, change_description, hypothesis, success_metric, status, review_date, change_date, planned_date, baseline_value, target_value, outcome_value, outcome_recorded_at, work_type, created_at, created_by';
+
+/** Full creative catalog for naming. No spend, no client, no alias table ids. */
+export const MB_LIBRARY_SELECT =
+  'id, ad_name, product, ad_format, status, summary, visual_notes, drive_url';
+
+export const MB_LIBRARY_ALIAS_SELECT = 'library_id, alias_name';
 
 const METRICS_EVENT_SELECT =
   'client_id, event_type, ghl_contact_id, lead_phone, lead_email, lead_name, phone_number_used, agent_name, occurred_at, occurred_at_has_time, lead_created_at, is_pickup, is_conversation, speed_to_lead_seconds, is_qualified, is_hot, is_out_of_state';
@@ -534,6 +541,87 @@ export async function getMbAds(
   return {
     ads: board.data.ads,
     truncated: board.data.truncated,
+    exclusions: [...MB_API_EXCLUSIONS],
+  };
+}
+
+const LIBRARY_PAGE = 1000;
+
+async function fetchPages<T>(
+  load: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>,
+): Promise<T[]> {
+  const out: T[] = [];
+  for (let from = 0; ; from += LIBRARY_PAGE) {
+    const { data, error } = await load(from, from + LIBRARY_PAGE - 1);
+    if (error) throw new Error(error.message);
+    const rows = data ?? [];
+    out.push(...rows);
+    if (rows.length < LIBRARY_PAGE) break;
+  }
+  return out;
+}
+
+type LibraryRow = {
+  id: string;
+  ad_name: string;
+  product: string | null;
+  ad_format: string | null;
+  status: string | null;
+  summary: string | null;
+  visual_notes: string | null;
+  drive_url: string | null;
+};
+
+/** Every library name and alias. Naming uniqueness uses this, not the performance board. */
+export async function getMbLibrary(service: Service) {
+  const ads = await fetchPages<LibraryRow>((from, to) =>
+    service
+      .from('ad_library')
+      .select(MB_LIBRARY_SELECT)
+      .order('ad_name', { ascending: true })
+      .range(from, to),
+  );
+  const aliases = await fetchPages<{ library_id: string; alias_name: string }>((from, to) =>
+    service
+      .from('ad_library_aliases')
+      .select(MB_LIBRARY_ALIAS_SELECT)
+      .order('alias_name', { ascending: true })
+      .range(from, to),
+  );
+
+  const aliasByLibrary = new Map<string, string[]>();
+  for (const alias of aliases) {
+    const list = aliasByLibrary.get(alias.library_id) ?? [];
+    list.push(alias.alias_name);
+    aliasByLibrary.set(alias.library_id, list);
+  }
+
+  const tags = new Map<string, { slug: string; label: string }[]>();
+  const ids = ads.map(row => row.id);
+  for (let i = 0; i < ids.length; i += 150) {
+    const chunk = await tagsByLibraryId(service, ids.slice(i, i + 150));
+    if (chunk.error) throw new Error(chunk.error);
+    for (const [libraryId, list] of chunk.data) {
+      tags.set(
+        libraryId,
+        list.map(tag => ({ slug: tag.slug, label: tag.label })),
+      );
+    }
+  }
+
+  return {
+    ads: ads.map(row => ({
+      id: row.id,
+      ad_name: row.ad_name,
+      product: row.product,
+      ad_format: row.ad_format,
+      status: row.status,
+      summary: row.summary,
+      visual_notes: row.visual_notes,
+      drive_url: row.drive_url,
+      aliases: aliasByLibrary.get(row.id) ?? [],
+      tags: tags.get(row.id) ?? [],
+    })),
     exclusions: [...MB_API_EXCLUSIONS],
   };
 }

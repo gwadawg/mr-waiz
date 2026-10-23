@@ -8,6 +8,8 @@ import {
   MB_CHANGE_SELECT,
   MB_CLIENT_SELECT,
   MB_CONTACT_SELECT,
+  MB_LIBRARY_ALIAS_SELECT,
+  MB_LIBRARY_SELECT,
   mbFulfillment,
   mbPackage,
   toMbPerformance,
@@ -36,6 +38,8 @@ describe('media-buyer brief selects', () => {
     for (const select of [
       MB_CLIENT_SELECT,
       MB_CONTACT_SELECT,
+      MB_LIBRARY_SELECT,
+      MB_LIBRARY_ALIAS_SELECT,
       MB_AGENT_SELECT,
       MB_ACTIVITY_SELECT,
       MB_CHANGE_SELECT,
@@ -57,6 +61,9 @@ describe('media-buyer brief selects', () => {
     ]) {
       assert.match(MB_CLIENT_SELECT, new RegExp(`\\b${column}\\b`));
     }
+    assert.match(MB_LIBRARY_SELECT, /\bad_name\b/);
+    assert.match(MB_LIBRARY_SELECT, /\bdrive_url\b/);
+    assert.match(MB_LIBRARY_ALIAS_SELECT, /\balias_name\b/);
     assert.deepEqual([...MB_CALL_TYPES], ['onboarding', 'launch']);
     assert.deepEqual([...MB_CHANGE_LAYERS], ['L1', 'L2']);
   });

@@ -14,6 +14,7 @@ The brief is that client's account. Company KPIs are not on this API. The only d
 | GET | `/api/mb/client?clientId=` | Same |
 | GET | `/api/mb/performance?clientId=&start_date=&end_date=` | Same |
 | GET | `/api/mb/ads?clientId=&start_date=&end_date=` | Same. Omit `clientId` for every client's ads. |
+| GET | `/api/mb/library` | Same. Every ad name and alias. No spend and no client. |
 | GET | `/api/mb/ads?library_id=` or `?ad=` | Same. One creative, split per client. |
 | GET | `/api/mb/activity?clientId=&kind=leads\|dials\|appointments\|closes` | Same |
 | GET | `/api/mb/calls?clientId=` | Same. Onboarding and launch only. |
@@ -42,6 +43,10 @@ Dates are `YYYY-MM-DD`. The default window is the last 30 days. Activity default
 **Performance** (`/api/mb/performance`)
 
 That client's totals for the window: ad spend, leads, qualified, hot, opt-in is on the ad rows, DQ count, bookings, shows, hand-raises, conversations, proposals, submissions, funded count, close counts, loan volume, cost-per for those steps, total dials, pickup, and speed-to-lead.
+
+**Library** (`/api/mb/library`)
+
+The creative catalog used to name a new ad: `ad_name`, aliases, product, format, status, summary, visual notes, tags, and the Drive link. This route does not return spend or which client ran the ad. Uniqueness checks use this list, including names that have not spent yet.
 
 **Ads** (`/api/mb/ads`)
 
@@ -93,6 +98,7 @@ src/app/api/mb/clients/route.ts
 src/app/api/mb/client/route.ts
 src/app/api/mb/performance/route.ts
 src/app/api/mb/ads/route.ts
+src/app/api/mb/library/route.ts
 src/app/api/mb/activity/route.ts
 src/app/api/mb/calls/route.ts
 src/app/api/mb/changes/route.ts
