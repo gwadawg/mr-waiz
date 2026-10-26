@@ -10,8 +10,12 @@ import {
   MB_CONTACT_SELECT,
   MB_LIBRARY_ALIAS_SELECT,
   MB_LIBRARY_SELECT,
+  MB_SPEND_MAX_DAYS,
   mbFulfillment,
+  mbLastWeekRange,
   mbPackage,
+  parseMbSpendRange,
+  rollupMbClientSpend,
   toMbPerformance,
 } from './mb-api';
 import type { MetricsResult } from './metrics';
@@ -106,5 +110,89 @@ describe('toMbPerformance', () => {
     assert.equal('roas' in out, false);
     assert.equal('billable_conversations' in out, false);
     assert.equal('mrr' in out, false);
+  });
+});
+
+describe('weekly client spend report', () => {
+  it('uses the previous Monday–Sunday', () => {
+    assert.deepEqual(mbLastWeekRange('2026-10-26'), {
+      start_date: '2026-10-19',
+      end_date: '2026-10-25',
+    });
+    assert.deepEqual(mbLastWeekRange('2026-10-25'), {
+      start_date: '2026-10-12',
+      end_date: '2026-10-18',
+    });
+  });
+
+  it('defaults a blank request to last week and rejects other presets', () => {
+    const lastWeek = parseMbSpendRange(new URLSearchParams(), '2026-10-26');
+    assert.deepEqual(lastWeek, mbLastWeekRange('2026-10-26'));
+    assert.deepEqual(
+      parseMbSpendRange(new URLSearchParams('preset=last_week'), '2026-10-26'),
+      lastWeek,
+    );
+    assert.throws(
+      () => parseMbSpendRange(new URLSearchParams('preset=last_30'), '2026-10-26'),
+      /preset must be last_week/,
+    );
+    assert.throws(
+      () =>
+        parseMbSpendRange(
+          new URLSearchParams('preset=last_week&start_date=2026-10-19&end_date=2026-10-25'),
+          '2026-10-26',
+        ),
+      /not both/,
+    );
+  });
+
+  it('accepts a short explicit window and rejects a long one', () => {
+    assert.deepEqual(
+      parseMbSpendRange(
+        new URLSearchParams('start_date=2026-10-19&end_date=2026-10-25'),
+        '2026-10-26',
+      ),
+      { start_date: '2026-10-19', end_date: '2026-10-25' },
+    );
+    const end = '2026-10-25';
+    const start = '2026-10-01';
+    assert.ok(MB_SPEND_MAX_DAYS < 25);
+    assert.throws(
+      () => parseMbSpendRange(new URLSearchParams(`start_date=${start}&end_date=${end}`), '2026-10-26'),
+      /days or fewer/,
+    );
+  });
+
+  it('sums every client’s media spend and leaves other KPIs out', () => {
+    const report = rollupMbClientSpend(
+      [
+        { id: 'b', name: 'Beta', is_live: true },
+        { id: 'a', name: 'Alpha', is_live: false },
+        { id: 'c', name: 'Quiet', is_live: true },
+      ],
+      [
+        { client_id: 'a', amount: 10.004 },
+        { client_id: 'a', amount: 10 },
+        { client_id: 'b', amount: 40.1 },
+        { client_id: 'missing', amount: 5 },
+      ],
+    );
+
+    assert.deepEqual(
+      report.clients.map(row => [row.client_id, row.ad_spend, row.name]),
+      [
+        ['b', 40.1, 'Beta'],
+        ['a', 20, 'Alpha'],
+        ['missing', 5, null],
+        ['c', 0, 'Quiet'],
+      ],
+    );
+    assert.equal(report.total_ad_spend, 65.1);
+    assert.deepEqual(Object.keys(report.clients[0]).sort(), [
+      'ad_spend',
+      'client_id',
+      'is_live',
+      'name',
+    ]);
   });
 });

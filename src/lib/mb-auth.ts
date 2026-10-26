@@ -93,7 +93,9 @@ export function mbError(err: unknown): NextResponse {
       : null;
   const status =
     statusFromErr ??
-    (/required|YYYY-MM-DD|kind must|limit must|offset must/.test(message)
+    (/required|YYYY-MM-DD|kind must|limit must|offset must|preset must|days or fewer|not both/.test(
+      message,
+    )
       ? 400
       : /not found/i.test(message)
         ? 404

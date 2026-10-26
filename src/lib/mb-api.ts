@@ -15,6 +15,8 @@ import {
 import {
   attachLoanDealMetrics,
   calculateMetrics,
+  daysInRange,
+  weekStartKey,
   type EventRow,
   type MetricsResult,
 } from '@/lib/metrics';
@@ -161,6 +163,119 @@ export function requireMbClientId(params: URLSearchParams): string {
   const clientId = params.get('clientId')?.trim();
   if (!clientId) throw new Error('clientId is required');
   return clientId;
+}
+
+/** Weekly client-media spend report. Longer windows stay on the one-client routes. */
+export const MB_SPEND_MAX_DAYS = 14;
+
+const SPEND_PAGE = 1000;
+const SPEND_MAX_PAGES = 50;
+
+function addDaysYmd(ymd: string, days: number): string {
+  const date = new Date(`${ymd}T00:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function roundMoney(amount: number): number {
+  return Math.round(amount * 100) / 100;
+}
+
+/**
+ * Previous Monday–Sunday for a calendar day.
+ * `todayYmd` is the call-center date. Weekday math is on that date, not UTC midnight.
+ */
+export function mbLastWeekRange(todayYmd: string): MbRange {
+  if (!DAY.test(todayYmd)) throw new Error('today must be YYYY-MM-DD');
+  const thisMonday = weekStartKey(todayYmd);
+  return {
+    start_date: addDaysYmd(thisMonday, -7),
+    end_date: addDaysYmd(thisMonday, -1),
+  };
+}
+
+/**
+ * `GET /api/mb/spend` window.
+ * No dates (or `preset=last_week` alone) is last week.
+ * An explicit pair is allowed through 14 days. Other presets are rejected.
+ */
+export function parseMbSpendRange(params: URLSearchParams, todayYmd: string): MbRange {
+  const preset = params.get('preset')?.trim() ?? '';
+  const start = params.get('start_date')?.trim() ?? '';
+  const end = params.get('end_date')?.trim() ?? '';
+  if (preset && preset !== 'last_week') throw new Error('preset must be last_week');
+  if ((start && !end) || (!start && end)) {
+    throw new Error('start_date and end_date must be YYYY-MM-DD');
+  }
+  if (preset === 'last_week' && start) {
+    throw new Error('pass preset=last_week or start_date and end_date, not both');
+  }
+  if (!start && !end) return mbLastWeekRange(todayYmd);
+  if (!DAY.test(start) || !DAY.test(end)) {
+    throw new Error('start_date and end_date must be YYYY-MM-DD');
+  }
+  if (start > end) throw new Error('start_date must be on or before end_date');
+  if (daysInRange(start, end) > MB_SPEND_MAX_DAYS) {
+    throw new Error(`spend report window must be ${MB_SPEND_MAX_DAYS} days or fewer`);
+  }
+  return { start_date: start, end_date: end };
+}
+
+export type MbSpendClient = {
+  client_id: string;
+  name: string | null;
+  is_live: boolean;
+  ad_spend: number;
+};
+
+/** Sum Meta spend per client. Clients with no rows stay at 0. No other KPIs. */
+export function rollupMbClientSpend(
+  clients: { id: string; name: string | null; is_live: boolean | null }[],
+  amounts: { client_id: string; amount: number }[],
+): { clients: MbSpendClient[]; total_ad_spend: number } {
+  const totals = new Map<string, number>();
+  const rows = new Map<string, MbSpendClient>();
+
+  for (const client of clients) {
+    totals.set(client.id, 0);
+    rows.set(client.id, {
+      client_id: client.id,
+      name: client.name,
+      is_live: client.is_live === true,
+      ad_spend: 0,
+    });
+  }
+
+  for (const row of amounts) {
+    if (!row.client_id) continue;
+    const amount = Number(row.amount);
+    if (!Number.isFinite(amount)) continue;
+    totals.set(row.client_id, (totals.get(row.client_id) ?? 0) + amount);
+    if (!rows.has(row.client_id)) {
+      rows.set(row.client_id, {
+        client_id: row.client_id,
+        name: null,
+        is_live: false,
+        ad_spend: 0,
+      });
+    }
+  }
+
+  const list = [...rows.values()].map(row => ({
+    ...row,
+    ad_spend: roundMoney(totals.get(row.client_id) ?? 0),
+  }));
+  list.sort((a, b) => {
+    if (b.ad_spend !== a.ad_spend) return b.ad_spend - a.ad_spend;
+    const byName = (a.name ?? '').localeCompare(b.name ?? '');
+    if (byName !== 0) return byName;
+    return a.client_id.localeCompare(b.client_id);
+  });
+
+  return {
+    clients: list,
+    total_ad_spend: roundMoney(list.reduce((sum, row) => sum + row.ad_spend, 0)),
+  };
 }
 
 /** Null when unset. Does not invent Call Center for a blank package. */
@@ -466,6 +581,92 @@ export async function getMbPerformance(service: Service, clientId: string, range
     range,
     truncated: events.length >= EVENT_CAP,
     performance: toMbPerformance(metrics),
+    exclusions: [...MB_API_EXCLUSIONS],
+  };
+}
+
+type SpendAmountRow = { client_id: string; amount: number };
+
+async function pageQuery<T>(
+  load: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>,
+): Promise<{ rows: T[]; truncated: boolean }> {
+  const rows: T[] = [];
+  for (let page = 0; page < SPEND_MAX_PAGES; page += 1) {
+    const from = page * SPEND_PAGE;
+    const { data, error } = await load(from, from + SPEND_PAGE - 1);
+    if (error) throw new Error(error.message);
+    const batch = data ?? [];
+    rows.push(...batch);
+    if (batch.length < SPEND_PAGE) return { rows, truncated: false };
+  }
+  return { rows, truncated: true };
+}
+
+async function fetchClientSpendAmounts(
+  service: Service,
+  range: MbRange,
+): Promise<{ rows: SpendAmountRow[]; truncated: boolean }> {
+  try {
+    const page = await pageQuery<{ client_id: string | null; amount: number | string | null }>(
+      (from, to) =>
+        service
+          .from('daily_meta_spend')
+          .select('client_id, amount')
+          .gte('spend_date', range.start_date)
+          .lte('spend_date', range.end_date)
+          .order('client_id', { ascending: true })
+          .order('spend_date', { ascending: true })
+          .range(from, to),
+    );
+    return {
+      truncated: page.truncated,
+      rows: page.rows
+        .filter(row => row.client_id)
+        .map(row => ({ client_id: String(row.client_id), amount: Number(row.amount) || 0 })),
+    };
+  } catch {
+    const page = await pageQuery<{ client_id: string | null; spend: number | string | null }>(
+      (from, to) =>
+        service
+          .from('meta_ad_insights')
+          .select('client_id, spend')
+          .gte('insight_date', range.start_date)
+          .lte('insight_date', range.end_date)
+          .order('id', { ascending: true })
+          .range(from, to),
+    );
+    return {
+      truncated: page.truncated,
+      rows: page.rows
+        .filter(row => row.client_id)
+        .map(row => ({ client_id: String(row.client_id), amount: Number(row.spend) || 0 })),
+    };
+  }
+}
+
+/**
+ * Meta ad spend for every client in one response.
+ * Dollars are client media budgets. Loan volume, leads, fees, and payroll are not selected.
+ */
+export async function getMbClientSpend(service: Service, range: MbRange) {
+  const [clientsPage, spendPage] = await Promise.all([
+    pageQuery<{ id: string; name: string | null; is_live: boolean | null }>((from, to) =>
+      service
+        .from('clients')
+        .select('id, name, is_live')
+        .order('id', { ascending: true })
+        .range(from, to),
+    ),
+    fetchClientSpendAmounts(service, range),
+  ]);
+
+  const rolled = rollupMbClientSpend(clientsPage.rows, spendPage.rows);
+  return {
+    range,
+    clients: rolled.clients,
+    client_count: rolled.clients.length,
+    total_ad_spend: rolled.total_ad_spend,
+    truncated: clientsPage.truncated || spendPage.truncated,
     exclusions: [...MB_API_EXCLUSIONS],
   };
 }

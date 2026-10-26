@@ -1,10 +1,10 @@
 # Media Buyer Brief API
 
-**Purpose:** Let the media-buyer Cursor kit read one client's ads, landing pages, and fulfillment performance from Mr. Waiz.  
+**Purpose:** Let the media-buyer Cursor kit read one client's ads, landing pages, and fulfillment performance from Mr. Waiz. The exception is `GET /api/mb/spend`, which returns every client's Meta ad spend for one short window (last week by default).  
 **Status:** routes are in the Mr. Waiz repo. `profiles.mb_api_token_hash` is applied on WM Reporting (`fszmndldcvrrmitfbwde`). The routes serve traffic after this app is deployed. Kit: sibling `wm-mb-kit`.  
 **Related:** [CSM_BRIEF_API.md](CSM_BRIEF_API.md). Do not reuse the CSM token.
 
-The brief is that client's account. Company KPIs are not on this API. The only dollars in the payload are what that client spends on ads, and the loan volume on their funded files. What Waiz charges the client, and what Waiz pays anyone, are never selected.
+Company KPIs are not on this API. On a one-client route the only dollars are what that client spends on ads, and the loan volume on their funded files. `/api/mb/spend` lists those media budgets for every client and does not include loan volume. What Waiz charges the client, and what Waiz pays anyone, are never selected.
 
 ## Endpoints
 
@@ -12,7 +12,8 @@ The brief is that client's account. Company KPIs are not on this API. The only d
 |--------|------|------|
 | GET | `/api/mb/clients?search=` | Bearer `mb_…` or a session with `media_buyer` |
 | GET | `/api/mb/client?clientId=` | Same |
-| GET | `/api/mb/performance?clientId=&start_date=&end_date=` | Same |
+| GET | `/api/mb/performance?clientId=&start_date=&end_date=` | Same. One client (`clientId` required). |
+| GET | `/api/mb/spend?preset=last_week` | Same. Every client's Meta ad spend for one short window. No `clientId`. |
 | GET | `/api/mb/ads?clientId=&start_date=&end_date=` | Same. Omit `clientId` for every client's ads. |
 | GET | `/api/mb/library` | Same. Every ad name and alias. No spend and no client. |
 | GET | `/api/mb/ads?library_id=` or `?ad=` | Same. One creative, split per client. |
@@ -22,7 +23,9 @@ The brief is that client's account. Company KPIs are not on this API. The only d
 | GET | `/api/mb/changes?clientId=` | Same. L1 and L2 only. |
 | GET | `/api/mb/landing?clientId=` | Same. Read only. |
 
-Dates are `YYYY-MM-DD`. The default window is the last 30 days, except **ad-diagnosis**, which defaults to that client's launch date through today. Activity defaults to `kind=dials`, `limit=200`, max `500`.
+Dates are `YYYY-MM-DD`. The default window is the last 30 days, except **ad-diagnosis**, which defaults to that client's launch date through today, and **spend**, which defaults to last week (Monday–Sunday before today in the call-center calendar). Activity defaults to `kind=dials`, `limit=200`, max `500`.
+
+`/api/mb/spend` is the one cross-client read. Omit dates or pass `preset=last_week` for that week. An explicit `start_date` and `end_date` is allowed through 14 days. Do not send both the preset and the dates. The body is `clients[]` of `client_id`, `name`, `is_live`, and `ad_spend`, plus `total_ad_spend` (the sum of those client media budgets) and `truncated`. Clients with no Meta rows are included at `0`. This route does not return leads, dials, closings, or loan volume. `/api/mb/performance` still requires one `clientId`. Ads requested without a `clientId` stay rolled up by creative and do not name the account.
 
 **Gate:** `media_buyer`. `client_health` alone is not enough. A `csm_…` token does not match this API.
 
@@ -43,7 +46,11 @@ Dates are `YYYY-MM-DD`. The default window is the last 30 days, except **ad-diag
 
 **Performance** (`/api/mb/performance`)
 
-That client's totals for the window: ad spend, leads, qualified, hot, opt-in is on the ad rows, DQ count, bookings, shows, hand-raises, conversations, proposals, submissions, funded count, close counts, loan volume, cost-per for those steps, total dials, pickup, and speed-to-lead.
+That client's totals for the window: ad spend, leads, qualified, hot, opt-in is on the ad rows, DQ count, bookings, shows, hand-raises, conversations, proposals, submissions, funded count, close counts, loan volume, cost-per for those steps, total dials, pickup, and speed-to-lead. `clientId` is required.
+
+**Spend** (`/api/mb/spend`)
+
+Every client's Meta ad spend for last week, or for an explicit window of at most 14 days. One request. `total_ad_spend` adds those client media budgets. It is not Waiz revenue, not what Waiz charges, and not Waiz's own acquisition ads.
 
 **Library** (`/api/mb/library`)
 
@@ -102,6 +109,7 @@ src/lib/mb-api.ts
 src/app/api/mb/clients/route.ts
 src/app/api/mb/client/route.ts
 src/app/api/mb/performance/route.ts
+src/app/api/mb/spend/route.ts
 src/app/api/mb/ads/route.ts
 src/app/api/mb/library/route.ts
 src/app/api/mb/ad-diagnosis/route.ts
