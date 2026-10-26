@@ -15,11 +15,17 @@ import {
 import {
   attachLoanDealMetrics,
   calculateMetrics,
-  daysInRange,
+  leadIdentityKey,
   weekStartKey,
   type EventRow,
   type MetricsResult,
 } from '@/lib/metrics';
+import {
+  emptySqlKpiCounts,
+  metricsFromSqlCounts,
+  parseSqlKpiCountsByClient,
+  type SqlKpiCounts,
+} from '@/lib/metrics-from-sql';
 import type { AvailabilityWindow } from '@/lib/speed-to-lead';
 import {
   getOnboardingFormProfile,
@@ -165,11 +171,31 @@ export function requireMbClientId(params: URLSearchParams): string {
   return clientId;
 }
 
-/** Weekly client-media spend report. Longer windows stay on the one-client routes. */
-export const MB_SPEND_MAX_DAYS = 14;
-
 const SPEND_PAGE = 1000;
 const SPEND_MAX_PAGES = 50;
+const PORTFOLIO_ROW_PAGES = 200;
+
+/** Shared windows for the all-client KPI report. `since_launch` stays on one client. */
+export const MB_PORTFOLIO_PRESETS = [
+  'today',
+  'yesterday',
+  'this_week',
+  'last_week',
+  'last_7',
+  'last_14',
+  'last_30',
+  'last_90',
+  'this_month',
+  'last_month',
+  'this_quarter',
+  'last_quarter',
+  'ytd',
+  'all_time',
+] as const;
+
+export type MbPortfolioPreset = (typeof MB_PORTFOLIO_PRESETS)[number];
+
+const MB_ALL_TIME_START = '2000-01-01';
 
 function addDaysYmd(ymd: string, days: number): string {
   const date = new Date(`${ymd}T00:00:00.000Z`);
@@ -194,30 +220,74 @@ export function mbLastWeekRange(todayYmd: string): MbRange {
   };
 }
 
+function calendarYmd(year: number, month: number, day: number): string {
+  return new Date(Date.UTC(year, month - 1, day)).toISOString().slice(0, 10);
+}
+
+/** One shared window for every client. Dates are the call-center calendar. */
+export function mbPresetRange(preset: string, todayYmd: string): MbRange {
+  if (!DAY.test(todayYmd)) throw new Error('today must be YYYY-MM-DD');
+  if (preset === 'since_launch') {
+    throw new Error('preset must be a shared window; since_launch stays on one client');
+  }
+  if (!(MB_PORTFOLIO_PRESETS as readonly string[]).includes(preset)) {
+    throw new Error(`preset must be ${MB_PORTFOLIO_PRESETS.join(', ')}`);
+  }
+  const [year, month] = todayYmd.split('-').map(Number);
+  if (preset === 'today') return { start_date: todayYmd, end_date: todayYmd };
+  if (preset === 'yesterday') {
+    const day = addDaysYmd(todayYmd, -1);
+    return { start_date: day, end_date: day };
+  }
+  if (preset === 'this_week') return { start_date: weekStartKey(todayYmd), end_date: todayYmd };
+  if (preset === 'last_week') return mbLastWeekRange(todayYmd);
+  if (preset === 'this_month') return { start_date: calendarYmd(year, month, 1), end_date: todayYmd };
+  if (preset === 'last_month') {
+    return {
+      start_date: calendarYmd(year, month - 1, 1),
+      end_date: calendarYmd(year, month, 0),
+    };
+  }
+  if (preset === 'this_quarter') {
+    const quarter = Math.floor((month - 1) / 3);
+    return { start_date: calendarYmd(year, quarter * 3 + 1, 1), end_date: todayYmd };
+  }
+  if (preset === 'last_quarter') {
+    const quarter = Math.floor((month - 1) / 3);
+    const startMonth = ((quarter - 1 + 4) % 4) * 3 + 1;
+    const startYear = quarter === 0 ? year - 1 : year;
+    return {
+      start_date: calendarYmd(startYear, startMonth, 1),
+      end_date: calendarYmd(startYear, startMonth + 3, 0),
+    };
+  }
+  if (preset === 'ytd') return { start_date: calendarYmd(year, 1, 1), end_date: todayYmd };
+  if (preset === 'last_7') return { start_date: addDaysYmd(todayYmd, -7), end_date: todayYmd };
+  if (preset === 'last_14') return { start_date: addDaysYmd(todayYmd, -14), end_date: todayYmd };
+  if (preset === 'last_30') return { start_date: addDaysYmd(todayYmd, -30), end_date: todayYmd };
+  if (preset === 'last_90') return { start_date: addDaysYmd(todayYmd, -90), end_date: todayYmd };
+  return { start_date: MB_ALL_TIME_START, end_date: todayYmd };
+}
+
 /**
- * `GET /api/mb/spend` window.
- * No dates (or `preset=last_week` alone) is last week.
- * An explicit pair is allowed through 14 days. Other presets are rejected.
+ * Window for the all-client KPI report.
+ * No dates defaults to last week. An explicit pair can be any length, including all time.
  */
 export function parseMbSpendRange(params: URLSearchParams, todayYmd: string): MbRange {
   const preset = params.get('preset')?.trim() ?? '';
   const start = params.get('start_date')?.trim() ?? '';
   const end = params.get('end_date')?.trim() ?? '';
-  if (preset && preset !== 'last_week') throw new Error('preset must be last_week');
   if ((start && !end) || (!start && end)) {
     throw new Error('start_date and end_date must be YYYY-MM-DD');
   }
-  if (preset === 'last_week' && start) {
-    throw new Error('pass preset=last_week or start_date and end_date, not both');
+  if (preset && start) {
+    throw new Error('pass a preset or start_date and end_date, not both');
   }
-  if (!start && !end) return mbLastWeekRange(todayYmd);
+  if (!start && !end) return mbPresetRange(preset || 'last_week', todayYmd);
   if (!DAY.test(start) || !DAY.test(end)) {
     throw new Error('start_date and end_date must be YYYY-MM-DD');
   }
   if (start > end) throw new Error('start_date must be on or before end_date');
-  if (daysInRange(start, end) > MB_SPEND_MAX_DAYS) {
-    throw new Error(`spend report window must be ${MB_SPEND_MAX_DAYS} days or fewer`);
-  }
   return { start_date: start, end_date: end };
 }
 
@@ -589,9 +659,10 @@ type SpendAmountRow = { client_id: string; amount: number };
 
 async function pageQuery<T>(
   load: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>,
+  maxPages = SPEND_MAX_PAGES,
 ): Promise<{ rows: T[]; truncated: boolean }> {
   const rows: T[] = [];
-  for (let page = 0; page < SPEND_MAX_PAGES; page += 1) {
+  for (let page = 0; page < maxPages; page += 1) {
     const from = page * SPEND_PAGE;
     const { data, error } = await load(from, from + SPEND_PAGE - 1);
     if (error) throw new Error(error.message);
@@ -644,29 +715,311 @@ async function fetchClientSpendAmounts(
   }
 }
 
+export type MbPortfolioClient = {
+  client_id: string;
+  name: string | null;
+  is_live: boolean;
+  launch_date: string | null;
+  reporting_type: string | null;
+  performance: ReturnType<typeof toMbPerformance>;
+};
+
+type MbPortfolioIdentity = {
+  id: string;
+  name: string | null;
+  is_live: boolean | null;
+  launch_date?: string | null;
+  reporting_type?: string | null;
+};
+
+type MbDealRow = {
+  client_id: string;
+  stage: string | null;
+  submitted_at: string | null;
+  funded_at: string | null;
+  loan_size: number | string | null;
+};
+
+type MbSpeedRow = { client_id: string; seconds: number };
+
+function sumSqlCounts(rows: SqlKpiCounts[]): SqlKpiCounts {
+  const total = emptySqlKpiCounts();
+  const keys = Object.keys(total) as (keyof SqlKpiCounts)[];
+  for (const row of rows) {
+    for (const key of keys) total[key] += row[key] || 0;
+  }
+  return total;
+}
+
+function mbSpeedMedian(seconds: number[]): { median_min: number | null; sample_size: number } {
+  const values = seconds.filter(value => Number.isFinite(value) && value >= 0).sort((a, b) => a - b);
+  if (values.length === 0) return { median_min: null, sample_size: 0 };
+  const mid = Math.floor(values.length / 2);
+  const medianSeconds =
+    values.length % 2 === 1 ? values[mid] : (values[mid - 1] + values[mid]) / 2;
+  return {
+    median_min: Math.round((medianSeconds / 60) * 10) / 10,
+    sample_size: values.length,
+  };
+}
+
+function performanceFromParts(
+  counts: SqlKpiCounts,
+  spend: number,
+  deals: { submitted_deals: number; funded_deals: number; loan_volume: number },
+  manualDqs: number,
+  speed: { median_min: number | null; sample_size: number },
+) {
+  const metrics = attachLoanDealMetrics(
+    metricsFromSqlCounts(counts, [{ amount: spend, platform: 'meta' }], {
+      median_min: speed.median_min,
+      sample_size: speed.sample_size,
+      excluded_out_of_window: 0,
+      excluded_no_time: 0,
+      excluded_before_cutoff: 0,
+      excluded_after_cutoff: 0,
+    }),
+    { ...deals, commission_total: 0 },
+  );
+  metrics.manual_dqs = manualDqs;
+  return toMbPerformance(metrics);
+}
+
 /**
- * Meta ad spend for every client in one response.
- * Dollars are client media budgets. Loan volume, leads, fees, and payroll are not selected.
+ * Full client KPI set for every client in one window.
+ * Fees, payroll, and ROAS are not copied. Speed on the total is not a pooled median.
  */
-export async function getMbClientSpend(service: Service, range: MbRange) {
-  const [clientsPage, spendPage] = await Promise.all([
-    pageQuery<{ id: string; name: string | null; is_live: boolean | null }>((from, to) =>
+export function buildMbPortfolio(input: {
+  clients: MbPortfolioIdentity[];
+  counts: Map<string, SqlKpiCounts>;
+  spend: { client_id: string; amount: number }[];
+  deals: MbDealRow[];
+  manualDqs: { client_id?: string | null; ghl_contact_id?: string | null; lead_phone?: string | null; lead_email?: string | null; lead_name?: string | null }[];
+  speed: MbSpeedRow[];
+  range: MbRange;
+}): { clients: MbPortfolioClient[]; totals: ReturnType<typeof toMbPerformance> } {
+  const spendByClient = new Map<string, number>();
+  for (const row of input.spend) {
+    if (!row.client_id) continue;
+    const amount = Number(row.amount);
+    if (!Number.isFinite(amount)) continue;
+    spendByClient.set(row.client_id, (spendByClient.get(row.client_id) ?? 0) + amount);
+  }
+
+  const dealsByClient = new Map<string, { submitted_deals: number; funded_deals: number; loan_volume: number }>();
+  const start = `${input.range.start_date}T00:00:00.000Z`;
+  const end = `${input.range.end_date}T23:59:59.999Z`;
+  const inRange = (iso: string | null) => {
+    if (!iso) return false;
+    if (iso < start || iso > end) return false;
+    return true;
+  };
+  for (const row of input.deals) {
+    if (!row.client_id) continue;
+    const current = dealsByClient.get(row.client_id) ?? {
+      submitted_deals: 0,
+      funded_deals: 0,
+      loan_volume: 0,
+    };
+    if (inRange(row.submitted_at)) current.submitted_deals += 1;
+    if (row.stage === 'funded' && inRange(row.funded_at)) {
+      current.funded_deals += 1;
+      const size = Number(row.loan_size);
+      if (Number.isFinite(size) && size > 0) current.loan_volume += size;
+    }
+    dealsByClient.set(row.client_id, current);
+  }
+
+  const dqsByClient = new Map<string, number>();
+  const seenLeads = new Set<string>();
+  for (const row of input.manualDqs) {
+    const key = leadIdentityKey(row);
+    if (!key || seenLeads.has(key)) continue;
+    seenLeads.add(key);
+    const clientId = row.client_id ?? '';
+    if (!clientId) continue;
+    dqsByClient.set(clientId, (dqsByClient.get(clientId) ?? 0) + 1);
+  }
+
+  const speedByClient = new Map<string, number[]>();
+  for (const row of input.speed) {
+    if (!row.client_id || !Number.isFinite(row.seconds)) continue;
+    const list = speedByClient.get(row.client_id) ?? [];
+    list.push(row.seconds);
+    speedByClient.set(row.client_id, list);
+  }
+
+  const identities = new Map<string, MbPortfolioIdentity>();
+  for (const client of input.clients) identities.set(client.id, client);
+  for (const id of input.counts.keys()) {
+    if (!identities.has(id)) identities.set(id, { id, name: null, is_live: false });
+  }
+  for (const id of spendByClient.keys()) {
+    if (!identities.has(id)) identities.set(id, { id, name: null, is_live: false });
+  }
+
+  const emptyDeals = { submitted_deals: 0, funded_deals: 0, loan_volume: 0 };
+  const clients: MbPortfolioClient[] = [...identities.values()].map(client => {
+    const launch = client.launch_date?.slice(0, 10) ?? null;
+    return {
+      client_id: client.id,
+      name: client.name,
+      is_live: client.is_live === true,
+      launch_date: launch && DAY.test(launch) ? launch : null,
+      reporting_type: client.reporting_type ?? null,
+      performance: performanceFromParts(
+        input.counts.get(client.id) ?? emptySqlKpiCounts(),
+        spendByClient.get(client.id) ?? 0,
+        dealsByClient.get(client.id) ?? emptyDeals,
+        dqsByClient.get(client.id) ?? 0,
+        mbSpeedMedian(speedByClient.get(client.id) ?? []),
+      ),
+    };
+  });
+  clients.sort((a, b) => {
+    if (b.performance.ad_spend !== a.performance.ad_spend) {
+      return b.performance.ad_spend - a.performance.ad_spend;
+    }
+    const byName = (a.name ?? '').localeCompare(b.name ?? '');
+    if (byName !== 0) return byName;
+    return a.client_id.localeCompare(b.client_id);
+  });
+
+  const totals = performanceFromParts(
+    sumSqlCounts([...input.counts.values()]),
+    [...spendByClient.values()].reduce((sum, amount) => sum + amount, 0),
+    [...dealsByClient.values()].reduce(
+      (sum, row) => ({
+        submitted_deals: sum.submitted_deals + row.submitted_deals,
+        funded_deals: sum.funded_deals + row.funded_deals,
+        loan_volume: sum.loan_volume + row.loan_volume,
+      }),
+      emptyDeals,
+    ),
+    [...dqsByClient.values()].reduce((sum, count) => sum + count, 0),
+    { median_min: null, sample_size: 0 },
+  );
+
+  return { clients, totals };
+}
+
+/**
+ * Every client's KPI set for one window: spend, funnel, dials, speed, and loan volume.
+ * What Waiz charges and what Waiz pays are not selected.
+ */
+export async function getMbPortfolio(service: Service, range: MbRange) {
+  const startIso = `${range.start_date}T00:00:00.000Z`;
+  const endIso = `${range.end_date}T23:59:59.999Z`;
+
+  const [clientsPage, spendPage, dealsPage, dqPage, speedPage, countsResult] = await Promise.all([
+    pageQuery<{
+      id: string;
+      name: string | null;
+      is_live: boolean | null;
+      launch_date: string | null;
+      reporting_type: string | null;
+    }>((from, to) =>
       service
         .from('clients')
-        .select('id, name, is_live')
+        .select('id, name, is_live, launch_date, reporting_type')
         .order('id', { ascending: true })
         .range(from, to),
     ),
     fetchClientSpendAmounts(service, range),
+    pageQuery<MbDealRow>(
+      (from, to) =>
+        service
+          .from('loan_deals')
+          .select('client_id, stage, submitted_at, funded_at, loan_size')
+          .order('id', { ascending: true })
+          .range(from, to),
+      PORTFOLIO_ROW_PAGES,
+    ).then(
+      page => ({ ...page, unavailable: false }),
+      (err: unknown) => {
+        const message = err instanceof Error ? err.message : '';
+        if (/loan_deals|schema cache|does not exist/i.test(message)) {
+          return { rows: [] as MbDealRow[], truncated: false, unavailable: true };
+        }
+        throw err;
+      },
+    ),
+    pageQuery<{
+      client_id: string | null;
+      ghl_contact_id: string | null;
+      lead_phone: string | null;
+      lead_email: string | null;
+      lead_name: string | null;
+    }>(
+      (from, to) =>
+        service
+          .from('events')
+          .select('client_id, ghl_contact_id, lead_phone, lead_email, lead_name')
+          .eq('event_type', 'manual_dq')
+          .gte('occurred_at', startIso)
+          .lte('occurred_at', endIso)
+          .order('id', { ascending: true })
+          .range(from, to),
+      PORTFOLIO_ROW_PAGES,
+    ),
+    pageQuery<{ client_id: string | null; speed_to_lead_seconds: number | null }>(
+      (from, to) =>
+        service
+          .from('events')
+          .select('client_id, speed_to_lead_seconds')
+          .eq('event_type', 'dial')
+          .gte('occurred_at', startIso)
+          .lte('occurred_at', endIso)
+          .not('speed_to_lead_seconds', 'is', null)
+          .order('id', { ascending: true })
+          .range(from, to),
+      PORTFOLIO_ROW_PAGES,
+    ),
+    service.rpc('dashboard_kpi_counts_by_client', {
+      p_client_ids: null,
+      p_start: startIso,
+      p_end: endIso,
+    }),
   ]);
 
-  const rolled = rollupMbClientSpend(clientsPage.rows, spendPage.rows);
+  if (countsResult.error) throw new Error(countsResult.error.message);
+
+  const built = buildMbPortfolio({
+    clients: clientsPage.rows,
+    counts: parseSqlKpiCountsByClient(countsResult.data),
+    spend: spendPage.rows,
+    deals: dealsPage.rows,
+    manualDqs: dqPage.rows,
+    speed: speedPage.rows
+      .filter(row => row.client_id)
+      .map(row => ({
+        client_id: String(row.client_id),
+        seconds: Number(row.speed_to_lead_seconds),
+      })),
+    range,
+  });
+
+  const truncated =
+    clientsPage.truncated ||
+    spendPage.truncated ||
+    dealsPage.truncated ||
+    dqPage.truncated ||
+    speedPage.truncated;
+
   return {
     range,
-    clients: rolled.clients,
-    client_count: rolled.clients.length,
-    total_ad_spend: rolled.total_ad_spend,
-    truncated: clientsPage.truncated || spendPage.truncated,
+    clients: built.clients,
+    client_count: built.clients.length,
+    totals: built.totals,
+    total_ad_spend: built.totals.ad_spend,
+    truncated,
+    coverage: {
+      counts: 'complete' as const,
+      spend: spendPage.truncated ? 'truncated' : 'complete',
+      loan_deals: dealsPage.unavailable ? 'unavailable' : dealsPage.truncated ? 'truncated' : 'complete',
+      manual_dqs: dqPage.truncated ? 'truncated' : 'complete',
+      speed_to_lead: speedPage.truncated ? 'truncated' : 'stored_dial_seconds',
+    },
     exclusions: [...MB_API_EXCLUSIONS],
   };
 }
