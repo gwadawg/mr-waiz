@@ -18,3 +18,4 @@ This version has breaking changes — APIs, conventions, and file structure may 
 | Client landing builder (DSCR, reverse, HomeSafe) | `docs/superpowers/specs/2026-10-06-client-landing-builder-design.md` — plan: `docs/superpowers/plans/2026-10-07-client-landing-builder.md` |
 | UI / design help (21st.dev) | `.cursor/skills/21st-ui-build/SKILL.md` · explore `.cursor/skills/21st-ui-explore/SKILL.md` · review `.cursor/skills/21st-ui-review/SKILL.md` · CLI `.cursor/skills/21st-cli-use/SKILL.md` — design context in `.21st/DESIGN.md` · MCP server `21st` (restart Cursor after setup) |
 | Private client offer letters | `offer-letters/README.md` — sheets, tokens, and `offerletter.waizmedia.net` only. Not `public/offers/` |
+| Backfill a client's lead list or Meta ads CSV without duplicating stored KPIs | `.cursor/skills/backfill-client-data/SKILL.md` — leads and Meta spend only. Compare, summarize, write after an explicit yes |
