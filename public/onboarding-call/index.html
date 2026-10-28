@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Waiz Media — Onboarding call</title>
+  <link rel="stylesheet" href="fonts.css">
+  <style>
+    * { box-sizing: border-box; margin: 0; }
+    html, body { height: 100%; }
+    body {
+      min-height: 100%;
+      display: grid;
+      place-items: center;
+      background:
+        radial-gradient(ellipse 900px 520px at 82% 12%, rgba(79,163,255,0.28), transparent 60%),
+        linear-gradient(155deg, #061A4A 0%, #0E2F73 62%, #061A4A 100%);
+      color: #fff;
+      font-family: "IBM Plex Sans", sans-serif;
+    }
+    main { width: min(880px, calc(100% - 48px)); text-align: center; }
+    img { width: min(420px, 70vw); height: auto; margin-bottom: 28px; }
+    h1 {
+      font-family: "Barlow Condensed", sans-serif;
+      font-weight: 600;
+      font-size: 56px;
+      line-height: 0.95;
+      letter-spacing: 0.01em;
+    }
+    p { margin-top: 12px; font-size: 18px; color: rgba(255,255,255,0.82); }
+    .pick { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 36px; }
+    a {
+      display: block;
+      text-decoration: none;
+      color: #061A4A;
+      background: #fff;
+      border-radius: 18px;
+      padding: 28px 22px;
+      text-align: left;
+    }
+    a strong {
+      display: block;
+      font-family: "Barlow Condensed", sans-serif;
+      font-size: 32px;
+      font-weight: 600;
+      line-height: 1;
+    }
+    a span { display: block; margin-top: 8px; font-size: 16px; color: #5B6475; }
+    a:hover, a:focus-visible { outline: 3px solid #4FA3FF; outline-offset: 3px; }
+    @media (max-width: 700px) {
+      .pick { grid-template-columns: 1fr; }
+      h1 { font-size: 40px; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <img src="waiz-white.svg" alt="Waiz">
+    <h1>Which onboarding call?</h1>
+    <p>Open one deck. The other offer is not in that file.</p>
+    <div class="pick">
+      <a href="live-transfer.html">
+        <strong>Live Transfer</strong>
+        <span>We call the lead, then transfer them live.</span>
+      </a>
+      <a href="direct-leads.html">
+        <strong>Direct Leads</strong>
+        <span>Leads come straight to the loan officers.</span>
+      </a>
+    </div>
+  </main>
+</body>
+</html>

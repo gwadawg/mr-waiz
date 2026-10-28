@@ -1,0 +1,773 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Waiz Media — Direct Leads onboarding</title>
+  <link rel="stylesheet" href="fonts.css">
+  <style>
+    /* ===========================================
+       THEME — Waiz doctrine palette
+       =========================================== */
+    :root {
+      --navy: #061A4A;
+      --royal: #0E2F73;
+      --accent: #4FA3FF;
+      --green: #7CFF7A;
+      --white: #FFFFFF;
+      --light: #F5F7FB;
+      --ink: #0B1220;
+      --mid: #5B6475;
+      --line: #E4EAF3;
+      --stage-bg: #061A4A;
+      --slide-bg: #F5F7FB;
+      --font-display: "Barlow Condensed", sans-serif;
+      --font-body: "IBM Plex Sans", sans-serif;
+      --ease: cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    h1, h2, h3, p { margin: 0; }
+    button, a { font: inherit; color: inherit; text-decoration: none; }
+    ol, ul { list-style: none; }
+    img.mark, .art-frame img, .flat img { max-width: none; max-height: none; }
+
+    /* --- PASTE viewport-base.css CONTENTS HERE --- */
+    html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: var(--stage-bg, #000); }
+    .deck-viewport { position: fixed; inset: 0; overflow: hidden; background: var(--stage-bg, #000); }
+    .deck-stage { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; overflow: hidden; transform-origin: 0 0; background: var(--slide-bg, #fff); }
+    .slide { position: absolute; inset: 0; width: 1920px; height: 1080px; overflow: hidden; display: block; visibility: hidden; opacity: 0; pointer-events: none; background: var(--slide-bg, #fff); }
+    .slide.active, .slide.visible { visibility: visible; opacity: 1; pointer-events: auto; z-index: 1; }
+    img, video, canvas, svg { max-width: 100%; max-height: 100%; }
+    .deck-controls { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); z-index: 1000; }
+    @media print {
+      html, body { width: 1920px; height: auto; overflow: visible; background: #fff; }
+      .deck-viewport { position: static; overflow: visible; background: #fff; }
+      .deck-stage { position: static; width: auto; height: auto; transform: none !important; background: none; }
+      .slide { position: relative; display: block !important; visibility: visible !important; opacity: 1 !important; pointer-events: auto !important; width: 1920px; height: 1080px; break-after: page; page-break-after: always; }
+      .slide:last-child { break-after: auto; page-break-after: auto; }
+      .deck-controls { display: none !important; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.2s !important; }
+    }
+
+    /* ===========================================
+       CHROME AND TYPE
+       =========================================== */
+    body { font-family: var(--font-body); color: var(--ink); -webkit-font-smoothing: antialiased; }
+    .slide.light { background: var(--light); color: var(--ink); }
+
+    .reveal { opacity: 0; transform: translateY(18px); transition: opacity 0.4s var(--ease), transform 0.4s var(--ease); }
+    .slide.visible .reveal { opacity: 1; transform: none; }
+    body.is-shot .reveal { opacity: 1 !important; transform: none !important; transition: none !important; }
+    body.is-shot .deck-controls { display: none !important; }
+
+    .chrome {
+      position: absolute; top: 0; left: 0; right: 0; height: 104px;
+      display: grid; grid-template-columns: 180px 1fr 72px; align-items: center;
+      padding: 0 64px; z-index: 2;
+    }
+    img.mark { width: 146px; height: 48px; object-fit: contain; object-position: left center; display: block; }
+    img.mark.hero { width: 640px; height: 210px; object-position: center; }
+    .pageno {
+      font-family: var(--font-display); font-weight: 600; font-size: 22px;
+      letter-spacing: 0.12em; color: var(--mid); text-align: right;
+    }
+    .rail { display: flex; justify-content: center; gap: 6px; }
+    .rail li {
+      font-size: 15px; font-weight: 500; color: var(--mid);
+      padding: 6px 8px 8px; white-space: nowrap; letter-spacing: 0.01em;
+    }
+    .rail li b { font-family: var(--font-display); font-weight: 600; margin-right: 4px; font-size: 18px; }
+    .rail li.done { color: var(--navy); }
+    .rail li.now { color: var(--navy); font-weight: 600; box-shadow: inset 0 -3px 0 var(--accent); }
+
+    .slide-body {
+      position: absolute; left: 72px; right: 72px; top: 116px; bottom: 40px;
+      display: flex; flex-direction: column;
+    }
+    .eyebrow {
+      font-size: 15px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase;
+      color: var(--navy); margin-bottom: 8px;
+    }
+    .eyebrow::before {
+      content: ""; display: inline-block; width: 10px; height: 10px; margin-right: 10px;
+      background: var(--accent); border-radius: 2px; transform: translateY(1px);
+    }
+    h2.headline {
+      font-family: var(--font-display); font-weight: 600; font-size: 56px; line-height: 0.98;
+      color: var(--navy); letter-spacing: 0.005em;
+    }
+
+    /* ===========================================
+       TITLE SLIDES
+       =========================================== */
+    .title-slide {
+      background:
+        radial-gradient(ellipse 900px 520px at 82% 12%, rgba(79,163,255,0.28), transparent 60%),
+        radial-gradient(ellipse 700px 480px at 8% 100%, rgba(14,47,115,0.55), transparent 70%),
+        linear-gradient(155deg, #061A4A 0%, #0E2F73 62%, #061A4A 100%);
+    }
+    .title-slide::before {
+      content: ""; position: absolute; inset: 0; pointer-events: none;
+      background-image:
+        linear-gradient(rgba(255,255,255,0.045) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.045) 1px, transparent 1px);
+      background-size: 80px 80px;
+      mask-image: radial-gradient(ellipse at 50% 42%, #000 15%, transparent 72%);
+    }
+    .title-inner {
+      position: absolute; inset: 0; z-index: 1;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      text-align: center; color: #fff; padding: 80px;
+    }
+    .title-inner h1 {
+      font-family: var(--font-display); font-weight: 600; font-size: 84px; line-height: 0.95;
+      letter-spacing: 0.01em; margin-top: 28px;
+    }
+    .title-inner .sub { margin-top: 18px; font-size: 30px; font-weight: 400; color: rgba(255,255,255,0.84); }
+    .title-inner .how { margin-top: 22px; font-size: 18px; color: rgba(255,255,255,0.72); }
+    .title-rule { width: 72px; height: 4px; background: var(--accent); border-radius: 4px; margin-top: 28px; }
+
+    /* ===========================================
+       TODAY'S PLAN
+       =========================================== */
+    .path { position: relative; display: grid; grid-template-columns: repeat(8, 1fr); gap: 8px; margin-top: 120px; }
+    .path-line { position: absolute; left: 6%; right: 6%; top: 79px; height: 3px; background: #D5DEEC; z-index: 0; }
+    .stop { text-align: center; position: relative; z-index: 1; }
+    .stop .n { font-family: var(--font-display); font-weight: 600; font-size: 22px; letter-spacing: 0.08em; color: var(--navy); }
+    .stop .bubble {
+      width: 88px; height: 88px; margin: 12px auto 18px; border-radius: 50%;
+      background: #fff; border: 2px solid var(--navy); display: grid; place-items: center; color: var(--navy);
+    }
+    .stop p { font-size: 18px; font-weight: 600; line-height: 1.25; color: var(--navy); max-width: 168px; margin: 0 auto; min-height: 68px; }
+    .icon { width: 32px; height: 32px; display: block; }
+
+    /* ===========================================
+       LOCK IN
+       =========================================== */
+    .lock { display: grid; grid-template-columns: 440px 1fr; gap: 24px; margin-top: 28px; flex: 1; min-height: 0; }
+    .hub {
+      border-radius: 28px; color: #fff; padding: 48px 40px;
+      background: linear-gradient(165deg, #061A4A 0%, #0E2F73 100%);
+      display: flex; flex-direction: column; justify-content: center;
+    }
+    .hub h3 { font-family: var(--font-display); font-weight: 600; font-size: 84px; line-height: 0.88; }
+    .tiles { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr 1fr; gap: 16px; }
+    .tile {
+      background: #fff; border: 1px solid var(--line); border-radius: 18px;
+      display: flex; align-items: center; gap: 16px; padding: 0 26px;
+      font-size: 26px; font-weight: 600; color: var(--navy); line-height: 1.2;
+    }
+    .tile .glyph {
+      width: 52px; height: 52px; border-radius: 14px; background: var(--light);
+      display: grid; place-items: center; color: var(--navy); flex: none;
+    }
+
+    /* ===========================================
+       ROUTING ART
+       =========================================== */
+    .art-frame { flex: 1; min-height: 0; margin-top: 10px; display: flex; align-items: center; justify-content: center; }
+    .art-frame img { width: 100%; height: 100%; object-fit: contain; }
+
+    /* ===========================================
+       NUMBERS
+       =========================================== */
+    .num-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 24px; margin-top: 36px; }
+    .num-card {
+      background: #fff; border: 1px solid var(--line); border-radius: 24px;
+      padding: 36px 32px 40px; min-height: 0;
+      display: flex; flex-direction: column; align-items: flex-start; gap: 18px;
+    }
+    .num-card.solo { width: 720px; min-height: 0; margin: 56px auto 0; }
+    .num-card .glyph {
+      width: 84px; height: 84px; border-radius: 22px; background: var(--light);
+      display: grid; place-items: center; color: var(--navy);
+    }
+    .num-card h3 { font-family: var(--font-display); font-weight: 600; font-size: 48px; line-height: 0.95; color: var(--navy); }
+    .num-card p { font-size: 26px; line-height: 1.35; color: var(--ink); max-width: 16em; }
+    .footnote { margin-top: 28px; text-align: center; font-size: 22px; color: var(--mid); }
+
+    /* ===========================================
+       BRAND
+       =========================================== */
+    .brand-layout { flex: 1; min-height: 0; display: grid; grid-template-columns: 1.05fr 0.95fr; gap: 28px; margin-top: 18px; }
+    .checks { display: flex; flex-direction: column; gap: 10px; }
+    .check {
+      display: grid; grid-template-columns: 28px 36px 1fr; gap: 14px; align-items: center;
+      background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 12px 16px; min-height: 78px;
+    }
+    .box { width: 26px; height: 26px; border: 2px solid var(--navy); border-radius: 6px; }
+    .check strong { display: block; font-size: 22px; font-weight: 600; color: var(--navy); line-height: 1.2; }
+    .check span { display: block; margin-top: 2px; font-size: 16px; color: var(--mid); font-weight: 400; }
+    .check .glyph { color: var(--navy); display: grid; place-items: center; }
+    .note { margin-top: 12px; font-size: 18px; color: var(--mid); padding-left: 4px; }
+    .flat {
+      background: #fff; border: 1px solid var(--line); border-radius: 28px;
+      display: flex; align-items: center; justify-content: center; padding: 12px; min-height: 0;
+    }
+    .flat img { width: 100%; height: 100%; object-fit: contain; }
+
+    /* ===========================================
+       QUALIFICATION
+       =========================================== */
+    .q-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; }
+    .q-head h2 { font-size: 48px; max-width: 980px; }
+    .badge {
+      display: inline-flex; align-items: center; height: 32px; padding: 0 12px; margin-bottom: 10px;
+      border-radius: 999px; background: rgba(79,163,255,0.16); color: var(--navy);
+      font-size: 14px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase;
+    }
+    .tabs { display: flex; gap: 10px; flex: none; }
+    .tab {
+      min-width: 168px; height: 56px; border-radius: 14px; display: grid; place-items: center;
+      font-family: var(--font-display); font-size: 28px; font-weight: 600; letter-spacing: 0.04em;
+    }
+    .tab.on { background: var(--navy); color: #fff; }
+    .tab.off { background: transparent; color: var(--navy); border: 2px solid var(--navy); }
+    .tiers { margin-top: 22px; display: flex; flex-direction: column; gap: 10px; }
+    .tier {
+      display: grid; grid-template-columns: 1.3fr 0.7fr; align-items: center;
+      background: #fff; border-radius: 14px; min-height: 78px; padding: 0 28px;
+      border: 1px solid var(--line);
+    }
+    .tier b { font-size: 26px; font-weight: 600; color: var(--navy); }
+    .tier em { font-style: normal; font-family: var(--font-display); font-weight: 600; font-size: 34px; color: var(--navy); text-align: right; }
+    .colhead {
+      display: grid; grid-template-columns: 1.3fr 0.7fr; padding: 0 28px; margin-top: 16px;
+      font-size: 14px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--mid);
+    }
+    .colhead span:last-child { text-align: right; }
+    .texas {
+      margin-top: 12px; background: #fff; border-radius: 14px; border: 1px solid var(--line);
+      border-left: 6px solid var(--navy); padding: 16px 20px; font-size: 22px; color: var(--navy); font-weight: 500;
+    }
+    .q-foot { margin-top: auto; display: flex; align-items: center; justify-content: space-between; padding-top: 12px; }
+    .broad { display: flex; align-items: center; gap: 14px; font-size: 22px; font-weight: 600; color: var(--navy); }
+    .broad i { width: 96px; height: 3px; background: var(--accent); border-radius: 3px; position: relative; display: block; }
+    .broad i::after {
+      content: ""; position: absolute; right: -2px; top: -5px;
+      border-top: 6px solid transparent; border-bottom: 6px solid transparent; border-left: 10px solid var(--accent);
+    }
+    .go {
+      height: 56px; padding: 0 22px; border-radius: 14px; background: var(--navy); color: #fff;
+      display: inline-flex; align-items: center; gap: 8px;
+      font-family: var(--font-display); font-size: 26px; font-weight: 600; letter-spacing: 0.03em;
+    }
+    .dscr-lead { margin-top: 28px; font-family: var(--font-display); font-weight: 600; font-size: 72px; line-height: 0.95; color: var(--navy); }
+    .dscr-sub { margin-top: 10px; font-size: 22px; color: var(--mid); }
+    .chips { display: flex; gap: 12px; margin-top: 22px; flex-wrap: wrap; }
+    .chip {
+      height: 60px; padding: 0 22px; border-radius: 999px; border: 2px solid var(--navy); background: #fff;
+      display: inline-flex; align-items: center; font-size: 22px; font-weight: 600; color: var(--navy);
+    }
+    .ask {
+      margin-top: 28px; background: #fff; border-radius: 18px; border: 1px solid var(--line);
+      border-left: 6px solid var(--accent); padding: 22px 28px; max-width: 920px;
+    }
+    .ask small { display: block; font-size: 14px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--mid); margin-bottom: 6px; }
+    .ask strong { font-family: var(--font-display); font-weight: 600; font-size: 40px; color: var(--navy); }
+
+    /* ===========================================
+       CONNECTED AND TIMELINE
+       =========================================== */
+    .apps { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 24px; margin-top: 48px; height: 440px; }
+    .app {
+      background: #fff; border: 1px solid var(--line); border-radius: 28px; padding: 40px 32px 36px;
+      display: flex; flex-direction: column; justify-content: flex-end; gap: 10px;
+    }
+    .app .glyph {
+      width: 88px; height: 88px; border-radius: 22px; background: var(--navy); color: #fff;
+      display: grid; place-items: center; margin-bottom: 28px;
+    }
+    .app h3 { font-family: var(--font-display); font-weight: 600; font-size: 42px; line-height: 0.98; color: var(--navy); min-height: 2.05em; }
+    .app p { font-size: 22px; color: var(--mid); min-height: 1.35em; }
+
+    .timeline { position: relative; margin-top: 72px; }
+    .shade {
+      position: absolute; left: 30%; right: 24%; top: 10px; height: 22px;
+      background: rgba(79,163,255,0.28); border-radius: 12px; z-index: 0;
+    }
+    .phases { display: grid; grid-template-columns: 0.8fr 1.5fr 0.8fr; position: relative; }
+    .phases::before {
+      content: ""; position: absolute; left: 8%; right: 8%; top: 18px; height: 6px;
+      background: #D5DEEC; border-radius: 6px; z-index: 0;
+    }
+    .phase { text-align: center; position: relative; z-index: 1; padding: 0 12px; }
+    .dot {
+      width: 26px; height: 26px; border-radius: 50%; margin: 8px auto 20px; background: var(--navy);
+      border: 5px solid var(--light); box-shadow: 0 0 0 3px var(--navy);
+    }
+    .dot.build { background: var(--accent); box-shadow: 0 0 0 3px var(--navy); }
+    .dot.go { background: var(--green); box-shadow: 0 0 0 3px var(--navy); }
+    .phase h3 { font-family: var(--font-display); font-weight: 600; font-size: 40px; color: var(--navy); line-height: 1; }
+    .phase > p { margin-top: 8px; font-size: 22px; color: var(--ink); }
+    .mini { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 16px; }
+    .mini li {
+      background: #fff; border: 1px solid var(--line); border-radius: 999px;
+      padding: 8px 14px; font-size: 18px; font-weight: 500; color: var(--navy);
+    }
+    .callout {
+      margin: 64px auto 0; max-width: 980px; background: #fff; border: 1px solid var(--line);
+      border-radius: 20px; padding: 26px 32px;
+    }
+    .callout strong { display: block; font-family: var(--font-display); font-weight: 600; font-size: 40px; color: var(--navy); line-height: 1; margin-bottom: 8px; }
+    .callout p { font-size: 24px; color: var(--ink); }
+    .shift { margin-top: 18px; text-align: center; font-size: 20px; color: var(--mid); }
+
+    .deck-stage { cursor: pointer; }
+    .deck-controls {
+      display: flex; align-items: center; gap: 10px; background: rgba(6,26,74,0.92); color: #fff;
+      border-radius: 999px; padding: 8px 14px; font-family: var(--font-body); font-size: 14px;
+      opacity: 0; pointer-events: none; transition: opacity 0.2s ease;
+    }
+    .deck-controls.show { opacity: 1; pointer-events: auto; }
+    .deck-controls button {
+      width: 36px; height: 36px; border: 0; border-radius: 50%; background: transparent; color: #fff; cursor: pointer;
+    }
+    .deck-controls .hint { opacity: 0.8; padding: 0 6px; white-space: nowrap; }
+  </style>
+</head>
+<body data-deck="dl">
+<svg aria-hidden="true" style="position:absolute;width:0;height:0;overflow:hidden">
+  <symbol id="i-clip" viewBox="0 0 24 24"><rect x="6" y="4" width="12" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M9 4.5h6V7H9z" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
+  <symbol id="i-people" viewBox="0 0 24 24"><circle cx="9" cy="8" r="2.4" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="16" cy="9" r="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M4.5 18.5c.8-2.6 2.6-3.8 4.5-3.8s3.7 1.2 4.5 3.8M14 14.8c1.4-.4 2.6.1 3.4 1.2.7 1 1.1 2 1.3 2.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+  <symbol id="i-grid" viewBox="0 0 24 24"><rect x="4" y="4" width="6.5" height="6.5" rx="1.4" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.4" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.4" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.4" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
+  <symbol id="i-phone" viewBox="0 0 24 24"><rect x="7" y="3" width="10" height="18" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M10 18h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+  <symbol id="i-swatch" viewBox="0 0 24 24"><circle cx="8" cy="10" r="3" fill="currentColor"/><circle cx="14" cy="8" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="15" cy="15" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
+  <symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="12" r="3.2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M11 12h9l-2 2.2M17.2 12l2 2.2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-flag" viewBox="0 0 24 24"><path d="M6 4v16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M6 5h11l-2 3.5L17 12H6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
+  <symbol id="i-chat" viewBox="0 0 24 24"><path d="M5 6.5h14v9H9l-4 3v-3H5z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 8v4.5l3 2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+  <symbol id="i-image" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M7 15l3-3 2 2 2-2 3 3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
+  <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M6 19c1.2-3 3.2-4.4 6-4.4S16.8 16 18 19" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+  <symbol id="i-lines" viewBox="0 0 24 24"><path d="M5 7h14M5 12h10M5 17h12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+  <symbol id="i-star" viewBox="0 0 24 24"><path d="M12 4.5l2.1 4.4 4.8.6-3.5 3.3.9 4.7L12 15.8 7.7 17.5l.9-4.7L5.1 9.5l4.8-.6z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></symbol>
+  <symbol id="i-medal" viewBox="0 0 24 24"><circle cx="12" cy="10" r="4.2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M9.2 13.6L8 20l4-2 4 2-1.2-6.4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
+  <symbol id="i-cal" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M8 3.5v4M16 3.5v4M4 10h16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+  <symbol id="i-megaphone" viewBox="0 0 24 24"><path d="M5 10v4h3l7 4V6L8 10H5z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M8 14.5V18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+  <symbol id="chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+</svg>
+
+<div class="deck-viewport">
+<main class="deck-stage" id="deckStage">
+
+  <!-- Talk: Glad to have you. Today we lock in everything our team needs, and you'll leave with your launch call booked. -->
+  <section class="slide title-slide active" id="welcome" data-file="slide-01-welcome.png">
+    <div class="title-inner">
+      <img class="mark hero reveal" src="waiz-white.svg" alt="Waiz">
+      <h1 class="reveal">Welcome to Waiz Media.</h1>
+      <p class="sub reveal">Your onboarding call.</p>
+      <div class="title-rule reveal"></div>
+      <p class="how reveal">Arrow keys, or click the right side to move ahead. Click the left edge to go back.</p>
+    </div>
+  </section>
+
+  <!-- Talk: Here's our path today. Most of this is confirming what you already gave us. -->
+  <section class="slide light" id="plan" data-file="slide-02-todays-plan.png">
+    <header class="chrome">
+      <img class="mark" src="waiz-navy.svg" alt="Waiz">
+      <div></div>
+      <div class="pageno">02</div>
+    </header>
+    <div class="slide-body">
+      <h2 class="headline reveal">Here's our path today.</h2>
+      <div class="path reveal">
+        <div class="path-line"></div>
+        <div class="stop"><div class="n">01</div><div class="bubble"><svg class="icon"><use href="#i-clip"/></svg></div><p>Confirm your setup</p></div>
+        <div class="stop"><div class="n">02</div><div class="bubble"><svg class="icon"><use href="#i-people"/></svg></div><p>Your team and leads</p></div>
+        <div class="stop"><div class="n">03</div><div class="bubble"><svg class="icon"><use href="#i-grid"/></svg></div><p>Your CRM</p></div>
+        <div class="stop"><div class="n">04</div><div class="bubble"><svg class="icon"><use href="#i-phone"/></svg></div><p>Phone numbers and hours</p></div>
+        <div class="stop"><div class="n">05</div><div class="bubble"><svg class="icon"><use href="#i-swatch"/></svg></div><p>Your brand</p></div>
+        <div class="stop"><div class="n">06</div><div class="bubble"><svg class="icon"><use href="#i-lines"/></svg></div><p>Who qualifies</p></div>
+        <div class="stop"><div class="n">07</div><div class="bubble"><svg class="icon"><use href="#i-key"/></svg></div><p>Access</p></div>
+        <div class="stop"><div class="n">08</div><div class="bubble"><svg class="icon"><use href="#i-flag"/></svg></div><p>Wrap-up and launch date</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Talk: From your sale and your form, here's what we have. Tell me if anything is off. -->
+  <section class="slide light" id="lock" data-file="slide-03-lock-in.png">
+    <header class="chrome">
+      <img class="mark" src="waiz-navy.svg" alt="Waiz">
+      <ol class="rail">
+        <li class="now"><b>1</b> Setup</li><li><b>2</b> Leads</li><li><b>3</b> CRM</li><li><b>4</b> Numbers</li><li><b>5</b> Brand</li><li><b>6</b> Qualify</li><li><b>7</b> Access</li><li><b>8</b> Launch</li>
+      </ol>
+      <div class="pageno">03</div>
+    </header>
+    <div class="slide-body">
+      <h2 class="headline reveal">Everything we'll lock in today.</h2>
+      <div class="lock reveal">
+        <div class="hub"><h3>Your<br>system</h3></div>
+        <div class="tiles">
+          <div class="tile"><span class="glyph"><svg class="icon"><use href="#i-megaphone"/></svg></span>What we market for you</div>
+          <div class="tile"><span class="glyph"><svg class="icon"><use href="#i-clip"/></svg></span>Your plan</div>
+          <div class="tile"><span class="glyph"><svg class="icon"><use href="#i-people"/></svg></span>Who works the leads</div>
+          <div class="tile"><span class="glyph"><svg class="icon"><use href="#i-grid"/></svg></span>Your CRM</div>
+          <div class="tile"><span class="glyph"><svg class="icon"><use href="#i-swatch"/></svg></span>Your brand</div>
+          <div class="tile"><span class="glyph"><svg class="icon"><use href="#i-key"/></svg></span>Access</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Talk: When a lead is ready, we bring them to you live. You choose whether we ring one number or everyone at once. -->
+
+
+  <!-- Talk: Leads rotate evenly across your LOs, and you get a text when one comes in. -->
+  <section class="slide light" id="route-dl" data-offer="dl" data-file="slide-04-routing-direct-leads.png">
+    <header class="chrome">
+      <img class="mark" src="waiz-navy.svg" alt="Waiz">
+      <ol class="rail">
+        <li class="done"><b>1</b> Setup</li><li class="now"><b>2</b> Leads</li><li><b>3</b> CRM</li><li><b>4</b> Numbers</li><li><b>5</b> Brand</li><li><b>6</b> Qualify</li><li><b>7</b> Access</li><li><b>8</b> Launch</li>
+      </ol>
+      <div class="pageno">04</div>
+    </header>
+    <div class="slide-body">
+      <p class="eyebrow reveal">Direct Leads</p>
+      <h2 class="headline reveal">Your leads come straight to you.</h2>
+      <div class="art-frame reveal">
+        <img src="deck-art/routing-direct.png" alt="New lead, your LOs take turns, the lead lands in your CRM. Text alert: New lead.">
+      </div>
+    </div>
+  </section>
+
+  <!-- Talk: Your text number can be different from the phone you take calls on. -->
+
+
+  <section class="slide light" id="numbers-dl" data-offer="dl" data-file="slide-05-numbers-direct-leads.png">
+    <header class="chrome">
+      <img class="mark" src="waiz-navy.svg" alt="Waiz">
+      <ol class="rail">
+        <li class="done"><b>1</b> Setup</li><li class="done"><b>2</b> Leads</li><li class="done"><b>3</b> CRM</li><li class="now"><b>4</b> Numbers</li><li><b>5</b> Brand</li><li><b>6</b> Qualify</li><li><b>7</b> Access</li><li><b>8</b> Launch</li>
+      </ol>
+      <div class="pageno">05</div>
+    </header>
+    <div class="slide-body">
+      <h2 class="headline reveal">The number we need.</h2>
+      <article class="num-card solo reveal">
+        <span class="glyph"><svg class="icon" style="width:40px;height:40px"><use href="#i-chat"/></svg></span>
+        <h3>Text number</h3>
+        <p>Where alerts go, one for each LO.</p>
+      </article>
+      <p class="footnote reveal">Your new business line is set up by our team. Nothing needed from you.</p>
+    </div>
+  </section>
+
+  <!-- Talk: Let's see what we already have and what's missing. -->
+  <section class="slide light" id="brand" data-file="slide-06-brand-checklist.png">
+    <header class="chrome">
+      <img class="mark" src="waiz-navy.svg" alt="Waiz">
+      <ol class="rail">
+        <li class="done"><b>1</b> Setup</li><li class="done"><b>2</b> Leads</li><li class="done"><b>3</b> CRM</li><li class="done"><b>4</b> Numbers</li><li class="now"><b>5</b> Brand</li><li><b>6</b> Qualify</li><li><b>7</b> Access</li><li><b>8</b> Launch</li>
+      </ol>
+      <div class="pageno">06</div>
+    </header>
+    <div class="slide-body">
+      <h2 class="headline reveal">Here's what helps you show up well.</h2>
+      <div class="brand-layout reveal">
+        <div>
+          <div class="checks">
+            <div class="check"><span class="box"></span><span class="glyph"><svg class="icon"><use href="#i-image"/></svg></span><div><strong>Your logo</strong></div></div>
+            <div class="check"><span class="box"></span><span class="glyph"><svg class="icon"><use href="#i-user"/></svg></span><div><strong>Headshot</strong></div></div>
+            <div class="check"><span class="box"></span><span class="glyph"><svg class="icon"><use href="#i-lines"/></svg></span><div><strong>Short bio</strong></div></div>
+            <div class="check"><span class="box"></span><span class="glyph"><svg class="icon"><use href="#i-swatch"/></svg></span><div><strong>Brand colors</strong><span>Or colors you like</span></div></div>
+            <div class="check"><span class="box"></span><span class="glyph"><svg class="icon"><use href="#i-star"/></svg></span><div><strong>Reviews</strong><span>If you have them</span></div></div>
+            <div class="check"><span class="box"></span><span class="glyph"><svg class="icon"><use href="#i-medal"/></svg></span><div><strong>Anything that builds trust</strong><span>Years in business, awards, affiliations</span></div></div>
+          </div>
+          <p class="note">Some of this may already be on your form.</p>
+        </div>
+        <div class="flat">
+          <img src="deck-art/brand-checklist.png" alt="Logo plaque, headshot, color chips, stars, a short bio, and an award.">
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Talk: This is what we recommend starting with. Broad in month one, then we tune together. -->
+  <section class="slide light" id="qual-reverse" data-file="slide-07-qualification-reverse.png">
+    <header class="chrome">
+      <img class="mark" src="waiz-navy.svg" alt="Waiz">
+      <ol class="rail">
+        <li class="done"><b>1</b> Setup</li><li class="done"><b>2</b> Leads</li><li class="done"><b>3</b> CRM</li><li class="done"><b>4</b> Numbers</li><li class="done"><b>5</b> Brand</li><li class="now"><b>6</b> Qualify</li><li><b>7</b> Access</li><li><b>8</b> Launch</li>
+      </ol>
+      <div class="pageno">07</div>
+    </header>
+    <div class="slide-body">
+      <div class="q-head reveal">
+        <div>
+          <div class="badge">Recommended</div>
+          <h2 class="headline">We start broad, then tighten together.</h2>
+        </div>
+        <div class="tabs">
+          <a class="tab on" href="#qual-reverse">Reverse</a>
+          <a class="tab off" href="#qual-dscr">DSCR</a>
+        </div>
+      </div>
+      <div class="colhead reveal"><span>Borrowers</span><span>We start with</span></div>
+      <div class="tiers reveal">
+        <div class="tier"><b>Both spouses 80+</b><em>LTV under 55%</em></div>
+        <div class="tier"><b>Both spouses 70+</b><em>LTV under 50%</em></div>
+        <div class="tier"><b>Both spouses 62+</b><em>LTV under 42%</em></div>
+        <div class="tier"><b>Both spouses 55+</b><em>LTV under 35%</em></div>
+      </div>
+      <p class="texas reveal">Texas: no spouse under 62. Not allowed.</p>
+      <div class="q-foot reveal">
+        <div class="broad">Broad <i></i> adjust with you</div>
+        <a class="go" href="#connected">Continue <svg class="icon" style="width:22px;height:22px"><use href="#chev"/></svg></a>
+      </div>
+    </div>
+  </section>
+
+  <section class="slide light" id="qual-dscr" data-file="slide-08-qualification-dscr.png">
+    <header class="chrome">
+      <img class="mark" src="waiz-navy.svg" alt="Waiz">
+      <ol class="rail">
+        <li class="done"><b>1</b> Setup</li><li class="done"><b>2</b> Leads</li><li class="done"><b>3</b> CRM</li><li class="done"><b>4</b> Numbers</li><li class="done"><b>5</b> Brand</li><li class="now"><b>6</b> Qualify</li><li><b>7</b> Access</li><li><b>8</b> Launch</li>
+      </ol>
+      <div class="pageno">08</div>
+    </header>
+    <div class="slide-body">
+      <div class="q-head reveal">
+        <div>
+          <div class="badge">Recommended</div>
+          <h2 class="headline">We start broad, then tighten together.</h2>
+        </div>
+        <div class="tabs">
+          <a class="tab off" href="#qual-reverse">Reverse</a>
+          <a class="tab on" href="#qual-dscr">DSCR</a>
+        </div>
+      </div>
+      <p class="dscr-lead reveal">Usually no filter.</p>
+      <p class="dscr-sub reveal">Optional, if you want one.</p>
+      <div class="chips reveal">
+        <span class="chip">FICO</span>
+        <span class="chip">Property type</span>
+        <span class="chip">LTV</span>
+        <span class="chip">Property value</span>
+      </div>
+      <div class="ask reveal">
+        <small>Also ask</small>
+        <strong>Can you market in all states?</strong>
+      </div>
+      <div class="q-foot reveal">
+        <div class="broad">Broad <i></i> adjust with you</div>
+        <a class="go" href="#connected">Continue <svg class="icon" style="width:22px;height:22px"><use href="#chev"/></svg></a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Talk: Let's do these together right now so nothing waits on email. -->
+  <section class="slide light" id="connected" data-file="slide-09-connected.png">
+    <header class="chrome">
+      <img class="mark" src="waiz-navy.svg" alt="Waiz">
+      <ol class="rail">
+        <li class="done"><b>1</b> Setup</li><li class="done"><b>2</b> Leads</li><li class="done"><b>3</b> CRM</li><li class="done"><b>4</b> Numbers</li><li class="done"><b>5</b> Brand</li><li class="done"><b>6</b> Qualify</li><li class="now"><b>7</b> Access</li><li><b>8</b> Launch</li>
+      </ol>
+      <div class="pageno">09</div>
+    </header>
+    <div class="slide-body">
+      <h2 class="headline reveal">Let's get you connected.</h2>
+      <div class="apps reveal">
+        <article class="app">
+          <span class="glyph"><svg class="icon" style="width:40px;height:40px"><use href="#i-cal"/></svg></span>
+          <h3>Your HighLevel account</h3>
+          <p>CRM and calendar</p>
+        </article>
+        <article class="app">
+          <span class="glyph"><svg class="icon" style="width:40px;height:40px"><use href="#i-grid"/></svg></span>
+          <h3>Facebook Business Manager</h3>
+          <p></p>
+        </article>
+        <article class="app">
+          <span class="glyph"><svg class="icon" style="width:40px;height:40px"><use href="#i-chat"/></svg></span>
+          <h3>Slack</h3>
+          <p>You and your LOs</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- Talk: If you don't hear from us for a few days, that's us heads-down building. -->
+  <section class="slide light" id="timeline" data-file="slide-10-next-days.png">
+    <header class="chrome">
+      <img class="mark" src="waiz-navy.svg" alt="Waiz">
+      <ol class="rail">
+        <li class="done"><b>1</b> Setup</li><li class="done"><b>2</b> Leads</li><li class="done"><b>3</b> CRM</li><li class="done"><b>4</b> Numbers</li><li class="done"><b>5</b> Brand</li><li class="done"><b>6</b> Qualify</li><li class="done"><b>7</b> Access</li><li class="now"><b>8</b> Launch</li>
+      </ol>
+      <div class="pageno">10</div>
+    </header>
+    <div class="slide-body">
+      <h2 class="headline reveal">Your next 8 to 9 days.</h2>
+      <div class="timeline reveal">
+        <div class="shade"></div>
+        <div class="phases">
+          <div class="phase">
+            <div class="dot"></div>
+            <h3>Today</h3>
+            <p>Onboarding call</p>
+          </div>
+          <div class="phase">
+            <div class="dot build"></div>
+            <h3>We build</h3>
+            <ul class="mini">
+              <li>Ads</li><li>Your brand</li><li>Phone setup</li><li>CRM connection</li>
+            </ul>
+          </div>
+          <div class="phase">
+            <div class="dot go"></div>
+            <h3>Launch call</h3>
+            <p>Day 8 to 9</p>
+          </div>
+        </div>
+      </div>
+      <div class="callout reveal">
+        <strong>Quiet doesn't mean stopped.</strong>
+        <p>Our team is working through a long list for you.</p>
+      </div>
+      <p class="shift reveal">Your launch date may shift a day or two either way.</p>
+    </div>
+  </section>
+
+  <!-- Talk: Let's pick a time about 8 to 9 days out. You'll see a recap in Slack today. -->
+  <section class="slide title-slide" id="close" data-file="slide-11-launch-call.png">
+    <div class="title-inner">
+      <img class="mark hero reveal" src="waiz-white.svg" alt="Waiz">
+      <h1 class="reveal">Let's book your launch call.</h1>
+      <p class="sub reveal">Questions anytime? Reach us in Slack.</p>
+      <div class="title-rule reveal"></div>
+    </div>
+  </section>
+
+</main>
+</div>
+
+<div class="deck-controls">
+  <button id="prev" type="button" aria-label="Previous slide">‹</button>
+  <span id="count">1 / 11</span>
+  <button id="next" type="button" aria-label="Next slide">›</button>
+  <span class="hint">Arrows or click</span>
+  <button id="full" type="button" aria-label="Full screen">⛶</button>
+</div>
+
+<script>
+/* ===========================================
+   SLIDE PRESENTATION CONTROLLER
+   Fixed 1920×1080 stage, scaled to the viewport.
+   =========================================== */
+class SlidePresentation {
+  constructor() {
+    const deck = document.body.dataset.deck;
+    if (deck === "lt" || deck === "dl") {
+      document.querySelectorAll(".slide[data-offer]").forEach((slide) => {
+        if (slide.dataset.offer !== deck) slide.remove();
+      });
+    }
+    this.slides = [...document.querySelectorAll(".slide")];
+    this.currentSlide = 0;
+    this.stage = document.getElementById("deckStage");
+    this.locked = false;
+    this.setupStageScale();
+    const params = new URLSearchParams(location.search);
+    const id = params.get("slide");
+    if (id) document.body.classList.add("is-shot");
+    const start = id ? this.slides.findIndex((s) => s.id === id) : 0;
+    this.showSlide(start < 0 ? 0 : start);
+    if (!id) {
+      this.setupKeyboardNav();
+      this.setupTouchNav();
+      this.setupWheel();
+      this.setupClickNav();
+      document.getElementById("prev").addEventListener("click", (e) => { e.stopPropagation(); this.showSlide(this.currentSlide - 1); });
+      document.getElementById("next").addEventListener("click", (e) => { e.stopPropagation(); this.showSlide(this.currentSlide + 1); });
+      document.getElementById("full").addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (!document.fullscreenElement) document.documentElement.requestFullscreen();
+        else document.exitFullscreen();
+      });
+      const bar = document.querySelector(".deck-controls");
+      let hideBar;
+      window.addEventListener("mousemove", (e) => {
+        if (window.innerHeight - e.clientY < 88) {
+          bar.classList.add("show");
+          clearTimeout(hideBar);
+          hideBar = setTimeout(() => bar.classList.remove("show"), 1400);
+        }
+      });
+    }
+    window.presentation = this;
+  }
+  setupClickNav() {
+    document.addEventListener("click", (e) => {
+      const link = e.target.closest("a[href^='#']");
+      if (link) {
+        e.preventDefault();
+        const id = link.getAttribute("href").slice(1);
+        const idx = this.slides.findIndex((s) => s.id === id);
+        if (idx >= 0) this.showSlide(idx);
+        return;
+      }
+      if (e.target.closest("a, button, .deck-controls")) return;
+      const rect = this.stage.getBoundingClientRect();
+      if (e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom) return;
+      const forward = (e.clientX - rect.left) > rect.width * 0.2;
+      this.showSlide(this.currentSlide + (forward ? 1 : -1));
+    });
+  }
+  setupStageScale() {
+    const scale = () => {
+      const factor = Math.min(window.innerWidth / 1920, window.innerHeight / 1080);
+      const x = (window.innerWidth - 1920 * factor) / 2;
+      const y = (window.innerHeight - 1080 * factor) / 2;
+      this.stage.style.transform = `translate(${x}px, ${y}px) scale(${factor})`;
+    };
+    scale();
+    window.addEventListener("resize", scale);
+  }
+  setupKeyboardNav() {
+    window.addEventListener("keydown", (e) => {
+      if (["ArrowRight", "ArrowDown", "PageDown", " "].includes(e.key)) { e.preventDefault(); this.showSlide(this.currentSlide + 1); }
+      if (["ArrowLeft", "ArrowUp", "PageUp"].includes(e.key)) { e.preventDefault(); this.showSlide(this.currentSlide - 1); }
+      if (e.key === "Home") this.showSlide(0);
+      if (e.key === "End") this.showSlide(this.slides.length - 1);
+      if (e.key === "f" || e.key === "F") {
+        if (!document.fullscreenElement) document.documentElement.requestFullscreen();
+        else document.exitFullscreen();
+      }
+    });
+  }
+  setupTouchNav() {
+    let x0 = null;
+    window.addEventListener("touchstart", (e) => { x0 = e.changedTouches[0].clientX; }, { passive: true });
+    window.addEventListener("touchend", (e) => {
+      if (x0 == null) return;
+      const dx = e.changedTouches[0].clientX - x0;
+      if (Math.abs(dx) > 50) this.showSlide(this.currentSlide + (dx < 0 ? 1 : -1));
+      x0 = null;
+    }, { passive: true });
+  }
+  setupWheel() {
+    window.addEventListener("wheel", (e) => {
+      if (this.locked || Math.abs(e.deltaY) < 20) return;
+      this.locked = true;
+      this.showSlide(this.currentSlide + (e.deltaY > 0 ? 1 : -1));
+      setTimeout(() => { this.locked = false; }, 500);
+    }, { passive: true });
+  }
+  goToSlide(i) { this.showSlide(i); }
+  showSlide(index) {
+    this.currentSlide = Math.max(0, Math.min(index, this.slides.length - 1));
+    this.slides.forEach((slide, i) => {
+      const on = i === this.currentSlide;
+      slide.classList.toggle("active", on);
+      slide.classList.toggle("visible", on);
+    });
+    const count = document.getElementById("count");
+    if (count) count.textContent = `${this.currentSlide + 1} / ${this.slides.length}`;
+  }
+}
+new SlidePresentation();
+</script>
+</body>
+</html>

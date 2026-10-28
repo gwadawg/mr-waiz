@@ -86,6 +86,17 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  async redirects() {
+    return [
+      // Deck HTML uses relative links (fonts, art, the other deck). Those resolve
+      // only when the browser URL is the file itself, so the short path lands there.
+      {
+        source: "/onboarding-call",
+        destination: "/onboarding-call/index.html",
+        permanent: false,
+      },
+    ];
+  },
 };
 
 export default nextConfig;
