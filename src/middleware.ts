@@ -35,6 +35,7 @@ const BYPASS_ROUTES = [
   '/tools/lead-source-roi',
   '/thank-you',
   '/offers/',
+  '/onboarding-call',
   '/card',
   '/api/acquisition/forms',
   '/api/eod',
@@ -58,6 +59,7 @@ const CARD_HOST_BLOCKED = [
   '/tools',
   '/library',
   '/offers',
+  '/onboarding-call',
 ];
 
 function isCardHost(hostHeader: string | null): boolean {
