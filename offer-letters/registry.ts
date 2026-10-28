@@ -26,4 +26,8 @@ export const offerLetters: Record<string, OfferLetter> = {
     token: '17fc5e7d15306df07a9cb97f8890a844',
     file: 'west-capital/index.html',
   },
+  'cfnb': {
+    token: '4456aca5ff14d6d36dc32d93d04f1c24',
+    file: 'cfnb/index.html',
+  },
 };

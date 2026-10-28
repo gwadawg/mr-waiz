@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Waiz × Community First — New Pricing Proposal</title>
+<style>
+  :root {
+    --ink: #12263f;
+    --navy: #0e2744;
+    --muted: #5c6d80;
+    --line: #e3e7ee;
+    --paper: #f4f6f8;
+    --card: #ffffff;
+    --amber: #c4840a;
+    --amber-wash: #fbf6ea;
+    --struck: #8b97a6;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: "Avenir Next", "Segoe UI", Helvetica, Arial, sans-serif;
+    font-size: 15px;
+    line-height: 1.45;
+  }
+  .page {
+    max-width: 1040px;
+    margin: 0 auto;
+    padding: 40px 36px 56px;
+  }
+  .kicker {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 22px;
+  }
+  h1 {
+    font-family: Palatino, "Palatino Linotype", "Iowan Old Style", Georgia, serif;
+    font-weight: 600;
+    font-size: 40px;
+    line-height: 1.12;
+    letter-spacing: -0.02em;
+    margin: 0 0 12px;
+    max-width: 18ch;
+  }
+  .lede {
+    margin: 0 0 32px;
+    font-size: 17px;
+    color: var(--navy);
+  }
+  h2 {
+    font-family: Palatino, "Palatino Linotype", Georgia, serif;
+    font-size: 22px;
+    font-weight: 600;
+    margin: 0 0 6px;
+  }
+  .section { margin-top: 36px; }
+  .note { color: var(--muted); font-size: 13px; margin: 8px 0 0; }
+
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 20px 22px 8px;
+  }
+  .card.new {
+    background: var(--amber-wash);
+    border-color: #ead7a4;
+  }
+  .card h3 {
+    margin: 0 0 4px;
+    font-size: 13px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 600;
+  }
+  .card .price {
+    font-family: Palatino, Georgia, serif;
+    font-size: 26px;
+    margin: 0 0 12px;
+  }
+  .card ul { list-style: none; margin: 0; padding: 0; }
+  .card li {
+    padding: 10px 0;
+    border-top: 1px solid var(--line);
+  }
+  .card.new li { border-top-color: #ead7a4; }
+  .gone { color: var(--struck); text-decoration: line-through; }
+
+  .chart-wrap {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 16px 12px 8px;
+    margin-top: 14px;
+  }
+  .legend { display: flex; gap: 18px; font-size: 13px; color: var(--muted); margin: 0 8px 4px; }
+  .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+  .swatch.now { background: #1e3a5f; }
+  .swatch.next { background: #c4840a; }
+  svg { width: 100%; height: auto; display: block; }
+  .axis { stroke: #d5dbe3; stroke-width: 1; }
+  .tick { fill: var(--muted); font-size: 11px; font-family: "Avenir Next", "Segoe UI", sans-serif; }
+  .bar-now { fill: #1e3a5f; }
+  .bar-new { fill: #c4840a; }
+  .glabel { fill: var(--ink); font-size: 12px; font-family: "Avenir Next", "Segoe UI", sans-serif; font-weight: 600; }
+  table { width: 100%; border-collapse: collapse; margin-top: 14px; font-size: 14px; }
+  th {
+    text-align: right;
+    font-weight: 600;
+    font-size: 12px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--line);
+  }
+  th:first-child, td:first-child { text-align: left; }
+  td { text-align: right; padding: 9px 10px; border-bottom: 1px solid var(--line); }
+  .split { display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 28px; }
+  .split ul { margin: 10px 0 0; padding: 0; list-style: none; }
+  .split li { padding: 8px 0 8px 16px; border-top: 1px solid var(--line); position: relative; }
+  .split li::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 16px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--amber);
+  }
+  .rule {
+    margin-top: 28px;
+    padding-top: 16px;
+    border-top: 1px solid var(--line);
+    color: var(--navy);
+  }
+  .rule strong { font-weight: 600; }
+
+  @media (max-width: 720px) {
+    .page { padding: 28px 18px 40px; }
+    h1 { font-size: 32px; }
+    .cols, .split { grid-template-columns: 1fr; }
+    .kicker { flex-direction: column; gap: 4px; }
+  }
+  @media print {
+    body { background: white; }
+    .page { max-width: none; padding: 0; }
+    .card, .chart-wrap { break-inside: avoid; }
+    .section { break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<main class="page">
+  <p class="kicker">
+    <span>Waiz × Community First National Bank</span>
+    <span>October 2026</span>
+  </p>
+  <h1>New Pricing Proposal</h1>
+  <p class="lede">$4,000 a month + $1,000 per funded loan.</p>
+
+  <section class="cols" aria-label="Today versus the new offer">
+    <article class="card">
+      <h3>Current</h3>
+      <p class="price">$4,000 + add-ons</p>
+      <ul>
+        <li>$4,000 retainer</li>
+        <li class="gone">10% of ad spend</li>
+        <li class="gone">$1,200 website management</li>
+        <li class="gone">$800 per funding after 5 a month</li>
+        <li class="gone">SendBlue, paid by you</li>
+      </ul>
+    </article>
+    <article class="card new">
+      <h3>Proposed</h3>
+      <p class="price">$4,000 + $1,000</p>
+      <ul>
+        <li>$4,000 retainer</li>
+        <li>$1,000 per funded loan</li>
+        <li>Ad management, website, SEO, reporting, and SendBlue included</li>
+      </ul>
+    </article>
+  </section>
+
+  <section class="section">
+    <h2>Monthly cost at each funding volume</h2>
+    <p class="note">Each bar is what you pay that month: ad spend plus our fee. Ad spend scales at $1,743 per funded loan.</p>
+    <div class="chart-wrap">
+      <p class="legend">
+        <span><i class="swatch now"></i>Current pricing</span>
+        <span><i class="swatch next"></i>Proposed pricing</span>
+      </p>
+      <svg viewBox="0 0 680 256" role="img" aria-label="Total monthly cost at 9, 15, 20, and 25 fundings. Current pricing versus the proposal. Totals are ad spend plus fee.">
+        <line class="axis" x1="56" y1="36" x2="56" y2="216"/>
+        <line class="axis" x1="56" y1="216" x2="660" y2="216"/>
+        <text class="tick" x="50" y="220" text-anchor="end">$0</text>
+        <text class="tick" x="50" y="130" text-anchor="end">$40k</text>
+        <text class="tick" x="50" y="40" text-anchor="end">$80k</text>
+        <line class="axis" x1="56" y1="126" x2="660" y2="126" stroke-dasharray="3 4"/>
+
+        <!-- scale: $80,000 = 180px, baseline y=216 -->
+        <rect class="bar-now" x="100" y="158.3" width="34" height="57.7" rx="3"/>
+        <rect class="bar-new" x="140" y="151.5" width="34" height="64.5" rx="3"/>
+        <text class="glabel" x="137" y="238" text-anchor="middle">9 loans</text>
+
+        <rect class="bar-now" x="248" y="121.6" width="34" height="94.4" rx="3"/>
+        <rect class="bar-new" x="288" y="114.4" width="34" height="101.6" rx="3"/>
+        <text class="glabel" x="285" y="238" text-anchor="middle">15 loans</text>
+
+        <rect class="bar-now" x="396" y="91.0" width="34" height="125.0" rx="3"/>
+        <rect class="bar-new" x="436" y="83.6" width="34" height="132.4" rx="3"/>
+        <text class="glabel" x="433" y="238" text-anchor="middle">20 loans</text>
+
+        <rect class="bar-now" x="544" y="60.5" width="34" height="155.5" rx="3"/>
+        <rect class="bar-new" x="584" y="52.7" width="34" height="163.3" rx="3"/>
+        <text class="glabel" x="581" y="238" text-anchor="middle">25 loans</text>
+      </svg>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Fundings / month</th>
+          <th>Current monthly total</th>
+          <th>Proposed monthly total</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>9</td><td>$25,656</td><td>$28,687</td></tr>
+        <tr><td>15</td><td>$41,960</td><td>$45,145</td></tr>
+        <tr><td>20</td><td>$55,546</td><td>$58,860</td></tr>
+        <tr><td>25</td><td>$69,133</td><td>$72,575</td></tr>
+      </tbody>
+    </table>
+    <p class="note">Totals include ad spend at $1,743 per funded loan, the May–September 2026 average. Current totals exclude SendBlue.</p>
+  </section>
+
+  <section class="section split">
+    <div>
+      <h2>What you get</h2>
+      <ul>
+        <li>Meta ad management, with no percentage of spend</li>
+        <li>More creative volume: new video ads and angles</li>
+        <li>Website and landing page management</li>
+        <li>Monthly SEO and AI search ranking</li>
+        <li>Live reporting dashboard and funded-loan tracking</li>
+        <li>SendBlue texting, paid by Waiz</li>
+      </ul>
+    </div>
+    <div>
+      <h2>What goes away</h2>
+      <ul>
+        <li>10% of ad spend</li>
+        <li>The $1,200 website fee</li>
+        <li>The 5-funding threshold, and the tracking behind it</li>
+        <li>Your SendBlue bill. We take it over and pay for it.</li>
+      </ul>
+    </div>
+  </section>
+
+  <p class="rule"><strong>How a funded loan counts.</strong> A Waiz-tagged loan on the monthly production log you already send us. The borrower is in our database with a phone number or email before the close.</p>
+</main>
+</body>
+</html>
