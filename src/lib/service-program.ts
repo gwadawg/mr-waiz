@@ -28,6 +28,18 @@ export const SERVICE_PROGRAM_META: Record<ServiceProgram, ServiceProgramMeta> = 
   },
 };
 
+/**
+ * System Type on the kickoff form.
+ * Stored codes stay `core` (Call Center) and `lead_gen` (Leads).
+ */
+export function resolveKickoffServiceProgram(value: unknown): ServiceProgram | null {
+  const raw = String(value ?? '').trim().toLowerCase().replace(/[\s-]+/g, '_');
+  if (!raw) return null;
+  if (raw === 'core' || raw === 'call_center' || raw === 'callcenter') return 'core';
+  if (raw === 'lead_gen' || raw === 'leads' || raw === 'leads_only' || raw === 'leadgen') return 'lead_gen';
+  return normalizeServiceProgram(value);
+}
+
 export function normalizeServiceProgram(value: unknown): ServiceProgram | null {
   const raw = String(value ?? '').trim().toLowerCase().replace(/\s+/g, '_');
   if (!raw) return null;
@@ -48,6 +60,14 @@ export function normalizeServiceProgram(value: unknown): ServiceProgram | null {
 export function getServiceProgramLabel(value: unknown): string | null {
   const normalized = normalizeServiceProgram(value);
   return normalized ? SERVICE_PROGRAM_META[normalized].label : null;
+}
+
+/** Words the kickoff form shows. Stored codes stay core and lead_gen. */
+export function kickoffSystemTypeLabel(value: unknown): string | null {
+  const program = resolveKickoffServiceProgram(value);
+  if (program === 'core') return 'Call Center';
+  if (program === 'lead_gen') return 'Leads';
+  return null;
 }
 
 /** Service program applies to RM and DSCR marketing clients, not Call Center. */

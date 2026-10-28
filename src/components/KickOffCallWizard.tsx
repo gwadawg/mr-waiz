@@ -9,14 +9,15 @@ import {
 } from "@/lib/onboarding-form-profile";
 import {
   applyKickoffSavedNarrative,
-  CC_KICKOFF_FIELD_LABELS,
-  CONTACT_ROLE_OPTIONS,
+  CONTACT_ROLE_CONFIRM_OPTIONS,
+  contactRoleNeedsConfirm,
   countKickoffFieldsOnFile,
   getKickoffConfig,
   isKickoffFieldVisible,
   isKickoffIdentityFieldComplete,
   isKickoffSetupResolved,
   KICKOFF_PM_FIELD_LABELS,
+  LEAD_NURTURING_HOSTS,
   kickoffDraftFromClient,
   kickoffDraftToBody,
   kickoffFieldHadValue,
@@ -28,7 +29,6 @@ import {
 } from "@/lib/kickoff";
 import type { RelatedOfferSummary } from "@/lib/client-identity";
 import {
-  getReportingTypeLabel,
   REPORTING_TYPE_META,
   type ReportingType,
 } from "@/lib/reporting-types";
@@ -179,7 +179,23 @@ export default function KickOffCallWizard({ clientId, fallbackName, onClose, onC
       return;
     }
     if (saveMode === "complete" && serviceProgramApplies(draft.reporting_type) && !draft.service_program) {
-      setSaveError("Select fulfillment (Call Center or Leads Only) before completing.");
+      setSaveError("Select System Type (Leads or Call Center) before completing.");
+      return;
+    }
+    if (saveMode === "complete" && !draft.lead_nurturing_host) {
+      setSaveError("Select Lead Nurturing Host before completing.");
+      return;
+    }
+    if (saveMode === "complete" && !draft.qualifies_leads) {
+      setSaveError("Select whether we qualify leads before completing.");
+      return;
+    }
+    if (saveMode === "complete" && !draft.account_shape) {
+      setSaveError("Select Solo or Team before completing.");
+      return;
+    }
+    if (saveMode === "complete" && contactRoleNeedsConfirm(draft.contact_role) && !draft.contact_role_choice) {
+      setSaveError("Confirm whether they own the company or are a loan officer.");
       return;
     }
     if (saveMode === "complete" && shareMode) {
@@ -215,11 +231,14 @@ export default function KickOffCallWizard({ clientId, fallbackName, onClose, onC
     }
     const recording = data.onboarding_call?.recording_url ?? draft.recording_url;
     const transcript = data.onboarding_call?.transcript ?? draft.transcript;
-    const refreshed = kickoffDraftFromClient(
-      data.client as KickoffClient,
-      recording,
-      !!data.vertical_confirmed,
-      transcript,
+    const refreshed = applyKickoffSavedNarrative(
+      kickoffDraftFromClient(
+        data.client as KickoffClient,
+        recording,
+        !!data.vertical_confirmed,
+        transcript,
+      ),
+      data.saved_narrative,
     );
     setDraft(refreshed);
     setInitialSnapshot(refreshed);
@@ -328,8 +347,8 @@ export default function KickOffCallWizard({ clientId, fallbackName, onClose, onC
                   <p className="text-sm" style={{ color: labelColor(shareMode) }}>
                     What type of client is this?
                   </p>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                    {(["RM", "DSCR", "CALL_CENTER"] as ReportingType[]).map(v => {
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {(["RM", "DSCR"] as ReportingType[]).map(v => {
                       const meta = REPORTING_TYPE_META[v];
                       const selected = draft.reporting_type === v && draft.vertical_confirmed;
                       return (
@@ -342,7 +361,7 @@ export default function KickOffCallWizard({ clientId, fallbackName, onClose, onC
                           style={{
                             color: titleColor,
                             background: selected
-                              ? shareMode ? meta.background : meta.background
+                              ? meta.background
                               : shareMode ? "#ffffff" : "rgba(255,255,255,0.04)",
                             border: selected
                               ? `2px solid ${meta.color}`
@@ -350,9 +369,6 @@ export default function KickOffCallWizard({ clientId, fallbackName, onClose, onC
                           }}
                         >
                           <span className="font-semibold block">{meta.shortLabel}</span>
-                          <span className="text-xs mt-1 block" style={{ color: subtitleColor }}>
-                            {meta.description}
-                          </span>
                         </button>
                       );
                     })}
@@ -361,9 +377,6 @@ export default function KickOffCallWizard({ clientId, fallbackName, onClose, onC
               ) : (
                 <div className="flex items-center gap-3 flex-wrap">
                   <ReportingTypeBadge value={draft.reporting_type} size="md" />
-                  <span className="text-sm" style={{ color: labelColor(shareMode) }}>
-                    {getReportingTypeLabel(draft.reporting_type)}
-                  </span>
                   <button
                     type="button"
                     className="text-xs font-medium underline"
@@ -378,12 +391,13 @@ export default function KickOffCallWizard({ clientId, fallbackName, onClose, onC
               {draft.vertical_confirmed && serviceProgramApplies(draft.reporting_type) && (
                 <div className="mt-5 space-y-3">
                   <p className="text-sm font-medium" style={{ color: labelColor(shareMode) }}>
-                    What fulfillment are we doing?
+                    System Type
                   </p>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     {(["core", "lead_gen"] as ServiceProgram[]).map(p => {
                       const meta = SERVICE_PROGRAM_META[p];
                       const selected = draft.service_program === p;
+                      const label = p === "core" ? "Call Center" : "Leads";
                       return (
                         <button
                           key={p}
@@ -397,10 +411,7 @@ export default function KickOffCallWizard({ clientId, fallbackName, onClose, onC
                             border: selected ? `2px solid ${meta.color}` : `1px solid ${borderColor}`,
                           }}
                         >
-                          <span className="font-semibold block">{meta.label}</span>
-                          <span className="text-xs mt-1 block" style={{ color: subtitleColor }}>
-                            {meta.description}
-                          </span>
+                          <span className="font-semibold block">{label}</span>
                         </button>
                       );
                     })}
@@ -408,11 +419,6 @@ export default function KickOffCallWizard({ clientId, fallbackName, onClose, onC
                 </div>
               )}
 
-              {draft.vertical_confirmed && draft.reporting_type === "CALL_CENTER" && (
-                <p className="text-sm mt-3" style={{ color: subtitleColor }}>
-                  Fulfillment package is not applicable for HE clients.
-                </p>
-              )}
             </Section>
 
             {!setupResolved && (
@@ -447,26 +453,20 @@ export default function KickOffCallWizard({ clientId, fallbackName, onClose, onC
                   >
                     <strong>Contact profile already on file</strong>
                     {relatedOffers.length > 1 ? (
-                      <> — phone, NMLS, licenses, and timezone are shared across {relatedOffers.length} offers for this client. Update them in the client file if anything changed.</>
+                      <> — NMLS, licenses, brokerage, and timezone are shared across {relatedOffers.length} offers. A change here updates each of them.</>
                     ) : (
-                      <> — phone, NMLS, licenses, and timezone are already saved. Update them in the client file if anything changed.</>
+                      <> — NMLS, licenses, brokerage, and timezone are prefilled. Change anything that is off.</>
                     )}
                   </div>
                 )}
 
-                {!identityComplete && (
                 <Section title="Confirm Information" shareMode={shareMode}>
                   <div className="space-y-4">
-                    {visible("phone") && (
-                      <Field label="Phone" required shareMode={shareMode} status={fieldStatus("phone")} helper="Primary contact number on file.">
-                        <input type="tel" value={draft.phone} disabled={saving} onChange={e => patch("phone", e.target.value)} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={fieldStyle(shareMode, fieldStatus("phone"))} />
-                      </Field>
-                    )}
-                    {visible("contact_role") && (
-                      <Field label="What position best describes your role?" shareMode={shareMode} status={fieldStatus("contact_role")}>
-                        <select value={draft.contact_role} disabled={saving} onChange={e => patch("contact_role", e.target.value)} className="w-full px-3 py-2 rounded-lg text-sm outline-none cursor-pointer" style={fieldStyle(shareMode, fieldStatus("contact_role"))}>
+                    {contactRoleNeedsConfirm(draft.contact_role) && (
+                      <Field label="Do you own the company, or are you a loan officer there?" shareMode={shareMode} status={fieldStatus("contact_role_choice")}>
+                        <select value={draft.contact_role_choice} disabled={saving} onChange={e => patch("contact_role_choice", e.target.value as KickoffDraft["contact_role_choice"])} className="w-full px-3 py-2 rounded-lg text-sm outline-none cursor-pointer" style={fieldStyle(shareMode, fieldStatus("contact_role_choice"))}>
                           <option value="">Select…</option>
-                          {CONTACT_ROLE_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+                          {CONTACT_ROLE_CONFIRM_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                         </select>
                       </Field>
                     )}
@@ -492,16 +492,10 @@ export default function KickOffCallWizard({ clientId, fallbackName, onClose, onC
                     )}
                   </div>
                 </Section>
-                )}
 
-                {(visible("appointment_settings") || visible("daily_adspend") || visible("facebook_page_name") || visible("phone_notifications") || visible("phone_live_transfer")) && (
+                {(visible("daily_adspend") || visible("facebook_page_name") || visible("phone_notifications") || visible("phone_live_transfer") || draft.service_program === "core") && (
                   <Section title="Get Information" shareMode={shareMode}>
                     <div className="space-y-4">
-                      {visible("appointment_settings") && (
-                        <Field label="Appointment Length, Details & Buffer Time" shareMode={shareMode} status={fieldStatus("appointment_settings")} helper="Recommended: 15-min time slots, 30-min calls.">
-                          <input value={draft.appointment_settings} disabled={saving} onChange={e => patch("appointment_settings", e.target.value)} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={fieldStyle(shareMode, fieldStatus("appointment_settings"))} />
-                        </Field>
-                      )}
                       {visible("daily_adspend") && (
                         <Field label="Daily Adspend" shareMode={shareMode} status={fieldStatus("daily_adspend")} helper="Average starting point is $50–$100/day.">
                           <div className="relative">
@@ -522,7 +516,7 @@ export default function KickOffCallWizard({ clientId, fallbackName, onClose, onC
                       )}
                       {visible("phone_live_transfer") && (
                         <>
-                          <Field label="Live transfer number" shareMode={shareMode} status={fieldStatus("phone_live_transfer")} helper="The client's phone. This is the number we call to live-transfer a lead to them.">
+                          <Field label="Live Transfer Number" shareMode={shareMode} status={fieldStatus("phone_live_transfer")} helper="The number we call to live-transfer a lead.">
                             <input type="tel" value={draft.phone_live_transfer} disabled={saving} onChange={e => patch("phone_live_transfer", e.target.value)} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={fieldStyle(shareMode, fieldStatus("phone_live_transfer"))} />
                           </Field>
                           <Field label="Live Transfer Approved?" shareMode={shareMode} status={fieldStatus("live_transfer_approved")}>
@@ -532,11 +526,66 @@ export default function KickOffCallWizard({ clientId, fallbackName, onClose, onC
                               <option value="no">No</option>
                             </select>
                           </Field>
+                          {draft.service_program === "core" && (
+                            <Field label="What hours can we book appointments?" shareMode={shareMode} status={fieldStatus("booking_hours")} helper="Type the client's hours.">
+                              <input value={draft.booking_hours} disabled={saving} onChange={e => patch("booking_hours", e.target.value)} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={fieldStyle(shareMode, fieldStatus("booking_hours"))} />
+                            </Field>
+                          )}
                         </>
                       )}
                     </div>
                   </Section>
                 )}
+
+                <Section title="Account" shareMode={shareMode}>
+                  <div className="space-y-4">
+                    <Field label="Lead Nurturing Host" shareMode={shareMode} status={fieldStatus("lead_nurturing_host")} helper="Internal: we nurture. External: straight to their CRM. Both: we prospect, then send once a conversation starts.">
+                      <select value={draft.lead_nurturing_host} disabled={saving} onChange={e => patch("lead_nurturing_host", e.target.value as KickoffDraft["lead_nurturing_host"])} className="w-full px-3 py-2 rounded-lg text-sm outline-none cursor-pointer" style={fieldStyle(shareMode, fieldStatus("lead_nurturing_host"))}>
+                        <option value="">Select…</option>
+                        {LEAD_NURTURING_HOSTS.map(host => <option key={host} value={host}>{host}</option>)}
+                      </select>
+                    </Field>
+                    <Field label="Do they use the account alone or with a team?" shareMode={shareMode} status={fieldStatus("account_shape")}>
+                      <select value={draft.account_shape} disabled={saving} onChange={e => patch("account_shape", e.target.value as KickoffDraft["account_shape"])} className="w-full px-3 py-2 rounded-lg text-sm outline-none cursor-pointer" style={fieldStyle(shareMode, fieldStatus("account_shape"))}>
+                        <option value="">Select…</option>
+                        <option value="solo">Solo</option>
+                        <option value="team">Team</option>
+                      </select>
+                    </Field>
+                    {draft.account_shape === "team" && (
+                      <Field label="Routing notes" shareMode={shareMode} status={fieldStatus("team_routing_notes")} helper="Optional. Routing rules or a special request for this team.">
+                        <textarea value={draft.team_routing_notes} disabled={saving} onChange={e => patch("team_routing_notes", e.target.value)} rows={2} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={fieldStyle(shareMode, fieldStatus("team_routing_notes"))} />
+                      </Field>
+                    )}
+                    <Field label="We qualify leads" shareMode={shareMode} status={fieldStatus("qualifies_leads")} helper="Yes: dial qualified only. No: book every lead.">
+                      <select value={draft.qualifies_leads} disabled={saving} onChange={e => patch("qualifies_leads", e.target.value as KickoffDraft["qualifies_leads"])} className="w-full px-3 py-2 rounded-lg text-sm outline-none cursor-pointer" style={fieldStyle(shareMode, fieldStatus("qualifies_leads"))}>
+                        <option value="">Select…</option>
+                        <option value="yes">Yes — dial qualified only</option>
+                        <option value="no">No — book every lead</option>
+                      </select>
+                    </Field>
+                    {draft.qualifies_leads === "yes" && (
+                      <Field label="How we qualify" shareMode={shareMode} status={fieldStatus("qualification_notes")}>
+                        <textarea value={draft.qualification_notes} disabled={saving} onChange={e => patch("qualification_notes", e.target.value)} rows={2} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={fieldStyle(shareMode, fieldStatus("qualification_notes"))} />
+                      </Field>
+                    )}
+                    <Field label="Brand colors as agreed on the call" shareMode={shareMode} status={fieldStatus("brand_colors")}>
+                      <textarea value={draft.brand_colors} disabled={saving} onChange={e => patch("brand_colors", e.target.value)} rows={2} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={fieldStyle(shareMode, fieldStatus("brand_colors"))} />
+                    </Field>
+                    <Field label="Headshot" shareMode={shareMode} status={fieldStatus("headshot_url")} helper="URL only.">
+                      <input type="url" value={draft.headshot_url} disabled={saving} onChange={e => patch("headshot_url", e.target.value)} placeholder="https://…" className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={fieldStyle(shareMode, fieldStatus("headshot_url"))} />
+                    </Field>
+                    <Field label="Bio" shareMode={shareMode} status={fieldStatus("biography")}>
+                      <textarea value={draft.biography} disabled={saving} onChange={e => patch("biography", e.target.value)} rows={3} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={fieldStyle(shareMode, fieldStatus("biography"))} />
+                    </Field>
+                    <Field label="Reviews" shareMode={shareMode} status={fieldStatus("reviews")} helper="Optional.">
+                      <textarea value={draft.reviews} disabled={saving} onChange={e => patch("reviews", e.target.value)} rows={2} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={fieldStyle(shareMode, fieldStatus("reviews"))} />
+                    </Field>
+                    <Field label="Anything added to establish trust" shareMode={shareMode} status={fieldStatus("trust_notes")} helper="Optional.">
+                      <textarea value={draft.trust_notes} disabled={saving} onChange={e => patch("trust_notes", e.target.value)} rows={2} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={fieldStyle(shareMode, fieldStatus("trust_notes"))} />
+                    </Field>
+                  </div>
+                </Section>
 
                 {!shareMode && kickoffConfig.showPmSection && (
                   <Section title="PM / Landing Page" shareMode={shareMode}>
@@ -557,17 +606,37 @@ export default function KickOffCallWizard({ clientId, fallbackName, onClose, onC
                   </Section>
                 )}
 
-                {!shareMode && kickoffConfig.showCallCenterSection && (
-                  <Section title="Call Center Setup" shareMode={shareMode}>
-                    <p className="text-xs -mt-2 mb-3" style={{ color: helperColor(shareMode) }}>
-                      Saved to Client notes on the client file.
-                    </p>
+                {!shareMode && (
+                  <Section title="Call checklist" shareMode={shareMode}>
                     <div className="space-y-4">
-                      {(["cc_lead_source", "cc_qualification_criteria", "cc_hp_tag_user", "cc_setter_notes"] as const).map(key => (
-                        <Field key={key} label={CC_KICKOFF_FIELD_LABELS[key]} shareMode={shareMode} status={fieldStatus(key)}>
-                          <textarea value={draft[key]} disabled={saving} onChange={e => patch(key, e.target.value)} rows={2} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={fieldStyle(shareMode, fieldStatus(key))} />
+                      <Field label="Stock criteria link" shareMode={shareMode} status={fieldStatus("stock_criteria_url")} helper="Link only. Optional.">
+                        <input type="url" value={draft.stock_criteria_url} disabled={saving} onChange={e => patch("stock_criteria_url", e.target.value)} placeholder="https://…" className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={fieldStyle(shareMode, fieldStatus("stock_criteria_url"))} />
+                      </Field>
+                      {(draft.lead_nurturing_host === "external" || draft.lead_nurturing_host === "Both") && (
+                        <label className="flex items-start gap-3 cursor-pointer">
+                          <input type="checkbox" checked={draft.integrated_on_call} disabled={saving} onChange={e => patch("integrated_on_call", e.target.checked)} className="mt-1" />
+                          <span className="text-sm" style={{ color: labelColor(shareMode) }}>Integrated on the call</span>
+                        </label>
+                      )}
+                      <Field label="Facebook Business Manager access" shareMode={shareMode} status={fieldStatus("facebook_access")}>
+                        <select value={draft.facebook_access} disabled={saving} onChange={e => patch("facebook_access", e.target.value as KickoffDraft["facebook_access"])} className="w-full px-3 py-2 rounded-lg text-sm outline-none cursor-pointer" style={fieldStyle(shareMode, fieldStatus("facebook_access"))}>
+                          <option value="">Select…</option>
+                          <option value="granted">Granted</option>
+                          <option value="follow_up">Follow-up booked</option>
+                        </select>
+                      </Field>
+                      {draft.facebook_access === "follow_up" && (
+                        <Field label="Follow-up time" shareMode={shareMode} status={fieldStatus("facebook_follow_up_at")} helper="No more than 3 days out.">
+                          <input type="datetime-local" value={draft.facebook_follow_up_at} disabled={saving} onChange={e => patch("facebook_follow_up_at", e.target.value)} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={fieldStyle(shareMode, fieldStatus("facebook_follow_up_at"))} />
                         </Field>
-                      ))}
+                      )}
+                      <label className="flex items-start gap-3 cursor-pointer">
+                        <input type="checkbox" checked={draft.slack_team_added} disabled={saving} onChange={e => patch("slack_team_added", e.target.checked)} className="mt-1" />
+                        <span className="text-sm" style={{ color: labelColor(shareMode) }}>Everyone on team added to Slack</span>
+                      </label>
+                      <Field label="Date signed" shareMode={shareMode} status={fieldStatus("date_signed")} helper="Optional. Leave blank to keep the date already on file.">
+                        <input type="date" value={draft.date_signed} disabled={saving} onChange={e => patch("date_signed", e.target.value)} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={fieldStyle(shareMode, fieldStatus("date_signed"))} />
+                      </Field>
                     </div>
                   </Section>
                 )}

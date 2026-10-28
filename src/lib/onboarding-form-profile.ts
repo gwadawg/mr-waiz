@@ -1,5 +1,10 @@
 import { normalizeReportingType, type ReportingType } from '@/lib/reporting-types';
-import { normalizeServiceProgram, serviceProgramApplies, type ServiceProgram } from '@/lib/service-program';
+import {
+  normalizeServiceProgram,
+  resolveKickoffServiceProgram,
+  serviceProgramApplies,
+  type ServiceProgram,
+} from '@/lib/service-program';
 
 export type OnboardingFormProfile = 'marketing_core' | 'marketing_lead_gen' | 'call_center';
 
@@ -70,11 +75,11 @@ export function validateKickoffClassification(
   if (!v) return 'Client vertical is required';
 
   if (saveMode === 'complete') {
-    if (serviceProgramApplies(v) && !normalizeServiceProgram(serviceProgram)) {
-      return 'Select fulfillment (Call Center or Leads Only) before completing kick-off';
+    if (v === 'CALL_CENTER') {
+      return 'Select RM or DSCR before completing kick-off';
     }
-    if (v === 'CALL_CENTER' && normalizeServiceProgram(serviceProgram)) {
-      return 'Call Center Lead clients do not use a fulfillment package';
+    if (!resolveKickoffServiceProgram(serviceProgram)) {
+      return 'Select System Type (Leads or Call Center) before completing kick-off';
     }
   }
 

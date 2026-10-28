@@ -13,17 +13,18 @@ import {
   getOnboardingFormProfile,
   type OnboardingFormProfile,
 } from '@/lib/onboarding-form-profile';
-import { getReportingTypeLabel, normalizeReportingType, type ReportingType } from '@/lib/reporting-types';
+import { normalizeReportingType, type ReportingType } from '@/lib/reporting-types';
 import {
-  getServiceProgramLabel,
+  kickoffSystemTypeLabel,
   normalizeServiceProgram,
+  resolveKickoffServiceProgram,
   serviceProgramApplies,
   type ServiceProgram,
 } from '@/lib/service-program';
 import { formatStatesLicensed } from '@/lib/us-states';
 
 export const KICKOFF_CLIENT_FIELDS =
-  'id, name, lifecycle_status, primary_contact_name, phone, contact_role, states_licensed, nmls, brokerage_name, timezone, appointment_settings, daily_adspend, facebook_page_name, phone_notifications, phone_live_transfer, live_transfer_approved, ghl_location_id, reporting_type, service_program, offer';
+  'id, name, lifecycle_status, primary_contact_name, phone, contact_role, states_licensed, nmls, brokerage_name, timezone, appointment_settings, daily_adspend, facebook_page_name, phone_notifications, phone_live_transfer, live_transfer_approved, ghl_location_id, reporting_type, service_program, offer, lead_nurturing_host, booking_hours, brand_colors, account_shape, team_routing_notes, qualifies_leads, qualification_notes, headshot_url, biography, date_signed';
 
 export const CONTACT_ROLE_OPTIONS = [
   'Loan Officer',
@@ -75,13 +76,10 @@ export type KickoffFieldDef = {
 };
 
 export const KICKOFF_FIELD_REGISTRY: KickoffFieldDef[] = [
-  { key: 'phone', section: 'confirm', profiles: ['marketing_core', 'marketing_lead_gen', 'call_center'] },
-  { key: 'contact_role', section: 'confirm', profiles: ['marketing_core', 'marketing_lead_gen', 'call_center'] },
   { key: 'states_licensed', section: 'confirm', profiles: ['marketing_core', 'marketing_lead_gen', 'call_center'] },
   { key: 'nmls', section: 'confirm', profiles: ['marketing_core', 'marketing_lead_gen', 'call_center'] },
   { key: 'brokerage_name', section: 'confirm', profiles: ['marketing_core', 'marketing_lead_gen', 'call_center'] },
   { key: 'timezone', section: 'confirm', profiles: ['marketing_core', 'marketing_lead_gen', 'call_center'] },
-  { key: 'appointment_settings', section: 'get_info', profiles: ['marketing_core', 'call_center'] },
   { key: 'daily_adspend', section: 'get_info', profiles: ['marketing_core', 'marketing_lead_gen'], requiresRevenue: true },
   { key: 'facebook_page_name', section: 'get_info', profiles: ['marketing_core', 'marketing_lead_gen'] },
   { key: 'phone_notifications', section: 'get_info', profiles: ['marketing_core', 'marketing_lead_gen', 'call_center'] },
@@ -111,11 +109,18 @@ export const CC_KICKOFF_FIELD_LABELS = {
 /** Brand / landing narrative. Stored on the client file as a note, not client columns. */
 export const KICKOFF_PM_FIELD_LABELS = {
   pm_landing_copy: 'Landing page copy notes',
-  pm_brand_assets: 'Brand colors / asset links',
   pm_compliance_notes: 'Compliance disclaimers',
   pm_competitor_refs: 'Competitor references',
   pm_funnel_requirements: 'Special funnel requirements',
 } as const;
+
+export const LEAD_NURTURING_HOSTS = ['internal', 'external', 'Both'] as const;
+export type LeadNurturingHost = (typeof LEAD_NURTURING_HOSTS)[number];
+
+export const CONTACT_ROLE_CONFIRM_OPTIONS = [
+  { value: 'owner', label: 'Company owner', stored: 'Broker Owner' },
+  { value: 'mlo', label: 'Loan officer', stored: 'MLO' },
+] as const;
 
 export const KICKOFF_PM_NOTE_MARKER = 'Kick-off — Brand & landing notes';
 export const KICKOFF_CC_NOTE_MARKER = 'Kick-off — Call center notes';
@@ -132,6 +137,10 @@ const KICKOFF_NARRATIVE_KEYS = [
   'cc_setter_notes',
   'recording_url',
   'transcript',
+  'reviews',
+  'trust_notes',
+  'stock_criteria_url',
+  'facebook_follow_up_at',
 ] as const satisfies readonly (keyof KickoffDraft)[];
 
 export type KickoffNarrativeKey = (typeof KICKOFF_NARRATIVE_KEYS)[number];
@@ -157,6 +166,16 @@ export type KickoffClient = {
   reporting_type: string | null;
   service_program: string | null;
   offer: string | null;
+  lead_nurturing_host: string | null;
+  booking_hours: string | null;
+  brand_colors: string | null;
+  account_shape: string | null;
+  team_routing_notes: string | null;
+  qualifies_leads: boolean | null;
+  qualification_notes: string | null;
+  headshot_url: string | null;
+  biography: string | null;
+  date_signed: string | null;
 };
 
 export type KickoffOnboardingCall = {
@@ -261,6 +280,24 @@ export type KickoffDraft = {
   cc_qualification_criteria: string;
   cc_hp_tag_user: string;
   cc_setter_notes: string;
+  lead_nurturing_host: LeadNurturingHost | '';
+  account_shape: '' | 'solo' | 'team';
+  team_routing_notes: string;
+  booking_hours: string;
+  qualifies_leads: '' | 'yes' | 'no';
+  qualification_notes: string;
+  brand_colors: string;
+  headshot_url: string;
+  biography: string;
+  reviews: string;
+  trust_notes: string;
+  stock_criteria_url: string;
+  integrated_on_call: boolean;
+  facebook_access: '' | 'granted' | 'follow_up';
+  facebook_follow_up_at: string;
+  slack_team_added: boolean;
+  date_signed: string;
+  contact_role_choice: '' | 'owner' | 'mlo';
 };
 
 export function kickoffDraftFromClient(
@@ -300,7 +337,53 @@ export function kickoffDraftFromClient(
     cc_qualification_criteria: '',
     cc_hp_tag_user: '',
     cc_setter_notes: '',
+    lead_nurturing_host: hostFromStored(c.lead_nurturing_host),
+    account_shape: c.account_shape === 'solo' || c.account_shape === 'team' ? c.account_shape : '',
+    team_routing_notes: c.team_routing_notes ?? '',
+    booking_hours: c.booking_hours ?? '',
+    qualifies_leads: c.qualifies_leads === true ? 'yes' : c.qualifies_leads === false ? 'no' : '',
+    qualification_notes: c.qualification_notes ?? '',
+    brand_colors: c.brand_colors ?? '',
+    headshot_url: c.headshot_url ?? '',
+    biography: c.biography ?? '',
+    reviews: '',
+    trust_notes: '',
+    stock_criteria_url: '',
+    integrated_on_call: false,
+    facebook_access: '',
+    facebook_follow_up_at: '',
+    slack_team_added: false,
+    date_signed: toDateInputValue(c.date_signed),
+    contact_role_choice: contactRoleChoiceFromStored(c.contact_role),
   };
+}
+
+function hostFromStored(value: string | null | undefined): LeadNurturingHost | '' {
+  if (value === 'internal' || value === 'external' || value === 'Both') return value;
+  return '';
+}
+
+export function contactRoleNeedsConfirm(role: string | null | undefined): boolean {
+  const value = (role ?? '').trim();
+  return value !== 'Broker Owner' && value !== 'MLO';
+}
+
+export function contactRoleChoiceFromStored(role: string | null | undefined): '' | 'owner' | 'mlo' {
+  if (role === 'Broker Owner') return 'owner';
+  if (role === 'MLO') return 'mlo';
+  return '';
+}
+
+export function storedContactRoleFromChoice(choice: unknown): 'Broker Owner' | 'MLO' | null {
+  if (choice === 'owner') return 'Broker Owner';
+  if (choice === 'mlo') return 'MLO';
+  return null;
+}
+
+function toDateInputValue(value: string | null | undefined): string {
+  if (!value) return '';
+  const day = value.slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(day) ? day : '';
 }
 
 const PREFILL_TRACKED_KEYS: (keyof KickoffDraft)[] = [
@@ -309,6 +392,9 @@ const PREFILL_TRACKED_KEYS: (keyof KickoffDraft)[] = [
   'phone_live_transfer', 'live_transfer_approved', 'ghl_location_id', 'recording_url',
   'cc_lead_source', 'cc_qualification_criteria', 'cc_hp_tag_user', 'cc_setter_notes',
   'pm_landing_copy', 'pm_brand_assets', 'pm_compliance_notes', 'pm_competitor_refs', 'pm_funnel_requirements',
+  'lead_nurturing_host', 'account_shape', 'team_routing_notes', 'booking_hours', 'qualifies_leads',
+  'qualification_notes', 'brand_colors', 'headshot_url', 'biography', 'reviews', 'trust_notes',
+  'stock_criteria_url', 'facebook_access', 'facebook_follow_up_at', 'date_signed',
 ];
 
 export function kickoffFieldHadValue(draft: KickoffDraft, key: keyof KickoffDraft): boolean {
@@ -316,6 +402,7 @@ export function kickoffFieldHadValue(draft: KickoffDraft, key: keyof KickoffDraf
   if (Array.isArray(v)) return v.length > 0;
   if (key === 'live_transfer_approved') return v === 'yes' || v === 'no';
   if (key === 'advance_lifecycle' || key === 'vertical_confirmed') return false;
+  if (typeof v === 'boolean') return v;
   return typeof v === 'string' && v.trim().length > 0;
 }
 
@@ -360,14 +447,25 @@ export function kickoffExtraFieldsFromDraft(
   return {};
 }
 
+export type KickoffSavedNarrative = Partial<Pick<KickoffDraft, KickoffNarrativeKey>> & {
+  integrated_on_call?: boolean;
+  slack_team_added?: boolean;
+  facebook_access?: '' | 'granted' | 'follow_up';
+};
+
 export function kickoffNarrativeFromResponses(
   responses: Record<string, unknown> | null | undefined,
-): Partial<Pick<KickoffDraft, KickoffNarrativeKey>> {
-  const out: Partial<Pick<KickoffDraft, KickoffNarrativeKey>> = {};
+): KickoffSavedNarrative {
+  const out: KickoffSavedNarrative = {};
   if (!responses) return out;
   for (const key of KICKOFF_NARRATIVE_KEYS) {
     const value = responses[key];
     if (typeof value === 'string' && value.trim()) out[key] = value;
+  }
+  if (responses.integrated_on_call === true) out.integrated_on_call = true;
+  if (responses.slack_team_added === true) out.slack_team_added = true;
+  if (responses.facebook_access === 'granted' || responses.facebook_access === 'follow_up') {
+    out.facebook_access = responses.facebook_access;
   }
   return out;
 }
@@ -375,13 +473,18 @@ export function kickoffNarrativeFromResponses(
 /** Fill brand / call-center narrative that is not stored on the client row. */
 export function applyKickoffSavedNarrative(
   draft: KickoffDraft,
-  saved: Partial<Pick<KickoffDraft, KickoffNarrativeKey>> | null | undefined,
+  saved: KickoffSavedNarrative | null | undefined,
 ): KickoffDraft {
   if (!saved) return draft;
   const next = { ...draft };
   for (const key of KICKOFF_NARRATIVE_KEYS) {
     const value = saved[key];
     if (typeof value === 'string' && value.trim() && !next[key].trim()) next[key] = value;
+  }
+  if (saved.integrated_on_call === true) next.integrated_on_call = true;
+  if (saved.slack_team_added === true) next.slack_team_added = true;
+  if (saved.facebook_access === 'granted' || saved.facebook_access === 'follow_up') {
+    next.facebook_access = saved.facebook_access;
   }
   return next;
 }
@@ -405,20 +508,28 @@ export function kickoffClientFileNote(
     if (text && text !== '—') sections.push({ label, value: text });
   };
 
-  add('Client vertical', getReportingTypeLabel(draft.reporting_type));
+  add('Client type', draft.reporting_type === 'RM' || draft.reporting_type === 'DSCR' ? draft.reporting_type : '');
   if (serviceProgramApplies(draft.reporting_type)) {
-    add('Fulfillment', getServiceProgramLabel(draft.service_program) ?? '');
+    add('System Type', kickoffSystemTypeLabel(draft.service_program) ?? '');
   }
-  add('Phone', draft.phone);
-  add('Contact role', draft.contact_role);
+  add('Lead Nurturing Host', draft.lead_nurturing_host);
+  add('Team', draft.account_shape === 'team' ? 'Team' : draft.account_shape === 'solo' ? 'Solo' : '');
+  if (draft.account_shape === 'team') add('Lead routing', draft.team_routing_notes);
+  add('We qualify leads', draft.qualifies_leads === 'yes' ? 'Yes — dial qualified only' : draft.qualifies_leads === 'no' ? 'No — book every lead' : '');
+  if (draft.qualifies_leads === 'yes') add('How we qualify', draft.qualification_notes);
+  add('Brand colors', draft.brand_colors);
+  add('Headshot', draft.headshot_url);
+  add('Bio', draft.biography);
+  if (resolveKickoffServiceProgram(draft.service_program) === 'core') {
+    add('Booking hours', draft.booking_hours);
+  }
+  const role = storedContactRoleFromChoice(draft.contact_role_choice);
+  add('Company owner or loan officer', role === 'Broker Owner' ? 'Company owner' : role === 'MLO' ? 'Loan officer' : draft.contact_role);
   if (draft.states_licensed.length) add('States licensed', formatStatesLicensed(draft.states_licensed));
   add('NMLS', draft.nmls);
   add('Brokerage', draft.brokerage_name);
   add('Timezone', draft.timezone);
 
-  if (isKickoffFieldVisible('appointment_settings', profile, includeRevenue)) {
-    add('Appointment settings', draft.appointment_settings);
-  }
   if (includeRevenue && isKickoffFieldVisible('daily_adspend', profile, includeRevenue)) {
     add('Daily ad spend', draft.daily_adspend.trim() ? `$${draft.daily_adspend.trim()}` : '');
   }
@@ -433,15 +544,19 @@ export function kickoffClientFileNote(
     add('Live transfer approved', yesNoLabel(draft.live_transfer_approved));
   }
 
-  if (profile === 'call_center') {
-    for (const key of Object.keys(CC_KICKOFF_FIELD_LABELS) as (keyof typeof CC_KICKOFF_FIELD_LABELS)[]) {
-      add(CC_KICKOFF_FIELD_LABELS[key], draft[key]);
-    }
-  } else {
-    for (const key of Object.keys(KICKOFF_PM_FIELD_LABELS) as (keyof typeof KICKOFF_PM_FIELD_LABELS)[]) {
-      add(KICKOFF_PM_FIELD_LABELS[key], draft[key]);
-    }
+  for (const key of Object.keys(KICKOFF_PM_FIELD_LABELS) as (keyof typeof KICKOFF_PM_FIELD_LABELS)[]) {
+    add(KICKOFF_PM_FIELD_LABELS[key], draft[key]);
   }
+  add('Reviews', draft.reviews);
+  add('Trust', draft.trust_notes);
+  add('Stock criteria', draft.stock_criteria_url);
+  if (draft.integrated_on_call) add('Integrated on the call', 'Yes');
+  if (draft.facebook_access === 'granted') add('Facebook Business Manager', 'Granted');
+  if (draft.facebook_access === 'follow_up') {
+    add('Facebook Business Manager', 'Follow-up booked');
+    add('Facebook follow-up', draft.facebook_follow_up_at);
+  }
+  add('Date signed', draft.date_signed);
 
   add('GHL sub-account name', draft.sub_account_name);
   add('GHL location ID', draft.ghl_location_id);
@@ -457,16 +572,15 @@ export function kickoffDraftToBody(
   saveMode: 'progress' | 'complete' = 'complete',
 ): Record<string, unknown> {
   const profile = getOnboardingFormProfile(draft.reporting_type, draft.service_program);
+  const program = resolveKickoffServiceProgram(draft.service_program);
+  const callCenter = program === 'core';
   const body: Record<string, unknown> = {
     save_mode: saveMode,
     reporting_type: draft.reporting_type,
-    service_program: serviceProgramApplies(draft.reporting_type)
-      ? (draft.service_program || null)
-      : null,
+    service_program: program,
     vertical_confirmed: draft.vertical_confirmed,
     sub_account_name: draft.sub_account_name.trim() || null,
-    phone: draft.phone.trim() || null,
-    contact_role: draft.contact_role.trim() || null,
+    contact_role_choice: draft.contact_role_choice || null,
     states_licensed: draft.states_licensed,
     nmls: draft.nmls.trim() || null,
     brokerage_name: draft.brokerage_name.trim() || null,
@@ -475,18 +589,26 @@ export function kickoffDraftToBody(
     recording_url: draft.recording_url.trim() || null,
     transcript: draft.transcript.trim() || null,
     advance_lifecycle: draft.advance_lifecycle,
+    lead_nurturing_host: draft.lead_nurturing_host || null,
+    account_shape: draft.account_shape || null,
+    team_routing_notes: draft.account_shape === 'team' ? draft.team_routing_notes.trim() || null : null,
+    qualifies_leads: draft.qualifies_leads || null,
+    qualification_notes: draft.qualifies_leads === 'yes' ? draft.qualification_notes.trim() || null : null,
+    brand_colors: draft.brand_colors.trim() || null,
+    headshot_url: draft.headshot_url.trim() || null,
+    biography: draft.biography.trim() || null,
+    reviews: draft.reviews.trim() || null,
+    trust_notes: draft.trust_notes.trim() || null,
+    stock_criteria_url: draft.stock_criteria_url.trim() || null,
+    integrated_on_call: draft.lead_nurturing_host === 'internal' ? false : draft.integrated_on_call,
+    facebook_access: draft.facebook_access || null,
+    facebook_follow_up_at: draft.facebook_access === 'follow_up' ? draft.facebook_follow_up_at.trim() || null : null,
+    slack_team_added: draft.slack_team_added,
+    date_signed: draft.date_signed.trim() || null,
+    phone_notifications: draft.phone_notifications.trim() || null,
   };
 
-  if (isKickoffFieldVisible('appointment_settings', profile, canViewRevenue)) {
-    body.appointment_settings = draft.appointment_settings.trim() || null;
-  }
-  if (isKickoffFieldVisible('facebook_page_name', profile, canViewRevenue)) {
-    body.facebook_page_name = draft.facebook_page_name.trim() || null;
-  }
-  if (isKickoffFieldVisible('phone_notifications', profile, canViewRevenue)) {
-    body.phone_notifications = draft.phone_notifications.trim() || null;
-  }
-  if (isKickoffFieldVisible('phone_live_transfer', profile, canViewRevenue)) {
+  if (callCenter) {
     body.phone_live_transfer = draft.phone_live_transfer.trim() || null;
     body.live_transfer_approved =
       draft.live_transfer_approved === 'yes'
@@ -494,19 +616,22 @@ export function kickoffDraftToBody(
         : draft.live_transfer_approved === 'no'
           ? false
           : null;
+    body.booking_hours = draft.booking_hours.trim() || null;
+  }
+  if (isKickoffFieldVisible('facebook_page_name', profile, canViewRevenue)) {
+    body.facebook_page_name = draft.facebook_page_name.trim() || null;
   }
   if (canViewRevenue && isKickoffFieldVisible('daily_adspend', profile, canViewRevenue)) {
     body.daily_adspend = draft.daily_adspend.trim() || null;
   }
 
-  Object.assign(body, kickoffExtraFieldsFromDraft(profile, draft));
+  Object.assign(body, kickoffPmFieldsFromDraft(draft));
 
   return body;
 }
 
 export function kickoffIdentitySlice(draft: KickoffDraft): Record<KickoffIdentityFieldKey, unknown> {
   return {
-    phone: draft.phone,
     contact_role: draft.contact_role,
     states_licensed: draft.states_licensed,
     nmls: draft.nmls,
@@ -520,19 +645,51 @@ export const KICKOFF_CLICKUP_FIELDS = {
   ob_stage: 'In Build',
 } as const;
 
-export function formatKickoffClickUpComment(client: { id: string; name: string }): string {
-  return [
+export function formatKickoffClickUpComment(
+  client: { id: string; name: string },
+  draft: KickoffDraft,
+): string {
+  const lines = [
     '✅ Kickoff Form submitted',
     '',
     `Client (Mr. Waiz): ${client.name}`,
     `Mr. Waiz ID: ${client.id}`,
     'Kickoff Form: Submitted',
     'OB Stage: In Build',
-  ].join('\n');
+  ];
+  const add = (label: string, value: string | null | undefined) => {
+    const text = (value ?? '').trim();
+    if (text && text !== '—') lines.push(`${label}: ${text}`);
+  };
+  const note = kickoffClientFileNote(
+    getOnboardingFormProfile(draft.reporting_type, draft.service_program),
+    draft,
+  );
+  if (note) {
+    for (const block of note.body.split('\n\n').slice(1)) {
+      const [label, ...rest] = block.split('\n');
+      const value = rest.join('\n').trim();
+      if (label && value) add(label, value);
+    }
+  }
+  return lines.join('\n');
 }
 
 export function isKickoffSetupResolved(draft: KickoffDraft): boolean {
   if (!draft.vertical_confirmed) return false;
-  if (serviceProgramApplies(draft.reporting_type) && !draft.service_program) return false;
-  return true;
+  if (draft.reporting_type === 'CALL_CENTER') return false;
+  return resolveKickoffServiceProgram(draft.service_program) != null;
+}
+
+export function facebookFollowUpError(draft: KickoffDraft, now = Date.now()): string | null {
+  if (draft.facebook_access !== 'follow_up') return null;
+  const when = Date.parse(draft.facebook_follow_up_at);
+  if (!Number.isFinite(when)) return 'Facebook follow-up needs a time';
+  const startOfToday = new Date(now);
+  startOfToday.setHours(0, 0, 0, 0);
+  const latest = startOfToday.getTime() + 4 * 24 * 60 * 60 * 1000;
+  if (when < startOfToday.getTime() || when >= latest) {
+    return 'Facebook follow-up must be within 3 days';
+  }
+  return null;
 }

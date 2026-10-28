@@ -49,7 +49,6 @@ describe('client-identity', () => {
   it('isKickoffIdentityFieldComplete requires all kickoff identity keys', () => {
     assert.equal(
       isKickoffIdentityFieldComplete({
-        phone: '555',
         contact_role: 'MLO',
         states_licensed: ['FL'],
         nmls: '1',
@@ -60,7 +59,6 @@ describe('client-identity', () => {
     );
     assert.equal(
       isKickoffIdentityFieldComplete({
-        phone: '555',
         contact_role: '',
         states_licensed: [],
         nmls: '1',

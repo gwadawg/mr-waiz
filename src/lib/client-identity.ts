@@ -28,7 +28,6 @@ export type ClientIdentityField = (typeof CLIENT_IDENTITY_FIELDS)[number];
 
 /** Kick-off "Confirm Information" fields — sourced from identity when linked. */
 export const KICKOFF_IDENTITY_FIELD_KEYS = [
-  'phone',
   'contact_role',
   'states_licensed',
   'nmls',

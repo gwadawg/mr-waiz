@@ -4,6 +4,7 @@ import { formatMarkedClientNote } from '@/lib/client-form-notes';
 import { emptyChurnDraft, churnClientFileNoteSections } from '@/lib/churn-form';
 import {
   applyKickoffSavedNarrative,
+  formatKickoffClickUpComment,
   isKickoffIncomplete,
   kickoffClientFileNote,
   kickoffDraftFromClient,
@@ -33,6 +34,16 @@ const client: KickoffClient = {
   reporting_type: 'RM',
   service_program: 'core',
   offer: 'RM',
+  lead_nurturing_host: null,
+  booking_hours: null,
+  brand_colors: null,
+  account_shape: null,
+  team_routing_notes: null,
+  qualifies_leads: null,
+  qualification_notes: null,
+  headshot_url: null,
+  biography: null,
+  date_signed: null,
 };
 
 function overflowInput(patch: Partial<OnboardingFormInput> = {}): OnboardingFormInput {
@@ -94,7 +105,8 @@ describe('client form notes', () => {
     const note = kickoffClientFileNote('marketing_core', draft);
     assert.ok(note);
     assert.match(note.body, /REMEMBER ITS ATI REVERSE/);
-    assert.match(note.body, /Phone\n555/);
+    assert.match(note.body, /NMLS\n1/);
+    assert.doesNotMatch(note.body, /Phone/);
     assert.match(note.body, /GHL sub-account name\nRussell Tunick/);
     assert.doesNotMatch(note.body, /Competitor references/);
     draft.transcript = 'Full call transcript that belongs on the call record.';
@@ -110,6 +122,26 @@ describe('client form notes', () => {
     const reloaded = applyKickoffSavedNarrative(kickoffDraftFromClient(client), saved);
     assert.equal(reloaded.pm_landing_copy, 'REMEMBER ITS ATI REVERSE');
     assert.equal(reloaded.pm_competitor_refs, '');
+  });
+
+  it('puts only filled kickoff answers in the ClickUp comment', () => {
+    const draft = kickoffDraftFromClient(client);
+    draft.service_program = 'core';
+    draft.lead_nurturing_host = 'internal';
+    draft.qualifies_leads = 'yes';
+    draft.qualification_notes = 'FICO 680';
+    draft.brand_colors = 'navy and gold';
+    draft.slack_team_added = true;
+    draft.reviews = '';
+    draft.headshot_url = 'https://cdn.example/headshot.jpg';
+    const comment = formatKickoffClickUpComment(client, draft);
+    assert.match(comment, /Lead Nurturing Host: internal/);
+    assert.match(comment, /Brand colors: navy and gold/);
+    assert.match(comment, /How we qualify: FICO 680/);
+    assert.match(comment, /Headshot: https:\/\/cdn.example\/headshot.jpg/);
+    assert.doesNotMatch(comment, /Reviews/);
+    assert.doesNotMatch(comment, /Slack/);
+    assert.doesNotMatch(comment, /everyone on team/);
   });
 
   it('clears later kick-off blocks once the form is filed', () => {

@@ -15,12 +15,13 @@ import { syncIsLiveWithLifecycle } from '@/lib/lifecycle-sync';
 import {
   getOnboardingFormProfile,
   isClientVerticalConfirmed,
-  resolveServiceProgramForSave,
   validateKickoffClassification,
 } from '@/lib/onboarding-form-profile';
 import {
   KICKOFF_CLIENT_FIELDS,
   KICKOFF_CLICKUP_FIELDS,
+  contactRoleNeedsConfirm,
+  facebookFollowUpError,
   formatKickoffClickUpComment,
   getKickoffConfig,
   isKickoffFieldVisible,
@@ -33,9 +34,12 @@ import {
   kickoffExtraFieldsFromDraft,
   kickoffIdentitySlice,
   kickoffNarrativeFromResponses,
+  storedContactRoleFromChoice,
   type KickoffClient,
   type KickoffDraft,
+  type LeadNurturingHost,
 } from '@/lib/kickoff';
+import { resolveKickoffServiceProgram } from '@/lib/service-program';
 import { saveMarkedClientNote } from '@/lib/client-form-notes';
 import { insertFormSubmission, kickoffFiledClientIds } from '@/lib/form-submissions';
 import { normalizeReportingType } from '@/lib/reporting-types';
@@ -121,10 +125,11 @@ async function persistKickoffNarrative(
 
   const responses = {
     ...kickoffExtraFieldsFromDraft(formProfile, draft),
+    ...kickoffChecklistResponses(draft),
     recording_url: draft.recording_url.trim() || null,
     transcript: draft.transcript.trim() || null,
     reporting_type: draft.reporting_type,
-    service_program: resolveServiceProgramForSave(draft.reporting_type, draft.service_program),
+    service_program: resolveKickoffServiceProgram(draft.service_program),
     form_profile: formProfile,
     vertical_confirmed: draft.vertical_confirmed,
   };
@@ -181,10 +186,32 @@ async function findLatestKickoffVerticalConfirmed(
   return responses?.vertical_confirmed === true;
 }
 
+function kickoffChecklistResponses(draft: KickoffDraft): Record<string, unknown> {
+  return {
+    reviews: draft.reviews.trim() || null,
+    trust_notes: draft.trust_notes.trim() || null,
+    stock_criteria_url: draft.stock_criteria_url.trim() || null,
+    integrated_on_call: draft.integrated_on_call,
+    facebook_access: draft.facebook_access || null,
+    facebook_follow_up_at: draft.facebook_follow_up_at.trim() || null,
+    slack_team_added: draft.slack_team_added,
+    pm_landing_copy: draft.pm_landing_copy.trim() || null,
+    pm_compliance_notes: draft.pm_compliance_notes.trim() || null,
+    pm_competitor_refs: draft.pm_competitor_refs.trim() || null,
+    pm_funnel_requirements: draft.pm_funnel_requirements.trim() || null,
+  };
+}
+
+function hostFromBody(value: unknown): LeadNurturingHost | '' {
+  if (value === 'internal' || value === 'external' || value === 'Both') return value;
+  return '';
+}
+
 function draftFromBody(body: Record<string, unknown>): KickoffDraft {
+  const program = resolveKickoffServiceProgram(body.service_program);
   return {
     reporting_type: normalizeReportingType(body.reporting_type),
-    service_program: (optionalText(body.service_program) as KickoffDraft['service_program']) || '',
+    service_program: program ?? '',
     vertical_confirmed: body.vertical_confirmed === true,
     sub_account_name: optionalText(body.sub_account_name) ?? '',
     phone: optionalText(body.phone) ?? '',
@@ -217,6 +244,26 @@ function draftFromBody(body: Record<string, unknown>): KickoffDraft {
     cc_qualification_criteria: optionalText(body.cc_qualification_criteria) ?? '',
     cc_hp_tag_user: optionalText(body.cc_hp_tag_user) ?? '',
     cc_setter_notes: optionalText(body.cc_setter_notes) ?? '',
+    lead_nurturing_host: hostFromBody(body.lead_nurturing_host),
+    account_shape: body.account_shape === 'solo' || body.account_shape === 'team' ? body.account_shape : '',
+    team_routing_notes: optionalText(body.team_routing_notes) ?? '',
+    booking_hours: optionalText(body.booking_hours) ?? '',
+    qualifies_leads: body.qualifies_leads === 'yes' || body.qualifies_leads === 'no' ? body.qualifies_leads : '',
+    qualification_notes: optionalText(body.qualification_notes) ?? '',
+    brand_colors: optionalText(body.brand_colors) ?? '',
+    headshot_url: optionalText(body.headshot_url) ?? '',
+    biography: optionalText(body.biography) ?? '',
+    reviews: optionalText(body.reviews) ?? '',
+    trust_notes: optionalText(body.trust_notes) ?? '',
+    stock_criteria_url: optionalText(body.stock_criteria_url) ?? '',
+    integrated_on_call: body.integrated_on_call === true,
+    facebook_access: body.facebook_access === 'granted' || body.facebook_access === 'follow_up' ? body.facebook_access : '',
+    facebook_follow_up_at: optionalText(body.facebook_follow_up_at) ?? '',
+    slack_team_added: body.slack_team_added === true,
+    date_signed: optionalText(body.date_signed)?.slice(0, 10) ?? '',
+    contact_role_choice: body.contact_role_choice === 'owner' || body.contact_role_choice === 'mlo'
+      ? body.contact_role_choice
+      : '',
   };
 }
 
@@ -248,7 +295,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const mergedClient = identityGroup
     ? (withIdentityProfile(rawClient, identityGroup.identity) as KickoffClient)
     : rawClient;
-  const verticalConfirmed = isClientVerticalConfirmed({
+  const storedProduct = normalizeReportingType(rawClient.reporting_type);
+  const verticalConfirmed = storedProduct !== 'CALL_CENTER' && isClientVerticalConfirmed({
     reporting_type: rawClient.reporting_type,
     offer: rawClient.offer,
     service_program: rawClient.service_program,
@@ -325,6 +373,19 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       { status: 400 },
     );
   }
+  if (saveMode === 'complete' && !draft.lead_nurturing_host) {
+    return NextResponse.json({ error: 'Select Lead Nurturing Host before completing kick-off' }, { status: 400 });
+  }
+  if (saveMode === 'complete' && !draft.qualifies_leads) {
+    return NextResponse.json({ error: 'Select whether we qualify leads before completing kick-off' }, { status: 400 });
+  }
+  if (saveMode === 'complete' && !draft.account_shape) {
+    return NextResponse.json({ error: 'Select Solo or Team before completing kick-off' }, { status: 400 });
+  }
+  if (saveMode === 'complete') {
+    const followUpError = facebookFollowUpError(draft);
+    if (followUpError) return NextResponse.json({ error: followUpError }, { status: 400 });
+  }
 
   let ghlLocationId = extractGhlLocationId(optionalText(body.ghl_location_id));
   let recordingUrl = optionalText(body.recording_url);
@@ -337,7 +398,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   const { data: existingClient, error: clientError } = await ctx.service
     .from('clients')
-    .select('id, name, primary_contact_name, lifecycle_status, ghl_location_id, onboarding_clickup_task_id')
+    .select('id, name, primary_contact_name, lifecycle_status, ghl_location_id, onboarding_clickup_task_id, contact_role')
     .eq('id', clientId)
     .single();
 
@@ -347,6 +408,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   }
   if (!existingClient) {
     return NextResponse.json({ error: 'Client not found' }, { status: 404 });
+  }
+  if (saveMode === 'complete' && contactRoleNeedsConfirm(existingClient.contact_role) && !draft.contact_role_choice) {
+    return NextResponse.json(
+      { error: 'Confirm whether they own the company or are a loan officer' },
+      { status: 400 },
+    );
   }
 
   const existingOnboardingCall = await findOnboardingCall(ctx.service, clientId);
@@ -415,20 +482,49 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     await addClickUpTaskComment(
       kickoffClickUpTaskId,
       token,
-      formatKickoffClickUpComment(existingClient),
+      formatKickoffClickUpComment(existingClient, draft),
     );
   }
 
+  const program = resolveKickoffServiceProgram(draft.service_program);
   const updates: Record<string, unknown> = {
     reporting_type: draft.reporting_type,
-    service_program: resolveServiceProgramForSave(draft.reporting_type, draft.service_program),
-    phone: optionalText(body.phone),
-    contact_role: optionalText(body.contact_role),
     states_licensed: normalizeStatesLicensed(body.states_licensed),
     nmls: optionalText(body.nmls),
     brokerage_name: optionalText(body.brokerage_name),
     timezone: optionalText(body.timezone),
+    biography: optionalText(body.biography),
+    headshot_url: optionalText(body.headshot_url),
+    brand_colors: optionalText(body.brand_colors),
+    phone_notifications: optionalText(body.phone_notifications),
   };
+  if (program && draft.reporting_type !== 'CALL_CENTER') {
+    updates.service_program = program;
+  }
+  if (draft.reporting_type === 'RM' || draft.reporting_type === 'DSCR') {
+    updates.offer = draft.reporting_type;
+  }
+  const chosenRole = storedContactRoleFromChoice(draft.contact_role_choice);
+  if (chosenRole) updates.contact_role = chosenRole;
+  if (draft.lead_nurturing_host) updates.lead_nurturing_host = draft.lead_nurturing_host;
+  if (draft.account_shape) {
+    updates.account_shape = draft.account_shape;
+    updates.team_routing_notes = draft.account_shape === 'team'
+      ? optionalText(body.team_routing_notes)
+      : null;
+  }
+  if (draft.qualifies_leads === 'yes' || draft.qualifies_leads === 'no') {
+    updates.qualifies_leads = draft.qualifies_leads === 'yes';
+    updates.qualification_notes = draft.qualifies_leads === 'yes'
+      ? optionalText(body.qualification_notes)
+      : null;
+  }
+  if (optionalText(body.date_signed)) updates.date_signed = optionalText(body.date_signed)!.slice(0, 10);
+  if (program === 'core') {
+    updates.phone_live_transfer = optionalText(body.phone_live_transfer);
+    updates.live_transfer_approved = parseLiveTransferApproved(body.live_transfer_approved);
+    updates.booking_hours = optionalText(body.booking_hours);
+  }
 
   const identityPatch = identityFieldsFromPatch(updates);
   const identityGroup = await loadClientIdentityGroup(ctx.service, clientId);
@@ -436,18 +532,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     await propagateIdentityFields(ctx.service, identityGroup.identity_client_id, identityPatch);
   }
 
-  if (isKickoffFieldVisible('appointment_settings', formProfile, includeRevenue)) {
-    updates.appointment_settings = optionalText(body.appointment_settings);
-  }
   if (isKickoffFieldVisible('facebook_page_name', formProfile, includeRevenue)) {
     updates.facebook_page_name = optionalText(body.facebook_page_name);
-  }
-  if (isKickoffFieldVisible('phone_notifications', formProfile, includeRevenue)) {
-    updates.phone_notifications = optionalText(body.phone_notifications);
-  }
-  if (isKickoffFieldVisible('phone_live_transfer', formProfile, includeRevenue)) {
-    updates.phone_live_transfer = optionalText(body.phone_live_transfer);
-    updates.live_transfer_approved = parseLiveTransferApproved(body.live_transfer_approved);
   }
   if (includeRevenue && isKickoffFieldVisible('daily_adspend', formProfile, includeRevenue)) {
     updates.daily_adspend = parseDailyAdspend(body.daily_adspend);
@@ -564,8 +650,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         submitted_by: ctx.userId,
         responses: {
           ...extraFields,
+          ...kickoffChecklistResponses(draft),
           reporting_type: draft.reporting_type,
-          service_program: resolveServiceProgramForSave(draft.reporting_type, draft.service_program),
+          service_program: program,
           form_profile: formProfile,
           vertical_confirmed: draft.vertical_confirmed,
           sub_account_name: subAccountName,
@@ -596,7 +683,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     if (dismissError) console.error('[kickoff] draft dismiss failed', dismissError.message);
   }
 
-  const verticalConfirmed = isClientVerticalConfirmed({
+  const savedProduct = normalizeReportingType(kickoffClient.reporting_type);
+  const verticalConfirmed = savedProduct !== 'CALL_CENTER' && isClientVerticalConfirmed({
     reporting_type: kickoffClient.reporting_type,
     offer: kickoffClient.offer,
     service_program: kickoffClient.service_program,
@@ -619,5 +707,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     identity_client_id: identityGroup?.identity_client_id ?? clientId,
     identity_complete: isKickoffIdentityFieldComplete(kickoffIdentitySlice(draft)),
     related_offers: identityGroup?.offers ?? [],
+    saved_narrative: kickoffNarrativeFromResponses(kickoffChecklistResponses(draft)),
   });
 }

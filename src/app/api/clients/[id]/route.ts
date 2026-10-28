@@ -48,7 +48,7 @@ const CLIENT_NOTES_FIELDS =
   'id, note_type, reason_code, body, created_at, created_by, updated_at, related_call_id';
 
 const FILE_CLIENT_FIELDS =
-  'id, name, identity_client_id, is_live, reporting_type, service_program, sales_package, offer, offer_summary, lifecycle_status, client_stage, mrr, billing_type, billing_day, launch_date, date_signed, contract_end_date, contract_term_months, daily_adspend, ads_paused, ads_paused_at, ads_paused_note, performance_terms, billing_email, primary_contact, primary_contact_name, email, phone, source, website, drive_folder_url, funnel_url, virtual_business_card_url, virtual_card_slug, landing_page_url, brokerage_name, legal_business_name, nmls, city, state, states_licensed, timezone, ghl_location_id, phone_ghl, phone_live_transfer, phone_notifications, live_transfer_approved, appointment_watch, brand_subject, account_shape, team_routing_notes, qualifies_leads, qualification_notes, contact_role, appointment_settings, facebook_page_name, instagram_handle, ad_account_name, ad_account_url, meta_pixel_id, thank_you_page_url, second_landing_page_url, onboarding_clickup_task_id, clickup_task_id, created_at, churned_at, reinstated_at, welcome_back_token';
+  'id, name, identity_client_id, is_live, reporting_type, service_program, sales_package, offer, offer_summary, lifecycle_status, client_stage, mrr, billing_type, billing_day, launch_date, date_signed, contract_end_date, contract_term_months, daily_adspend, ads_paused, ads_paused_at, ads_paused_note, performance_terms, billing_email, primary_contact, primary_contact_name, email, phone, source, website, drive_folder_url, funnel_url, virtual_business_card_url, virtual_card_slug, landing_page_url, brokerage_name, legal_business_name, nmls, city, state, states_licensed, timezone, ghl_location_id, phone_ghl, phone_live_transfer, phone_notifications, live_transfer_approved, appointment_watch, brand_subject, account_shape, team_routing_notes, qualifies_leads, qualification_notes, contact_role, appointment_settings, facebook_page_name, lead_nurturing_host, booking_hours, brand_colors, instagram_handle, ad_account_name, ad_account_url, meta_pixel_id, thank_you_page_url, second_landing_page_url, onboarding_clickup_task_id, clickup_task_id, created_at, churned_at, reinstated_at, welcome_back_token';
 
 const PIXEL_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -233,6 +233,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     'appointment_watch', 'brand_subject', 'account_shape', 'team_routing_notes',
     'qualifies_leads', 'qualification_notes',
     'contact_role', 'appointment_settings', 'facebook_page_name', 'offer_summary',
+    'lead_nurturing_host', 'booking_hours', 'brand_colors',
     // Media buying account ops
     'instagram_handle', 'ad_account_name', 'ad_account_url', 'meta_pixel_id',
     'thank_you_page_url', 'second_landing_page_url',
@@ -340,7 +341,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         updates[k] = raw;
       }
     }
-    else if (k === 'team_routing_notes' || k === 'qualification_notes') {
+    else if (k === 'lead_nurturing_host') {
+      const host = body[k];
+      if (host === '' || host == null) updates[k] = null;
+      else if (host === 'internal' || host === 'external' || host === 'Both') updates[k] = host;
+      else return NextResponse.json({ error: 'lead_nurturing_host must be internal, external, Both, or empty' }, { status: 400 });
+    }
+    else if (k === 'team_routing_notes' || k === 'qualification_notes' || k === 'booking_hours' || k === 'brand_colors') {
       const raw = typeof body[k] === 'string' ? body[k].trim() : '';
       updates[k] = raw || null;
     }

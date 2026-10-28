@@ -72,6 +72,9 @@ export type EditableClient = {
   team_routing_notes?: string | null;
   qualifies_leads?: boolean | null;
   qualification_notes?: string | null;
+  lead_nurturing_host?: string | null;
+  booking_hours?: string | null;
+  brand_colors?: string | null;
   offer_summary: string | null;
   facebook_page_name: string | null;
   instagram_handle: string | null;
@@ -128,6 +131,9 @@ type Draft = {
   team_routing_notes: string;
   qualifies_leads: "" | "yes" | "no";
   qualification_notes: string;
+  lead_nurturing_host: "" | "internal" | "external" | "Both";
+  booking_hours: string;
+  brand_colors: string;
   offer_summary: string;
   facebook_page_name: string;
   instagram_handle: string;
@@ -193,6 +199,9 @@ export function clientToDraft(c: EditableClient): Draft {
     team_routing_notes: c.team_routing_notes ?? "",
     qualifies_leads: c.qualifies_leads === true ? "yes" : c.qualifies_leads === false ? "no" : "",
     qualification_notes: c.qualification_notes ?? "",
+    lead_nurturing_host: c.lead_nurturing_host === "internal" || c.lead_nurturing_host === "external" || c.lead_nurturing_host === "Both" ? c.lead_nurturing_host : "",
+    booking_hours: c.booking_hours ?? "",
+    brand_colors: c.brand_colors ?? "",
     offer_summary: c.offer_summary ?? "",
     facebook_page_name: c.facebook_page_name ?? "",
     instagram_handle: c.instagram_handle ?? "",
@@ -248,6 +257,9 @@ export function draftToPatchBody(draft: Draft, canViewRevenue: boolean): Record<
     team_routing_notes: draft.account_shape === "team" ? draft.team_routing_notes.trim() || null : null,
     qualifies_leads: draft.qualifies_leads === "yes" ? true : draft.qualifies_leads === "no" ? false : null,
     qualification_notes: draft.qualifies_leads === "yes" ? draft.qualification_notes.trim() || null : null,
+    lead_nurturing_host: draft.lead_nurturing_host || null,
+    booking_hours: draft.booking_hours.trim() || null,
+    brand_colors: draft.brand_colors.trim() || null,
     offer_summary: draft.offer_summary.trim() || null,
     facebook_page_name: draft.facebook_page_name.trim() || null,
     instagram_handle: draft.instagram_handle.trim() || null,
@@ -529,6 +541,36 @@ export default function ClientFileEditForm({
               <option key={value} value={value}>{BRAND_SUBJECT_LABELS[value]}</option>
             ))}
           </SelectField>
+          <SelectField
+            label="Lead Nurturing Host"
+            value={draft.lead_nurturing_host}
+            onChange={v => patch("lead_nurturing_host", (v === "internal" || v === "external" || v === "Both" ? v : "") as Draft["lead_nurturing_host"])}
+            highlightEmpty
+          >
+            <option value="">Unset</option>
+            <option value="internal">internal</option>
+            <option value="external">external</option>
+            <option value="Both">Both</option>
+          </SelectField>
+          <Field
+            label="Brand colors"
+            value={draft.brand_colors}
+            onChange={v => patch("brand_colors", v)}
+            placeholder="Colors agreed on the kickoff call"
+            highlightEmpty
+            wide
+            multiline
+          />
+          {draft.service_program === "core" && (
+            <Field
+              label="Booking hours"
+              value={draft.booking_hours}
+              onChange={v => patch("booking_hours", v)}
+              placeholder="Hours we can book"
+              highlightEmpty
+              wide
+            />
+          )}
           <SelectField
             label="Team"
             value={draft.account_shape}

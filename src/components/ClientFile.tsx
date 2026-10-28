@@ -151,6 +151,9 @@ type FileClient = {
   team_routing_notes?: string | null;
   qualifies_leads?: boolean | null;
   qualification_notes?: string | null;
+  lead_nurturing_host?: string | null;
+  booking_hours?: string | null;
+  brand_colors?: string | null;
   offer_summary: string | null;
   facebook_page_name: string | null;
   instagram_handle: string | null;
@@ -1790,6 +1793,29 @@ export default function ClientFile({
                   value={accountShapeLabel(client?.account_shape)}
                   missing={!accountShapeLabel(client?.account_shape)}
                 />
+                <Detail
+                  label="Lead Nurturing Host"
+                  value={client?.lead_nurturing_host}
+                  missing={!client?.lead_nurturing_host}
+                />
+                <Detail
+                  label="Brand colors"
+                  value={client?.brand_colors ? (
+                    <span className="whitespace-pre-wrap">{client.brand_colors}</span>
+                  ) : null}
+                  missing={!client?.brand_colors?.trim()}
+                  wide
+                />
+                {client?.service_program === "core" && (
+                  <Detail
+                    label="Booking hours"
+                    value={client.booking_hours ? (
+                      <span className="whitespace-pre-wrap">{client.booking_hours}</span>
+                    ) : null}
+                    missing={!client.booking_hours?.trim()}
+                    wide
+                  />
+                )}
                 {!usesCallCenterKpiLayout(client?.reporting_type) && (
                   <Detail
                     label="We qualify leads"
