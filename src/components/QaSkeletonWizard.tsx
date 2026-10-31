@@ -26,6 +26,27 @@ const fieldStyle = {
   color: "#e2e8f0",
 };
 
+function hrefForQaLink(url: string): string {
+  return /^https?:\/\//i.test(url) ? url : `https://${url}`;
+}
+
+function checklistSections(config: QaFormConfig): { title: string; items: QaFormConfig["items"] }[] {
+  if (!config.items.some(item => item.section)) {
+    return [{ title: "Skeleton QA Checklist", items: config.items }];
+  }
+  const titles: string[] = [];
+  const groups = new Map<string, QaFormConfig["items"]>();
+  for (const item of config.items) {
+    const title = item.section || "Checklist";
+    if (!groups.has(title)) {
+      titles.push(title);
+      groups.set(title, []);
+    }
+    groups.get(title)!.push(item);
+  }
+  return titles.map(title => ({ title, items: groups.get(title) ?? [] }));
+}
+
 export default function QaSkeletonWizard({
   clientId,
   lane,
@@ -59,17 +80,32 @@ export default function QaSkeletonWizard({
         return;
       }
       const loadedConfig = (data.qa_config ?? initialConfig) as QaFormConfig;
+      const nextDraft = emptyQaFormDraft(loadedConfig, data.default_completed_by ?? "");
+      if (data.links && typeof data.links === "object") {
+        for (const link of loadedConfig.links ?? []) {
+          const value = (data.links as Record<string, unknown>)[link.key];
+          if (typeof value === "string") nextDraft.links[link.key] = value;
+        }
+      }
       setConfig(loadedConfig);
       setClientName(data.client?.name ?? fallbackName);
       setAlreadyComplete(!!data.already_complete);
       setLifecycleOk(data.lifecycle_ok !== false);
-      setDraft(emptyQaFormDraft(loadedConfig, data.default_completed_by ?? ""));
+      setDraft(nextDraft);
       setLoading(false);
     })();
     return () => {
       cancelled = true;
     };
   }, [clientId, fallbackName, initialConfig, lane]);
+
+  function patchLink(key: string, value: string) {
+    setDraft(prev => ({
+      ...prev,
+      links: { ...prev.links, [key]: value },
+    }));
+    setSaveError(null);
+  }
 
   function patchChecklist(key: string, checked: boolean) {
     setDraft(prev => ({
@@ -85,7 +121,11 @@ export default function QaSkeletonWizard({
 
   async function submit() {
     if (!isQaChecklistComplete(draft, config)) {
-      setSaveError(`Confirm every item, add completed-by, and type ${QA_FINAL_CONFIRMATION}.`);
+      setSaveError(
+        config.requireEveryItem
+          ? `Confirm every item, add completed-by, and type ${QA_FINAL_CONFIRMATION}.`
+          : `Add completed-by and type ${QA_FINAL_CONFIRMATION}.`,
+      );
       const firstIncomplete = getFirstIncompleteQaItemKey(draft, config);
       if (firstIncomplete) scrollToItem(firstIncomplete);
       return;
@@ -164,46 +204,95 @@ export default function QaSkeletonWizard({
                 />
               </label>
 
-              <section
-                className="rounded-lg overflow-hidden"
-                style={{ border: "1px solid rgba(255,255,255,0.08)", background: "#0a1628" }}
-              >
-                <div className="px-4 py-3 flex items-center justify-between" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-                  <h3 className="text-sm font-semibold text-slate-200">Skeleton QA Checklist</h3>
-                  <span className="text-xs text-slate-500">{confirmed} / {config.items.length}</span>
-                </div>
-                <div className="px-2 py-2 space-y-1">
-                  {config.items.map(item => {
-                    const checked = draft.checklist[item.key] === true;
-                    return (
-                      <div
-                        key={item.key}
-                        ref={el => { itemRefs.current[item.key] = el; }}
-                        className="rounded-lg px-3 py-2"
-                        style={{
-                          background: checked ? "rgba(34,197,94,0.08)" : "transparent",
-                          border: checked ? "1px solid rgba(34,197,94,0.2)" : "1px solid transparent",
-                        }}
-                      >
-                        <label className="flex items-start gap-3 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={e => patchChecklist(item.key, e.target.checked)}
-                            className="mt-1"
-                          />
-                          <span className="text-sm text-slate-200">
-                            {item.label}
-                            {item.helpText && (
-                              <span className="block text-xs mt-0.5 text-slate-500">{item.helpText}</span>
-                            )}
-                          </span>
-                        </label>
+              {checklistSections(config).map(section => {
+                const sectionConfirmed = section.items.filter(item => draft.checklist[item.key] === true).length;
+                const sectionLinks = (config.links ?? []).filter(link => link.section === section.title);
+                return (
+                  <section
+                    key={section.title}
+                    className="rounded-lg overflow-hidden"
+                    style={{ border: "1px solid rgba(255,255,255,0.08)", background: "#0a1628" }}
+                  >
+                    <div className="px-4 py-3 flex items-center justify-between" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+                      <h3 className="text-sm font-semibold text-slate-200">{section.title}</h3>
+                      <span className="text-xs text-slate-500">{sectionConfirmed} / {section.items.length}</span>
+                    </div>
+                    {sectionLinks.length > 0 && (
+                      <div className="px-4 py-3 space-y-3" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+                        {sectionLinks.map(link => {
+                          const value = draft.links[link.key] ?? "";
+                          return (
+                            <div key={link.key} className="space-y-1">
+                              <span className="text-sm font-medium text-slate-300">{link.label}</span>
+                              {link.readOnly ? (
+                                value ? (
+                                  <a
+                                    href={hrefForQaLink(value)}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    data-qa-link={link.key}
+                                    className="block text-sm break-all underline underline-offset-2"
+                                    style={{ color: "#38bdf8" }}
+                                  >
+                                    {value}
+                                  </a>
+                                ) : (
+                                  <p className="text-sm text-slate-500" data-qa-link={link.key}>Not on file</p>
+                                )
+                              ) : (
+                                <input
+                                  type="url"
+                                  value={value}
+                                  onChange={e => patchLink(link.key, e.target.value)}
+                                  placeholder="https://"
+                                  data-qa-link={link.key}
+                                  className="w-full px-3 py-2 rounded-lg text-sm outline-none"
+                                  style={fieldStyle}
+                                />
+                              )}
+                              {link.helpText && (
+                                <p className="text-xs text-slate-500">{link.helpText}</p>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
-                    );
-                  })}
-                </div>
-              </section>
+                    )}
+                    <div className="px-2 py-2 space-y-1">
+                      {section.items.map(item => {
+                        const checked = draft.checklist[item.key] === true;
+                        return (
+                          <div
+                            key={item.key}
+                            ref={el => { itemRefs.current[item.key] = el; }}
+                            className="rounded-lg px-3 py-2"
+                            style={{
+                              background: checked ? "rgba(34,197,94,0.08)" : "transparent",
+                              border: checked ? "1px solid rgba(34,197,94,0.2)" : "1px solid transparent",
+                            }}
+                          >
+                            <label className="flex items-start gap-3 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={e => patchChecklist(item.key, e.target.checked)}
+                                className="mt-1"
+                                data-qa-item={item.key}
+                              />
+                              <span className="text-sm text-slate-200">
+                                {item.label}
+                                {item.helpText && (
+                                  <span className="block text-xs mt-0.5 text-slate-500">{item.helpText}</span>
+                                )}
+                              </span>
+                            </label>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </section>
+                );
+              })}
 
               <label className="block space-y-1.5">
                 <span className="text-sm font-medium text-slate-400">Evidence / links</span>

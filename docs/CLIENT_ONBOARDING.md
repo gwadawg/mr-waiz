@@ -18,7 +18,7 @@ renames it. New onboarding code must not write `clickup_task_id`.
 | 3b. Launch Kit | CSM | **Kit** wizard in Client Roster | Branded client PDF → Storage, `launch_kit` submission, Slack links |
 | 3c. Virtual Card | CS / ops | **Card** wizard in Client Roster / File | `loanofficer.me/{slug}` + `/learn`; URL on `clients.virtual_business_card_url` |
 | 3e. Landing page | CS / ops | **Landing** on Client File (DSCR only) | Pull request into `gwadawg/dscr-experts`. URLs written after the live page responds |
-| 3d. Tech / Media QA | Tech VA / Media Buyer | QA wizards in Client Roster / File | `tech_qa` / `marketing_qa` submission + ClickUp fact `Complete` |
+| 3d. Tech / Media / Creative QA | Tech VA / Media Buyer / Creative | QA wizards in Client Roster / File | `tech_qa` / `marketing_qa` / `creative` submission + ClickUp fact `Complete` |
 | 4. Launch | Ops | Launch checklist wizard | `lifecycle_status: active`, `launch_date`, Slack via Make |
 
 **Scheduled CS calls** (onboarding / launch / check-in calendars from GHL Client Success) sync via Make into `cs_appointments` and show on Ops Overview + Client Roster/File. See [`docs/CS_APPOINTMENTS.md`](CS_APPOINTMENTS.md).
@@ -185,6 +185,7 @@ Planned fact fields:
 | Kickoff Form | `kickoff_form` = `Submitted` and `ob_stage` = `In Build`. Does not set Launch Call Date. |
 | Tech QA Form | `Tech QA = Complete` |
 | Marketing QA Form | `Marketing QA = Complete` |
+| Creative QA Form | Add `creative_qa` to `CLICKUP_OB_FIELD_MAP`. Submit sets that field to `Complete` and posts a comment. `creative` is accepted only if `creative_qa` is absent. |
 | Launch Form | `launch_form` = `Submitted`. ClickUp automation owns Launch Gate. Mr. Waiz does not set it. |
 
 Use `CLICKUP_OB_FIELD_MAP` for live ClickUp field IDs and dropdown option
@@ -198,22 +199,44 @@ Added 2026-09-29 as automation skeletons, not final SOP-derived QA.
 |------|-------|--------------------|-------------------|---------------|
 | Tech Setup QA | `/api/clients/[id]/qa/tech_setup` | `tech_qa` | `tech_qa` | `Complete` |
 | Media Buying QA | `/api/clients/[id]/qa/media_buying` | `marketing_qa` | `marketing_qa` | `Complete` |
+| Creative QA | `/api/clients/[id]/qa/creative` | `creative` | `creative_qa` (`creative` only if `creative_qa` is absent) | `Complete` |
 
-Both forms are client-scoped admin wizards opened from Client Roster or
+Creative QA is a third form. It does not change the Media Buying QA checklist.
+Creatives and Funnel lines are confirm checkboxes. A line left unchecked is
+omitted from `responses.checklist` and is not stored as no. Funnel link rows
+stay links: Perspective funnel link is editable and stored on
+`clients.landing_page_url`. Apex funnel link is read-only, auto-mapped as
+`{site}/{slug}/` from the published landing page. Thank-you link is read-only
+from `clients.thank_you_page_url` (`{site}/{slug}/thank-you`).
+
+The landing publish already writes that same `{site}/{slug}/` Apex URL onto
+`clients.landing_page_url`, which is also the Perspective funnel link column.
+Both rows share that column. Creative QA does not add a column and does not
+write the Apex URL onto `clients.funnel_url`.
+
+Add `creative_qa` to `CLICKUP_OB_FIELD_MAP`. Submit sets that onboarding
+custom field to `Complete` and posts a comment. If `creative_qa` is missing
+and `creative` is present, submit uses `creative`. Submit fails before the
+submission row when the key, the onboarding task, or the token is missing.
+It does not change ClickUp status or post to Slack. Run
+`supabase/migrations/add_creative_qa_form_type.sql` so submissions accept
+`creative`.
+
+These forms are client-scoped admin wizards opened from Client Roster or
 Client File. They do not create per-client form definitions. One shared
 config in `src/lib/qa-form.ts` is reused for every client. The submitted
 answers are saved in `client_form_submissions.responses` with
-`skeleton_version = qa-skeleton-v0`, and the ClickUp onboarding task
-receives a comment with the checklist evidence.
+`skeleton_version = qa-skeleton-v0`. When a ClickUp field is written, the
+onboarding task also receives a comment with the checklist evidence.
 
 QA actions only appear while `lifecycle_status` is `new_account` or
-`onboarding`. A reinstate starts a new QA cycle. Writes go only to
+`onboarding`. A reinstate starts a new QA cycle. ClickUp writes go only to
 `clients.onboarding_clickup_task_id` — never the retired Client Hub task.
 
-The submit path intentionally fails before writing the submission when
-`onboarding_clickup_task_id`, `CLICKUP_API_TOKEN`, or the matching
-`CLICKUP_OB_FIELD_MAP` key is missing. That keeps Mr. Waiz from recording
-QA complete when the ClickUp automation did not receive the fact.
+Tech QA, Media Buying QA, and Creative QA fail before writing the submission
+when `onboarding_clickup_task_id`, `CLICKUP_API_TOKEN`, or the matching
+`CLICKUP_OB_FIELD_MAP` key is missing. Creative QA's key is `creative_qa`.
+None of the QA forms change ClickUp status or post to Slack.
 
 Run `supabase/migrations/add_onboarding_qa_form_types.sql` so
 `client_form_submissions` accepts `tech_qa` and `marketing_qa`.

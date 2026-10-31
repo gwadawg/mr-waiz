@@ -802,6 +802,7 @@ export default function ClientFile({
   const latestReinstate = formSubmissions.find(s => s.form_type === "reinstate") ?? null;
   const techQaDone = formSubmissions.some(s => s.form_type === "tech_qa" && s.status === "applied");
   const mediaQaDone = formSubmissions.some(s => s.form_type === "marketing_qa" && s.status === "applied");
+  const creativeQaDone = formSubmissions.some(s => s.form_type === "creative" && s.status === "applied");
   const welcomeBackObDone = !!(
     latestReinstate &&
     formSubmissions.some(
@@ -1609,6 +1610,35 @@ export default function ClientFile({
                 Open Media QA{mediaQaDone ? " ✓" : ""}
               </button>
             </div>
+
+            <div
+              className="rounded-lg px-4 py-3 flex items-start justify-between gap-4 flex-wrap"
+              style={{
+                background: "rgba(232,121,249,0.08)",
+                border: "1px solid rgba(232,121,249,0.25)",
+              }}
+            >
+              <div>
+                <p className="text-sm font-semibold" style={{ color: creativeQaDone ? "#22c55e" : "#e879f9" }}>
+                  Creative QA{creativeQaDone ? " complete" : ""}
+                </p>
+                <p className="text-xs mt-1" style={{ color: "#94a3b8" }}>
+                  Confirm creative builds and the Perspective funnel. Separate from Media Buying QA. A checklist line that does not apply is left unchecked.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowQaLane("creative")}
+                className="text-xs font-semibold px-3 py-1.5 rounded-lg whitespace-nowrap"
+                style={{
+                  color: creativeQaDone ? "#22c55e" : "#e879f9",
+                  background: creativeQaDone ? "rgba(34,197,94,0.12)" : "rgba(232,121,249,0.12)",
+                  border: creativeQaDone ? "1px solid rgba(34,197,94,0.3)" : "1px solid rgba(232,121,249,0.3)",
+                }}
+              >
+                Open Creative QA{creativeQaDone ? " ✓" : ""}
+              </button>
+            </div>
             </div>
             )}
 
@@ -1879,7 +1909,7 @@ export default function ClientFile({
 
             <Section title="Websites & funnels">
               <p className="text-xs mb-3" style={{ color: "#64748b" }}>
-                Personal site, agency-built lander, WM Apex Funnel, and thank-you page.
+                Personal site, Perspective funnel link, WM Apex Funnel, and thank-you page.
               </p>
               <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-4">
                 <Detail
@@ -1899,7 +1929,7 @@ export default function ClientFile({
                   wide
                 />
                 <Detail
-                  label="Built landing page"
+                  label="Perspective funnel link"
                   value={client?.landing_page_url ? (
                     <a
                       href={/^https?:\/\//i.test(client.landing_page_url) ? client.landing_page_url : `https://${client.landing_page_url}`}

@@ -4,8 +4,11 @@ import {
   addClickUpTaskComment,
   applyClickUpFieldMap,
   getClickUpToken,
+  parseClickUpObFieldMap,
 } from '@/lib/clickup';
+import { creativeApexFunnelLink } from '@/lib/creative-qa-links';
 import { insertFormSubmission } from '@/lib/form-submissions';
+import { listLandingRows } from '@/lib/landing-page/storage';
 import {
   formatQaClickUpComment,
   getQaFormConfig,
@@ -13,33 +16,14 @@ import {
   isQaCompleteForCycle,
   isQaLane,
   isQaLifecycle,
+  qaDraftFromSubmitBody,
   qaDraftToResponses,
-  type QaFormDraft,
+  resolveQaClickUpFieldKey,
+  sealCreativeFunnelLinks,
 } from '@/lib/qa-form';
 
 const QA_PERMISSION_KEYS = ['admin_clients', 'admin_billing'];
-const QA_CYCLE_FORM_TYPES = ['tech_qa', 'marketing_qa', 'reinstate'] as const;
-
-function optionalText(value: unknown): string {
-  return typeof value === 'string' ? value.trim() : '';
-}
-
-function parseQaDraft(body: Record<string, unknown>): QaFormDraft {
-  const rawChecklist = body.checklist;
-  return {
-    completed_by_label: optionalText(body.completed_by_label),
-    checklist:
-      rawChecklist && typeof rawChecklist === 'object' && !Array.isArray(rawChecklist)
-        ? Object.fromEntries(
-            Object.entries(rawChecklist as Record<string, unknown>).map(([key, value]) => [key, value === true]),
-          )
-        : {},
-    evidence: optionalText(body.evidence),
-    blockers: optionalText(body.blockers),
-    notes: optionalText(body.notes),
-    final_confirmation: optionalText(body.final_confirmation),
-  };
-}
+const QA_CYCLE_FORM_TYPES = ['tech_qa', 'marketing_qa', 'creative', 'reinstate'] as const;
 
 export async function GET(
   _req: Request,
@@ -59,7 +43,7 @@ export async function GET(
   const [clientRes, cycleRes, userRes] = await Promise.all([
     ctx.service
       .from('clients')
-      .select('id, name, lifecycle_status, onboarding_clickup_task_id')
+      .select('id, name, lifecycle_status, onboarding_clickup_task_id, landing_page_url, thank_you_page_url')
       .eq('id', clientId)
       .single(),
     ctx.service
@@ -81,6 +65,18 @@ export async function GET(
   const latestSubmission =
     cycleRows.find(row => row.form_type === config.formType) ?? null;
 
+  let links: Record<string, string> | undefined;
+  if (config.lane === 'creative') {
+    const landingRows = await listLandingRows(ctx.service, clientId);
+    const perspective = textOrEmpty(clientRes.data.landing_page_url);
+    const thankYou = textOrEmpty(clientRes.data.thank_you_page_url);
+    links = {
+      perspective_funnel_link: perspective,
+      apex_funnel_link: creativeApexFunnelLink(landingRows, perspective) ?? '',
+      thank_you_link: thankYou,
+    };
+  }
+
   return NextResponse.json({
     client: clientRes.data,
     qa_config: config,
@@ -88,7 +84,12 @@ export async function GET(
     already_complete: isQaCompleteForCycle(cycleRows, config.formType),
     latest_submission: latestSubmission,
     default_completed_by: userRes.data.user?.email ?? ctx.userId,
+    ...(links ? { links } : {}),
   });
+}
+
+function textOrEmpty(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
 }
 
 export async function POST(
@@ -107,11 +108,15 @@ export async function POST(
 
   const config = getQaFormConfig(lane);
   const body = await req.json();
-  const draft = parseQaDraft(body);
+  let draft = qaDraftFromSubmitBody(body);
 
   if (!isQaChecklistComplete(draft, config)) {
     return NextResponse.json(
-      { error: `Complete every ${config.shortLabel} item and type QA to submit.` },
+      {
+        error: config.requireEveryItem
+          ? `Complete every ${config.shortLabel} item and type QA to submit.`
+          : `Add who completed ${config.shortLabel} and type QA to submit.`,
+      },
       { status: 400 },
     );
   }
@@ -119,7 +124,7 @@ export async function POST(
   const [clientRes, cycleRes] = await Promise.all([
     ctx.service
       .from('clients')
-      .select('id, name, lifecycle_status, onboarding_clickup_task_id')
+      .select('id, name, lifecycle_status, onboarding_clickup_task_id, landing_page_url, thank_you_page_url')
       .eq('id', clientId)
       .single(),
     ctx.service
@@ -146,7 +151,29 @@ export async function POST(
     );
   }
 
-  const taskId = clientRes.data.onboarding_clickup_task_id?.trim();
+  const taskId = clientRes.data.onboarding_clickup_task_id?.trim() || null;
+  const clickupFieldKey = resolveQaClickUpFieldKey(config, parseClickUpObFieldMap());
+  if (!clickupFieldKey) {
+    return NextResponse.json(
+      {
+        error: `${config.shortLabel} ClickUp field is not configured in CLICKUP_OB_FIELD_MAP. Add the key creative_qa.`,
+      },
+      { status: 500 },
+    );
+  }
+
+  let perspectiveLink = '';
+  if (config.lane === 'creative') {
+    const landingRows = await listLandingRows(ctx.service, clientId);
+    const thankYou = textOrEmpty(clientRes.data.thank_you_page_url);
+    perspectiveLink = draft.links.perspective_funnel_link?.trim() ?? '';
+    draft = sealCreativeFunnelLinks(draft, {
+      perspective: perspectiveLink,
+      apex: creativeApexFunnelLink(landingRows, textOrEmpty(clientRes.data.landing_page_url)),
+      thankYou: thankYou || null,
+    });
+  }
+
   if (!taskId) {
     return NextResponse.json(
       { error: 'Client is missing a ClickUp onboarding task ID. QA writes only to the onboarding task, not the retired Client Hub task.' },
@@ -165,13 +192,15 @@ export async function POST(
   const wrote = await applyClickUpFieldMap(
     taskId,
     token,
-    { [config.clickupFieldKey]: 'Complete' },
+    { [clickupFieldKey]: 'Complete' },
     '[qa-form]',
   );
   if (wrote < 1) {
     return NextResponse.json(
       {
-        error: `${config.shortLabel} ClickUp field is not configured in CLICKUP_OB_FIELD_MAP.`,
+        error: config.lane === 'creative'
+          ? `${config.shortLabel} ClickUp field is not configured in CLICKUP_OB_FIELD_MAP. Add the key creative_qa.`
+          : `${config.shortLabel} ClickUp field is not configured in CLICKUP_OB_FIELD_MAP.`,
       },
       { status: 500 },
     );
@@ -183,6 +212,16 @@ export async function POST(
     formatQaClickUpComment(clientRes.data, config, draft),
   );
 
+  if (config.lane === 'creative' && perspectiveLink) {
+    const { error: linkError } = await ctx.service
+      .from('clients')
+      .update({ landing_page_url: perspectiveLink })
+      .eq('id', clientId);
+    if (linkError) {
+      return NextResponse.json({ error: linkError.message }, { status: 500 });
+    }
+  }
+
   const responses = qaDraftToResponses(draft, config);
   const submission = await insertFormSubmission(ctx.service, {
     client_id: clientId,
@@ -192,11 +231,16 @@ export async function POST(
     responses,
     applied_patch: {
       onboarding_clickup_task_id: taskId,
-      clickup_field: config.clickupFieldKey,
+      clickup_field: clickupFieldKey,
       clickup_value: 'Complete',
+      ...(perspectiveLink ? { landing_page_url: perspectiveLink } : {}),
     },
   });
 
-  return NextResponse.json({ submission, clickup_task_id: taskId });
+  return NextResponse.json({
+    submission,
+    clickup_task_id: taskId,
+    clickup_field: clickupFieldKey,
+  });
 }
 
