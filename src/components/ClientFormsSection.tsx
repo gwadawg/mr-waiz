@@ -198,16 +198,40 @@ function humanizeQaResponses(formType: FormType, responses: Record<string, unkno
   const rows: { label: string; value: string; section?: string }[] = [
     { label: "Skeleton", value: formatValue("skeleton_version", responses.skeleton_version) },
     { label: "Completed by", value: formatValue("completed_by_label", responses.completed_by_label) },
-    { label: "Checklist", value: "", section: "Checklist" },
   ];
-  for (const item of config.items) {
-    const confirmed = checklist[item.key] === true;
-    if (config.omitUnchecked && !confirmed) continue;
-    rows.push({
-      label: item.label,
-      value: confirmed ? "✓ Confirmed" : "—",
-      section: "Checklist",
-    });
+  const linkValues = responses.links && typeof responses.links === "object"
+    ? responses.links as Record<string, unknown>
+    : {};
+  const sectioned = config.items.some(item => item.section) || (config.links ?? []).length > 0;
+  if (!sectioned) {
+    rows.push({ label: "Checklist", value: "", section: "Checklist" });
+  }
+  const sections = sectioned
+    ? [...new Set([
+        ...config.items.map(item => item.section || "Checklist"),
+        ...(config.links ?? []).map(link => link.section),
+      ])]
+    : ["Checklist"];
+  for (const section of sections) {
+    const sectionRows: { label: string; value: string; section?: string }[] = [];
+    for (const link of (config.links ?? []).filter(link => link.section === section)) {
+      const value = linkValues[link.key];
+      if (typeof value !== "string" || !value.trim()) continue;
+      sectionRows.push({ label: link.label, value, section });
+    }
+    for (const item of config.items.filter(item => (item.section || "Checklist") === section || !sectioned)) {
+      if (sectioned && (item.section || "Checklist") !== section) continue;
+      const confirmed = checklist[item.key] === true;
+      if (config.omitUnchecked && !confirmed) continue;
+      sectionRows.push({
+        label: item.label,
+        value: confirmed ? "✓ Confirmed" : "—",
+        section,
+      });
+    }
+    if (sectioned && sectionRows.length === 0) continue;
+    if (sectioned) rows.push({ label: section, value: "", section });
+    rows.push(...sectionRows);
   }
   if (responses.evidence) rows.push({ label: "Evidence", value: String(responses.evidence) });
   if (responses.blockers) rows.push({ label: "Blockers / exceptions", value: String(responses.blockers) });

@@ -1623,7 +1623,7 @@ export default function ClientFile({
                   Creative QA{creativeQaDone ? " complete" : ""}
                 </p>
                 <p className="text-xs mt-1" style={{ color: "#94a3b8" }}>
-                  Confirm ads are on the client drive, the fine line includes the NMLS#, and the offer and message are clean. Separate from Media Buying QA. A line that does not apply is left unchecked.
+                  Confirm creative builds and the Perspective funnel. Separate from Media Buying QA. A checklist line that does not apply is left unchecked.
                 </p>
               </div>
               <button
@@ -1909,7 +1909,7 @@ export default function ClientFile({
 
             <Section title="Websites & funnels">
               <p className="text-xs mb-3" style={{ color: "#64748b" }}>
-                Personal site, agency-built lander, WM Apex Funnel, and thank-you page.
+                Personal site, Perspective funnel link, WM Apex Funnel, and thank-you page.
               </p>
               <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-4">
                 <Detail
@@ -1929,7 +1929,7 @@ export default function ClientFile({
                   wide
                 />
                 <Detail
-                  label="Built landing page"
+                  label="Perspective funnel link"
                   value={client?.landing_page_url ? (
                     <a
                       href={/^https?:\/\//i.test(client.landing_page_url) ? client.landing_page_url : `https://${client.landing_page_url}`}

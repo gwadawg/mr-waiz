@@ -6,7 +6,9 @@ import {
   getClickUpToken,
   parseClickUpObFieldMap,
 } from '@/lib/clickup';
+import { creativeApexFunnelLink } from '@/lib/creative-qa-links';
 import { insertFormSubmission } from '@/lib/form-submissions';
+import { listLandingRows } from '@/lib/landing-page/storage';
 import {
   formatQaClickUpComment,
   getQaFormConfig,
@@ -17,6 +19,7 @@ import {
   qaDraftFromSubmitBody,
   qaDraftToResponses,
   resolveQaClickUpFieldKey,
+  sealCreativeFunnelLinks,
 } from '@/lib/qa-form';
 
 const QA_PERMISSION_KEYS = ['admin_clients', 'admin_billing'];
@@ -40,7 +43,7 @@ export async function GET(
   const [clientRes, cycleRes, userRes] = await Promise.all([
     ctx.service
       .from('clients')
-      .select('id, name, lifecycle_status, onboarding_clickup_task_id')
+      .select('id, name, lifecycle_status, onboarding_clickup_task_id, landing_page_url, thank_you_page_url')
       .eq('id', clientId)
       .single(),
     ctx.service
@@ -62,6 +65,18 @@ export async function GET(
   const latestSubmission =
     cycleRows.find(row => row.form_type === config.formType) ?? null;
 
+  let links: Record<string, string> | undefined;
+  if (config.lane === 'creative') {
+    const landingRows = await listLandingRows(ctx.service, clientId);
+    const perspective = textOrEmpty(clientRes.data.landing_page_url);
+    const thankYou = textOrEmpty(clientRes.data.thank_you_page_url);
+    links = {
+      perspective_funnel_link: perspective,
+      apex_funnel_link: creativeApexFunnelLink(landingRows, perspective) ?? '',
+      thank_you_link: thankYou,
+    };
+  }
+
   return NextResponse.json({
     client: clientRes.data,
     qa_config: config,
@@ -69,7 +84,12 @@ export async function GET(
     already_complete: isQaCompleteForCycle(cycleRows, config.formType),
     latest_submission: latestSubmission,
     default_completed_by: userRes.data.user?.email ?? ctx.userId,
+    ...(links ? { links } : {}),
   });
+}
+
+function textOrEmpty(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
 }
 
 export async function POST(
@@ -88,7 +108,7 @@ export async function POST(
 
   const config = getQaFormConfig(lane);
   const body = await req.json();
-  const draft = qaDraftFromSubmitBody(body);
+  let draft = qaDraftFromSubmitBody(body);
 
   if (!isQaChecklistComplete(draft, config)) {
     return NextResponse.json(
@@ -104,7 +124,7 @@ export async function POST(
   const [clientRes, cycleRes] = await Promise.all([
     ctx.service
       .from('clients')
-      .select('id, name, lifecycle_status, onboarding_clickup_task_id')
+      .select('id, name, lifecycle_status, onboarding_clickup_task_id, landing_page_url, thank_you_page_url')
       .eq('id', clientId)
       .single(),
     ctx.service
@@ -133,45 +153,73 @@ export async function POST(
 
   const taskId = clientRes.data.onboarding_clickup_task_id?.trim() || null;
   const clickupFieldKey = resolveQaClickUpFieldKey(config, parseClickUpObFieldMap());
-
-  // Tech and Media always have a field key, so a missing task or token still
-  // blocks those submits. Creative with no mapped field records the row only.
-  if (clickupFieldKey) {
-    if (!taskId) {
-      return NextResponse.json(
-        { error: 'Client is missing a ClickUp onboarding task ID. QA writes only to the onboarding task, not the retired Client Hub task.' },
-        { status: 400 },
-      );
-    }
-
-    const token = getClickUpToken();
-    if (!token) {
-      return NextResponse.json(
-        { error: 'CLICKUP_API_TOKEN is not configured; QA cannot trigger ClickUp automation.' },
-        { status: 500 },
-      );
-    }
-
-    const wrote = await applyClickUpFieldMap(
-      taskId,
-      token,
-      { [clickupFieldKey]: 'Complete' },
-      '[qa-form]',
+  if (!clickupFieldKey) {
+    return NextResponse.json(
+      {
+        error: `${config.shortLabel} ClickUp field is not configured in CLICKUP_OB_FIELD_MAP. Add the key creative_qa.`,
+      },
+      { status: 500 },
     );
-    if (wrote < 1) {
-      return NextResponse.json(
-        {
-          error: `${config.shortLabel} ClickUp field is not configured in CLICKUP_OB_FIELD_MAP.`,
-        },
-        { status: 500 },
-      );
-    }
+  }
 
-    await addClickUpTaskComment(
-      taskId,
-      token,
-      formatQaClickUpComment(clientRes.data, config, draft),
+  let perspectiveLink = '';
+  if (config.lane === 'creative') {
+    const landingRows = await listLandingRows(ctx.service, clientId);
+    const thankYou = textOrEmpty(clientRes.data.thank_you_page_url);
+    perspectiveLink = draft.links.perspective_funnel_link?.trim() ?? '';
+    draft = sealCreativeFunnelLinks(draft, {
+      perspective: perspectiveLink,
+      apex: creativeApexFunnelLink(landingRows, textOrEmpty(clientRes.data.landing_page_url)),
+      thankYou: thankYou || null,
+    });
+  }
+
+  if (!taskId) {
+    return NextResponse.json(
+      { error: 'Client is missing a ClickUp onboarding task ID. QA writes only to the onboarding task, not the retired Client Hub task.' },
+      { status: 400 },
     );
+  }
+
+  const token = getClickUpToken();
+  if (!token) {
+    return NextResponse.json(
+      { error: 'CLICKUP_API_TOKEN is not configured; QA cannot trigger ClickUp automation.' },
+      { status: 500 },
+    );
+  }
+
+  const wrote = await applyClickUpFieldMap(
+    taskId,
+    token,
+    { [clickupFieldKey]: 'Complete' },
+    '[qa-form]',
+  );
+  if (wrote < 1) {
+    return NextResponse.json(
+      {
+        error: config.lane === 'creative'
+          ? `${config.shortLabel} ClickUp field is not configured in CLICKUP_OB_FIELD_MAP. Add the key creative_qa.`
+          : `${config.shortLabel} ClickUp field is not configured in CLICKUP_OB_FIELD_MAP.`,
+      },
+      { status: 500 },
+    );
+  }
+
+  await addClickUpTaskComment(
+    taskId,
+    token,
+    formatQaClickUpComment(clientRes.data, config, draft),
+  );
+
+  if (config.lane === 'creative' && perspectiveLink) {
+    const { error: linkError } = await ctx.service
+      .from('clients')
+      .update({ landing_page_url: perspectiveLink })
+      .eq('id', clientId);
+    if (linkError) {
+      return NextResponse.json({ error: linkError.message }, { status: 500 });
+    }
   }
 
   const responses = qaDraftToResponses(draft, config);
@@ -181,18 +229,17 @@ export async function POST(
     status: 'applied',
     submitted_by: ctx.userId,
     responses,
-    applied_patch: clickupFieldKey
-      ? {
-          onboarding_clickup_task_id: taskId,
-          clickup_field: clickupFieldKey,
-          clickup_value: 'Complete',
-        }
-      : { clickup_field: null },
+    applied_patch: {
+      onboarding_clickup_task_id: taskId,
+      clickup_field: clickupFieldKey,
+      clickup_value: 'Complete',
+      ...(perspectiveLink ? { landing_page_url: perspectiveLink } : {}),
+    },
   });
 
   return NextResponse.json({
     submission,
-    clickup_task_id: clickupFieldKey ? taskId : null,
+    clickup_task_id: taskId,
     clickup_field: clickupFieldKey,
   });
 }

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
+import { creativeApexFunnelLink } from '@/lib/creative-qa-links';
 import {
   emptyQaFormDraft,
   formatQaClickUpComment,
@@ -12,6 +13,7 @@ import {
   qaDraftFromSubmitBody,
   qaDraftToResponses,
   resolveQaClickUpFieldKey,
+  sealCreativeFunnelLinks,
   QA_FINAL_CONFIRMATION,
   QA_SKELETON_VERSION,
   type QaLane,
@@ -100,13 +102,28 @@ describe('qa-form', () => {
 
     assert.equal(isQaChecklistComplete(draft, config), true);
     assert.deepEqual(
-      config.items.map(item => item.label),
+      config.items.filter(item => item.section === 'Creatives').map(item => item.label),
       [
         'Ads uploaded to the client drive',
         'Client name / business name fine line includes the NMLS#',
         'Offer and message make sense and have no typos',
       ],
     );
+    assert.deepEqual(
+      config.items.filter(item => item.section === 'Funnel').map(item => item.label),
+      [
+        'Perspective footer has the correct privacy policy and legal notice',
+        'Client bio is clean and makes sense',
+        'Brand colors align from WM Apex to Perspective',
+        'Correct pixel on the Perspective account',
+        'HighLevel integration complete',
+        'Opt-in language uses the client name',
+        'Correct URL on Perspective (DSCR vs retirement experts)',
+      ],
+    );
+    assert.equal(config.links.find(link => link.key === 'apex_funnel_link')?.readOnly, true);
+    assert.equal(config.links.find(link => link.key === 'thank_you_link')?.readOnly, true);
+    assert.equal(config.links.find(link => link.key === 'perspective_funnel_link')?.readOnly, false);
 
     const responses = qaDraftToResponses(draft, config);
     const checklist = responses.checklist as Record<string, unknown>;
@@ -114,6 +131,7 @@ describe('qa-form', () => {
     assert.equal(checklist.ads_uploaded_to_client_drive, true);
     assert.equal(checklist.offer_and_message_clean, true);
     assert.equal('fine_line_includes_nmls' in checklist, false);
+    assert.equal('perspective_footer_privacy' in checklist, false);
     assert.equal(Object.values(checklist).includes(false), false);
     assert.equal(Object.values(checklist).includes('no'), false);
 
@@ -150,7 +168,37 @@ describe('qa-form', () => {
     }
   });
 
-  it('leaves the creative ClickUp field unset unless the map already has one', () => {
+  it('keeps funnel links as links and omits a blank thank-you line', () => {
+    const config = getQaFormConfig('creative');
+    const draft = emptyQaFormDraft(config, 'ada@waiz.media');
+    draft.final_confirmation = QA_FINAL_CONFIRMATION;
+    draft.links.apex_funnel_link = 'https://evil.example/apex';
+    draft.links.thank_you_link = 'https://evil.example/thanks';
+    const sealed = sealCreativeFunnelLinks(draft, {
+      perspective: 'https://funnel.example/jane',
+      apex: 'https://dscrexperts.com/jane-doe/',
+      thankYou: null,
+    });
+    const responses = qaDraftToResponses(sealed, config);
+    const links = responses.links as Record<string, string>;
+    assert.equal(links.perspective_funnel_link, 'https://funnel.example/jane');
+    assert.equal(links.apex_funnel_link, 'https://dscrexperts.com/jane-doe/');
+    assert.equal('thank_you_link' in links, false);
+    assert.equal(Object.values(links).includes('no'), false);
+
+    const apex = creativeApexFunnelLink([
+      {
+        id: 'row-1',
+        client_id: 'client-1',
+        status: 'applied',
+        submitted_at: '2026-10-01T00:00:00.000Z',
+        responses: { product: 'DSCR', fields: { slug: 'jane-doe' } },
+      },
+    ]);
+    assert.equal(apex, 'https://dscrexperts.com/jane-doe/');
+  });
+
+  it('uses creative_qa as the ClickUp field key to add', () => {
     const config = getQaFormConfig('creative');
     assert.equal(resolveQaClickUpFieldKey(config, {}), null);
     assert.equal(resolveQaClickUpFieldKey(config, { tech_qa: { id: 't' }, marketing_qa: { id: 'm' } }), null);

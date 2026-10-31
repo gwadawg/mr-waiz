@@ -685,10 +685,11 @@ export default function ClientFileEditForm({
             wide
           />
           <Field
-            label="Built landing page"
+            label="Perspective funnel link"
             value={draft.landing_page_url}
             onChange={v => patch("landing_page_url", v)}
-            placeholder="Agency-built lander (e.g. homequityhacks)…"
+            placeholder="https://"
+            hint="Same column the landing publish writes {site}/{slug}/ into."
             wide
           />
           <Field

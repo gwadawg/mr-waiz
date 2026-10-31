@@ -29,6 +29,15 @@ export type QaChecklistItemDef = {
   key: string;
   label: string;
   helpText?: string;
+  section?: string;
+};
+
+export type QaLinkDef = {
+  key: string;
+  label: string;
+  section: string;
+  readOnly: boolean;
+  helpText?: string;
 };
 
 export type QaFormConfig = {
@@ -41,6 +50,7 @@ export type QaFormConfig = {
   description: string;
   ownerLabel: string;
   items: QaChecklistItemDef[];
+  links: QaLinkDef[];
   /** Tech and Media require every line. Creative can leave a line off. */
   requireEveryItem: boolean;
   /** Creative stores only confirmed lines. Unchecked lines are omitted. */
@@ -50,6 +60,7 @@ export type QaFormConfig = {
 export type QaFormDraft = {
   completed_by_label: string;
   checklist: Record<string, boolean>;
+  links: Record<string, string>;
   evidence: string;
   blockers: string;
   notes: string;
@@ -68,6 +79,7 @@ export const QA_FORM_CONFIGS: Record<QaLane, QaFormConfig> = {
       'Skeleton QA gate for A2P, GHL, routing, phone, and Closebot readiness. This closes the Tech QA fact for ClickUp automation testing.',
     requireEveryItem: true,
     omitUnchecked: false,
+    links: [],
     items: [
       {
         key: 'a2p_status_checked',
@@ -103,6 +115,7 @@ export const QA_FORM_CONFIGS: Record<QaLane, QaFormConfig> = {
       'Skeleton QA gate for media buying and funnel readiness. This closes the Marketing QA fact for ClickUp automation testing.',
     requireEveryItem: true,
     omitUnchecked: false,
+    links: [],
     items: [
       {
         key: 'ad_access_confirmed',
@@ -135,21 +148,82 @@ export const QA_FORM_CONFIGS: Record<QaLane, QaFormConfig> = {
     shortLabel: 'Creative QA',
     ownerLabel: 'Creative',
     description:
-      'Confirm the ads are on the client drive, the fine line includes the NMLS#, and the offer and message are clean. Leave a line unchecked when it does not apply. This form is separate from Media Buying QA.',
+      'Confirm creative builds and the Perspective funnel. Leave a checklist line unchecked when it does not apply. This form is separate from Media Buying QA.',
     requireEveryItem: false,
     omitUnchecked: true,
+    links: [
+      {
+        key: 'perspective_funnel_link',
+        label: 'Perspective funnel link',
+        section: 'Funnel',
+        readOnly: false,
+        helpText: 'Saved on the client as the Perspective funnel link.',
+      },
+      {
+        key: 'apex_funnel_link',
+        label: 'Apex funnel link',
+        section: 'Funnel',
+        readOnly: true,
+        helpText: 'Read-only. Published as {site}/{slug}/. That publish also writes this URL onto the Perspective funnel link column.',
+      },
+      {
+        key: 'thank_you_link',
+        label: 'Thank-you link',
+        section: 'Funnel',
+        readOnly: true,
+        helpText: 'Read-only from the thank-you page on file ({site}/{slug}/thank-you).',
+      },
+    ],
     items: [
       {
         key: 'ads_uploaded_to_client_drive',
         label: 'Ads uploaded to the client drive',
+        section: 'Creatives',
       },
       {
         key: 'fine_line_includes_nmls',
         label: 'Client name / business name fine line includes the NMLS#',
+        section: 'Creatives',
       },
       {
         key: 'offer_and_message_clean',
         label: 'Offer and message make sense and have no typos',
+        section: 'Creatives',
+      },
+      {
+        key: 'perspective_footer_privacy',
+        label: 'Perspective footer has the correct privacy policy and legal notice',
+        section: 'Funnel',
+      },
+      {
+        key: 'client_bio_clean',
+        label: 'Client bio is clean and makes sense',
+        section: 'Funnel',
+      },
+      {
+        key: 'brand_colors_align',
+        label: 'Brand colors align from WM Apex to Perspective',
+        section: 'Funnel',
+      },
+      {
+        key: 'perspective_pixel',
+        label: 'Correct pixel on the Perspective account',
+        section: 'Funnel',
+      },
+      {
+        key: 'highlevel_integration',
+        label: 'HighLevel integration complete',
+        section: 'Funnel',
+      },
+      {
+        key: 'opt_in_client_name',
+        label: 'Opt-in language uses the client name',
+        section: 'Funnel',
+      },
+      {
+        key: 'perspective_url_offer',
+        label: 'Correct URL on Perspective (DSCR vs retirement experts)',
+        section: 'Funnel',
       },
     ],
   },
@@ -183,6 +257,15 @@ function optionalText(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
 }
 
+function linkMap(raw: unknown): Record<string, string> {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  return Object.fromEntries(
+    Object.entries(raw as Record<string, unknown>)
+      .filter((entry): entry is [string, string] => typeof entry[1] === 'string')
+      .map(([key, value]) => [key, value.trim()]),
+  );
+}
+
 /** Body posted by the QA wizard. Unchecked boxes stay false here; storage omits them for Creative. */
 export function qaDraftFromSubmitBody(body: Record<string, unknown>): QaFormDraft {
   const rawChecklist = body.checklist;
@@ -194,6 +277,7 @@ export function qaDraftFromSubmitBody(body: Record<string, unknown>): QaFormDraf
             Object.entries(rawChecklist as Record<string, unknown>).map(([key, value]) => [key, value === true]),
           )
         : {},
+    links: linkMap(body.links),
     evidence: optionalText(body.evidence),
     blockers: optionalText(body.blockers),
     notes: optionalText(body.notes),
@@ -201,10 +285,27 @@ export function qaDraftFromSubmitBody(body: Record<string, unknown>): QaFormDraf
   };
 }
 
+/** Server-owned funnel links. Apex and thank-you ignore whatever the browser posted. */
+export function sealCreativeFunnelLinks(
+  draft: QaFormDraft,
+  sources: { perspective: string; apex: string | null; thankYou: string | null },
+): QaFormDraft {
+  return {
+    ...draft,
+    links: {
+      ...draft.links,
+      perspective_funnel_link: sources.perspective.trim(),
+      apex_funnel_link: sources.apex?.trim() ?? '',
+      thank_you_link: sources.thankYou?.trim() ?? '',
+    },
+  };
+}
+
 export function emptyQaFormDraft(config: QaFormConfig, completedByLabel = ''): QaFormDraft {
   return {
     completed_by_label: completedByLabel,
     checklist: Object.fromEntries(config.items.map(item => [item.key, false])),
+    links: Object.fromEntries((config.links ?? []).map(link => [link.key, ''])),
     evidence: '',
     blockers: '',
     notes: '',
@@ -239,6 +340,15 @@ function storedChecklist(draft: QaFormDraft, config: QaFormConfig): Record<strin
   return stored;
 }
 
+function storedLinks(draft: QaFormDraft, config: QaFormConfig): Record<string, string> {
+  const stored: Record<string, string> = {};
+  for (const link of config.links) {
+    const value = draft.links[link.key]?.trim() ?? '';
+    if (value) stored[link.key] = value;
+  }
+  return stored;
+}
+
 export function qaDraftToResponses(
   draft: QaFormDraft,
   config: QaFormConfig,
@@ -248,6 +358,7 @@ export function qaDraftToResponses(
     skeleton_version: QA_SKELETON_VERSION,
     completed_by_label: draft.completed_by_label.trim(),
     checklist: storedChecklist(draft, config),
+    ...(config.links.length > 0 ? { links: storedLinks(draft, config) } : {}),
     evidence: draft.evidence.trim() || null,
     blockers: draft.blockers.trim() || null,
     notes: draft.notes.trim() || null,
@@ -263,6 +374,12 @@ export function formatQaClickUpComment(
   const confirmed = config.omitUnchecked
     ? config.items.filter(item => draft.checklist[item.key] === true)
     : config.items;
+  const linkLines = config.links
+    .map(link => {
+      const value = draft.links[link.key]?.trim() ?? '';
+      return value ? `${link.label}: ${value}` : '';
+    })
+    .filter(Boolean);
   const lines = [
     `✅ ${config.title} submitted`,
     '',
@@ -271,6 +388,7 @@ export function formatQaClickUpComment(
     `Skeleton: ${QA_SKELETON_VERSION}`,
     `Completed by: ${draft.completed_by_label.trim() || '—'}`,
     '',
+    ...(linkLines.length > 0 ? ['— Links —', ...linkLines, ''] : []),
     '— Checklist —',
     ...confirmed.map(item => `✓ ${item.label}`),
   ];
