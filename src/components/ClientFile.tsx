@@ -48,6 +48,7 @@ import LoanLogLinkSection from "@/components/loan-log/LoanLogLinkSection";
 import KickOffCallWizard from "@/components/KickOffCallWizard";
 import LaunchChecklistWizard from "@/components/LaunchChecklistWizard";
 import LaunchKitWizard from "@/components/LaunchKitWizard";
+import MediaBuyingQaWizard from "@/components/MediaBuyingQaWizard";
 import QaSkeletonWizard from "@/components/QaSkeletonWizard";
 import VirtualCardWizard from "@/components/VirtualCardWizard";
 
@@ -848,7 +849,18 @@ export default function ClientFile({
         }}
       />
     )}
-    {showQaLane && (
+    {showQaLane === "media_buying" && (
+      <MediaBuyingQaWizard
+        clientId={clientId}
+        fallbackName={offerName}
+        onClose={() => setShowQaLane(null)}
+        onCompleted={() => {
+          load();
+          onUpdated?.();
+        }}
+      />
+    )}
+    {showQaLane && showQaLane !== "media_buying" && (
       <QaSkeletonWizard
         clientId={clientId}
         lane={showQaLane}
@@ -1582,6 +1594,7 @@ export default function ClientFile({
               </button>
             </div>
 
+            {(!usesCallCenterKpiLayout(client?.reporting_type) || mediaQaDone) && (
             <div
               className="rounded-lg px-4 py-3 flex items-start justify-between gap-4 flex-wrap"
               style={{
@@ -1594,7 +1607,7 @@ export default function ClientFile({
                   Media Buying QA{mediaQaDone ? " complete" : ""}
                 </p>
                 <p className="text-xs mt-1" style={{ color: "#94a3b8" }}>
-                  Skeleton QA gate for ad access, funnel, campaign setup, creative, and launch-readiness. Submitting writes Marketing QA complete to ClickUp.
+                  Ads checks after the build. The ad account link saves on the roster. Submitting writes Marketing QA complete to ClickUp.
                 </p>
               </div>
               <button
@@ -1610,6 +1623,7 @@ export default function ClientFile({
                 Open Media QA{mediaQaDone ? " ✓" : ""}
               </button>
             </div>
+            )}
 
             <div
               className="rounded-lg px-4 py-3 flex items-start justify-between gap-4 flex-wrap"
