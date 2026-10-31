@@ -201,7 +201,18 @@ Added 2026-09-29 as automation skeletons, not final SOP-derived QA.
 | Media Buying QA | `/api/clients/[id]/qa/media_buying` | `marketing_qa` | `marketing_qa` | `Complete` |
 | Creative QA | `/api/clients/[id]/qa/creative` | `creative` | `creative_qa` (`creative` only if `creative_qa` is absent) | `Complete` |
 
-Creative QA is a third form. It does not change the Media Buying QA checklist.
+Media Buying QA is the ads checklist the media buyer fills after the build
+(`skeleton_version = media-buying-qa-v1`). Each check is Done or Does not
+apply. A skipped line is omitted, not stored as No. Facebook page (profile
+picture, page description, and banner), UTM, and the MAKE sub-account name
+are required. HE clients do not see this form. Leads and Call Center use the
+same lines. The ad account link is the only roster write: when it is not
+skipped, submit saves it to `clients.ad_account_url`. Page, pixel, and UTM
+stay confirmations. Submit still sets ClickUp `marketing_qa` to `Complete`
+and posts a comment. It does not move the task to Ready to review and it
+does not post to Slack.
+
+Creative QA is a separate form. It does not change the Media Buying QA checklist.
 Creatives and Funnel lines are confirm checkboxes. A line left unchecked is
 omitted from `responses.checklist` and is not stored as no. Funnel link rows
 stay links: Perspective funnel link is editable and stored on
@@ -225,9 +236,10 @@ It does not change ClickUp status or post to Slack. Run
 These forms are client-scoped admin wizards opened from Client Roster or
 Client File. They do not create per-client form definitions. One shared
 config in `src/lib/qa-form.ts` is reused for every client. The submitted
-answers are saved in `client_form_submissions.responses` with
-`skeleton_version = qa-skeleton-v0`. When a ClickUp field is written, the
-onboarding task also receives a comment with the checklist evidence.
+answers are saved in `client_form_submissions.responses`. Tech Setup QA
+and Creative QA use `skeleton_version = qa-skeleton-v0`. Media Buying QA
+uses `media-buying-qa-v1`. When a ClickUp field is written, the onboarding
+task also receives a comment with the checklist evidence.
 
 QA actions only appear while `lifecycle_status` is `new_account` or
 `onboarding`. A reinstate starts a new QA cycle. ClickUp writes go only to
@@ -241,9 +253,9 @@ None of the QA forms change ClickUp status or post to Slack.
 Run `supabase/migrations/add_onboarding_qa_form_types.sql` so
 `client_form_submissions` accepts `tech_qa` and `marketing_qa`.
 
-Replace the skeleton checklist content later from the Tech/A2P and
-Media Buying/Funnel SOP done-definitions. Keep the write contract the
-same unless the ClickUp field architecture changes.
+Tech Setup QA is still the five-item skeleton. Replace that checklist later
+from the Tech/A2P done-definitions. Keep the ClickUp write contract the
+same unless the field architecture changes.
 
 After `POST /api/admin/onboard` stores `onboarding_clickup_task_id`, Mr. Waiz
 writes two dropdowns on that task:
@@ -501,7 +513,7 @@ Roster shows progress strip: Sign | OB | KO | Kit | Live. Launch Kit rows in Cli
 | `GET/POST /api/form-submissions/pending` | Admin session | Unmapped OB queue |
 | `POST /api/clients/[id]/kickoff` | Admin session | Kickoff wizard |
 | `GET/POST /api/clients/[id]/qa/tech_setup` | Admin session (`admin_clients` / `admin_billing`) | Tech Setup QA skeleton |
-| `GET/POST /api/clients/[id]/qa/media_buying` | Admin session (`admin_clients` / `admin_billing`) | Media Buying QA skeleton |
+| `GET/POST /api/clients/[id]/qa/media_buying` | Admin session (`admin_clients` / `admin_billing`) | Media Buying QA. Saves `clients.ad_account_url` when the link is not skipped |
 | `GET/POST /api/clients/[id]/launch-kit` | Admin session (`admin_clients` / `admin_billing`) | Prefill + versions / `{ mode: 'draft' \| 'generate', draft }` |
 | `POST /api/clients/[id]/launch-kit/send` | Admin session | Post a kit version to the client Slack channel |
 | `GET /api/clients/[id]/launch-kit/download?submission=` | Admin session (+ `client_health`) | Redirect to a fresh 15-min signed URL |

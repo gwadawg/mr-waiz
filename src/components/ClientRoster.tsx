@@ -7,6 +7,7 @@ import ModalCloseButton from "@/components/ModalCloseButton";
 import KickOffCallWizard from "@/components/KickOffCallWizard";
 import LaunchChecklistWizard from "@/components/LaunchChecklistWizard";
 import LaunchKitWizard from "@/components/LaunchKitWizard";
+import MediaBuyingQaWizard from "@/components/MediaBuyingQaWizard";
 import QaSkeletonWizard from "@/components/QaSkeletonWizard";
 import VirtualCardWizard from "@/components/VirtualCardWizard";
 import { isLaunchKitLifecycle } from "@/lib/launch-kit/intake";
@@ -1451,7 +1452,16 @@ export default function ClientRoster({ canViewRevenue: initialCanViewRevenue = f
         />
       )}
 
-      {qaFor && (
+      {qaFor?.lane === "media_buying" && (
+        <MediaBuyingQaWizard
+          clientId={qaFor.id}
+          fallbackName={qaFor.name}
+          onClose={() => setQaFor(null)}
+          onCompleted={reload}
+        />
+      )}
+
+      {qaFor && qaFor.lane !== "media_buying" && (
         <QaSkeletonWizard
           clientId={qaFor.id}
           lane={qaFor.lane}
@@ -1694,6 +1704,7 @@ function ClientRow({
   const showKickoffAction = isKickoffLifecycle(c.lifecycle_status) || kickoffPending;
   const showLaunchAction = c.lifecycle_status === "onboarding" || c.lifecycle_status === "new_account";
   const showQaAction = isQaLifecycle(c.lifecycle_status);
+  const showMediaQaAction = showQaAction && (!usesCallCenterKpiLayout(c.reporting_type) || !!c.form_progress?.marketing_qa);
   const showLaunchKitAction = isLaunchKitLifecycle(c.lifecycle_status);
   const techQaDone = !!c.form_progress?.tech_qa;
   const mediaQaDone = !!c.form_progress?.marketing_qa;
@@ -1943,13 +1954,15 @@ function ClientRow({
                 >
                   Tech QA{techQaDone ? " ✓" : ""}
                 </ActionButton>
+                {showMediaQaAction && (
                 <ActionButton
                   onClick={onOpenMediaQa}
                   color={mediaQaDone ? "#22c55e" : "#fb923c"}
-                  title="Media Buying QA skeleton — writes Marketing QA complete to ClickUp"
+                  title="Media Buying QA — confirms the ads build and saves the ad account link on the roster. Writes Marketing QA complete to ClickUp."
                 >
                   Media QA{mediaQaDone ? " ✓" : ""}
                 </ActionButton>
+                )}
                 <ActionButton
                   onClick={onOpenCreativeQa}
                   color={creativeQaDone ? "#22c55e" : "#e879f9"}

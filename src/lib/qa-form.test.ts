@@ -14,6 +14,14 @@ import {
   qaDraftToResponses,
   resolveQaClickUpFieldKey,
   sealCreativeFunnelLinks,
+  emptyMediaQaDraft,
+  formatMediaQaClickUpComment,
+  MEDIA_QA_ITEMS,
+  MEDIA_QA_VERSION,
+  mediaBuyingQaApplies,
+  mediaQaToResponses,
+  normalizeAdAccountUrl,
+  validateMediaQaDraft,
   QA_FINAL_CONFIRMATION,
   QA_SKELETON_VERSION,
   type QaLane,
@@ -234,5 +242,82 @@ describe('qa-form', () => {
       ),
       true,
     );
+  });
+});
+
+function completeMediaDraft() {
+  const draft = emptyMediaQaDraft('buyer@waiz.media', 'adsmanager.facebook.com/adsmanager/manage/campaigns?act=1');
+  for (const item of MEDIA_QA_ITEMS) draft.done[item.key] = true;
+  draft.final_confirmation = QA_FINAL_CONFIRMATION;
+  return draft;
+}
+
+describe('media buying qa v1', () => {
+  it('hides the form for HE and shows it for leads and call center', () => {
+    assert.equal(mediaBuyingQaApplies('CALL_CENTER'), false);
+    assert.equal(mediaBuyingQaApplies('HE'), false);
+    assert.equal(mediaBuyingQaApplies('RM'), true);
+    assert.equal(mediaBuyingQaApplies('DSCR'), true);
+    assert.equal(mediaBuyingQaApplies(''), true);
+    assert.equal(mediaBuyingQaApplies(null), true);
+  });
+
+  it('requires the ad account link unless it does not apply', () => {
+    const draft = completeMediaDraft();
+    assert.equal(validateMediaQaDraft(draft), null);
+    assert.equal(normalizeAdAccountUrl('adsmanager.facebook.com/adsmanager'), 'https://adsmanager.facebook.com/adsmanager');
+    assert.equal(normalizeAdAccountUrl('not a url'), null);
+
+    draft.ad_account_url = '';
+    assert.match(validateMediaQaDraft(draft) ?? '', /ad account link/i);
+    draft.ad_account_skipped = true;
+    assert.equal(validateMediaQaDraft(draft), null);
+  });
+
+  it('requires Facebook page, UTM, and MAKE, and lets other lines be skipped', () => {
+    const draft = completeMediaDraft();
+    draft.done.fb_profile_pic = false;
+    assert.match(validateMediaQaDraft(draft) ?? '', /Profile picture/);
+    draft.skipped.fb_profile_pic = true;
+    assert.match(validateMediaQaDraft(draft) ?? '', /Profile picture/);
+
+    draft.done.fb_profile_pic = true;
+    draft.skipped.fb_profile_pic = false;
+    draft.done.utm_placed = false;
+    assert.match(validateMediaQaDraft(draft) ?? '', /UTM/);
+    draft.done.utm_placed = true;
+    draft.done.make_subaccount_name = false;
+    assert.match(validateMediaQaDraft(draft) ?? '', /MAKE/);
+
+    draft.done.make_subaccount_name = true;
+    draft.done.dummy_account = false;
+    assert.match(validateMediaQaDraft(draft) ?? '', /does not apply/i);
+    draft.skipped.dummy_account = true;
+    assert.equal(validateMediaQaDraft(draft), null);
+  });
+
+  it('stores done checks and skipped keys, not a No for a skipped line', () => {
+    const draft = completeMediaDraft();
+    draft.done.dummy_account = false;
+    draft.skipped.dummy_account = true;
+    draft.ad_account_skipped = true;
+    const responses = mediaQaToResponses(draft);
+    assert.equal(responses.skeleton_version, MEDIA_QA_VERSION);
+    assert.equal(responses.ad_account_url, null);
+    assert.equal(responses.ad_account_skipped, true);
+    const checklist = responses.checklist as Record<string, boolean>;
+    assert.equal(checklist.dummy_account, undefined);
+    assert.equal(checklist.utm_placed, true);
+    assert.deepEqual(responses.skipped, ['dummy_account']);
+  });
+
+  it('writes a ClickUp comment that names the checks and the roster link', () => {
+    const draft = completeMediaDraft();
+    const comment = formatMediaQaClickUpComment({ id: 'client-1', name: 'Acme LO' }, draft);
+    assert.match(comment, /Media Buying QA submitted/);
+    assert.match(comment, /media-buying-qa-v1/);
+    assert.match(comment, /https:\/\/adsmanager\.facebook\.com/);
+    assert.match(comment, /Dummy account setup with a \$5 budget/);
+    assert.match(comment, /Profile picture is up/);
   });
 });
