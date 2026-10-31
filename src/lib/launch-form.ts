@@ -7,14 +7,32 @@ import {
 import { normalizeReportingType } from '@/lib/reporting-types';
 import { normalizeServiceProgram } from '@/lib/service-program';
 
+/** Live walkthrough sections. Older submissions still use the legacy section ids. */
 export const LAUNCH_SECTIONS = [
-  { id: 'media_buying', label: 'Media Buying' },
-  { id: 'funnel', label: 'Funnel' },
-  { id: 'ghl_subaccount', label: 'GHL Subaccount' },
-  { id: 'admin', label: 'Admin' },
+  { id: 'flow', label: 'Lead flow' },
+  { id: 'account', label: 'Account' },
 ] as const;
 
-export type LaunchSectionId = (typeof LAUNCH_SECTIONS)[number]['id'];
+export type LaunchSectionId =
+  | (typeof LAUNCH_SECTIONS)[number]['id']
+  | 'media_buying'
+  | 'funnel'
+  | 'ghl_subaccount'
+  | 'admin';
+
+export const LAUNCH_SECTION_LABELS: Record<LaunchSectionId, string> = {
+  flow: 'Lead flow',
+  account: 'Account',
+  media_buying: 'Media Buying',
+  funnel: 'Funnel',
+  ghl_subaccount: 'GHL Subaccount',
+  admin: 'Admin',
+};
+
+export type LaunchChecklistLink = {
+  href: string;
+  label: string;
+};
 
 export type LaunchChecklistItemDef = {
   key: string;
@@ -22,98 +40,191 @@ export type LaunchChecklistItemDef = {
   section: LaunchSectionId;
   confirmType: 'checkbox' | 'type_yes';
   helpText?: string;
+  links?: LaunchChecklistLink[];
   profiles?: OnboardingFormProfile[];
 };
 
+/** Ads-running accounts cannot fill the walkthrough until this is set. */
+export const LAUNCH_ADS_READY = ['scheduled', 'published'] as const;
+export type LaunchAdsReady = (typeof LAUNCH_ADS_READY)[number];
+
+/** Designated AI Contact inbox for the launch text test. */
+export const AI_CONTACT_TEST_INBOX_URL =
+  'https://app.gohighlevel.com/v2/location/oUpd4eO1gisJSY1A49vP/conversations/conversations/q0KzN7xCasbmo94N2hRY?category=team-inbox&tab=all';
+export const AI_CONTACT_TEST_PHONE_DISPLAY = '(949) 518-0137';
+export const AI_CONTACT_TEST_PHONE_TEL = 'tel:+19495180137';
+
 const ALL_PROFILES: OnboardingFormProfile[] = ['marketing_core', 'marketing_lead_gen', 'call_center'];
 
+const AD_PROFILES: OnboardingFormProfile[] = ['marketing_core', 'marketing_lead_gen'];
+
 export const LAUNCH_CHECKLIST_ITEMS: LaunchChecklistItemDef[] = [
-  // Media Buying — marketing profiles only
+  {
+    key: 'flow_ad_opens_funnel',
+    label: 'The ad link opens the live funnel',
+    section: 'flow',
+    confirmType: 'checkbox',
+    helpText: 'Spot check the destination only. Creative and the funnel build are already signed off.',
+    profiles: AD_PROFILES,
+  },
+  {
+    key: 'flow_lead_reaches_ghl',
+    label: 'A lead from this ad reaches Go High Level',
+    section: 'flow',
+    confirmType: 'checkbox',
+    helpText: 'The Facebook lead path is on. Do not go live if the ad can spend and the lead dies before GHL.',
+    profiles: AD_PROFILES,
+  },
+  {
+    key: 'flow_ai_contact_books',
+    label: `Text ${AI_CONTACT_TEST_PHONE_DISPLAY} and the appointment books in the AI Contact inbox`,
+    section: 'flow',
+    confirmType: 'type_yes',
+    helpText: 'Use the designated subaccount inbox. Send the text, then confirm the appointment is booked.',
+    links: [
+      { href: AI_CONTACT_TEST_INBOX_URL, label: 'Open the AI Contact inbox' },
+      { href: AI_CONTACT_TEST_PHONE_TEL, label: `Text ${AI_CONTACT_TEST_PHONE_DISPLAY}` },
+    ],
+    profiles: ['marketing_core'],
+  },
+  {
+    key: 'flow_appointment_on_calendar',
+    label: 'That appointment is on the client calendar',
+    section: 'flow',
+    confirmType: 'checkbox',
+    helpText: 'The booked test sits on the client’s calendar, assigned to the right user.',
+    profiles: ['marketing_core'],
+  },
+  {
+    key: 'flow_lead_gen_notified',
+    label: 'A test lead lands in the client GHL and the client is notified',
+    section: 'flow',
+    confirmType: 'type_yes',
+    helpText: 'Leads Only: the client works the lead. Confirm they actually get it.',
+    profiles: ['marketing_lead_gen'],
+  },
+  {
+    key: 'flow_cc_dial_books',
+    label: 'A test lead can be dialed, qualified, and booked',
+    section: 'flow',
+    confirmType: 'type_yes',
+    profiles: ['call_center'],
+  },
+  {
+    key: 'acct_hp_tag',
+    label: 'Client info was not overwritten, and the assigned user still has the HP tag',
+    section: 'account',
+    confirmType: 'type_yes',
+    helpText: 'Do not change the client’s user. Confirm the assigned user still has the HP tag.',
+    profiles: ['marketing_core', 'call_center'],
+  },
+  {
+    key: 'acct_bonzo_new_lead',
+    label: 'Make scenario "New Lead Bonzo" is active, and the queue is clear',
+    section: 'account',
+    confirmType: 'checkbox',
+    profiles: ['call_center'],
+  },
+  {
+    key: 'acct_bonzo_claimed',
+    label: 'Make scenario "Claimed Bonzo" is active',
+    section: 'account',
+    confirmType: 'checkbox',
+    profiles: ['call_center'],
+  },
+  {
+    key: 'acct_records_filled',
+    label: 'Mr. Waiz and ClickUp onboarding fields are filled out',
+    section: 'account',
+    confirmType: 'checkbox',
+    profiles: ALL_PROFILES,
+  },
+];
+
+/** Previous creative / media checklist. Used only to read submissions already on file. */
+const LEGACY_LAUNCH_CHECKLIST_ITEMS: LaunchChecklistItemDef[] = [
   {
     key: 'mb_creative_message_aligned',
     label: 'Headline / primary text aligned with creative message',
     section: 'media_buying',
     confirmType: 'checkbox',
-    profiles: ['marketing_core', 'marketing_lead_gen'],
+    profiles: AD_PROFILES,
   },
   {
     key: 'mb_states_targeted',
     label: 'Correct states are being targeted',
     section: 'media_buying',
     confirmType: 'checkbox',
-    profiles: ['marketing_core', 'marketing_lead_gen'],
+    profiles: AD_PROFILES,
   },
   {
     key: 'mb_budget_set',
     label: 'Correct budget is set',
     section: 'media_buying',
     confirmType: 'checkbox',
-    profiles: ['marketing_core', 'marketing_lead_gen'],
+    profiles: AD_PROFILES,
   },
   {
     key: 'mb_midnight_schedule',
     label: 'Campaign scheduled for launch at midnight',
     section: 'media_buying',
     confirmType: 'type_yes',
-    profiles: ['marketing_core', 'marketing_lead_gen'],
+    profiles: AD_PROFILES,
   },
   {
     key: 'mb_funnel_in_ad_live',
     label: 'Correct funnel is in the ad and tested funnel is live correctly',
     section: 'media_buying',
     confirmType: 'checkbox',
-    profiles: ['marketing_core', 'marketing_lead_gen'],
+    profiles: AD_PROFILES,
   },
-  // Funnel — marketing profiles only
   {
     key: 'fn_headline_congruent',
     label: 'Funnel headline congruent to ad message / angle',
     section: 'funnel',
     confirmType: 'checkbox',
-    profiles: ['marketing_core', 'marketing_lead_gen'],
+    profiles: AD_PROFILES,
   },
   {
     key: 'fn_split_test_headlines',
     label: 'Split test between two headlines is on',
     section: 'funnel',
     confirmType: 'checkbox',
-    profiles: ['marketing_core', 'marketing_lead_gen'],
+    profiles: AD_PROFILES,
   },
   {
     key: 'fn_pixel_conversion_event',
     label: 'Pixel data working with correct conversion event',
     section: 'funnel',
     confirmType: 'type_yes',
-    profiles: ['marketing_core', 'marketing_lead_gen'],
+    profiles: AD_PROFILES,
   },
   {
     key: 'fn_ghl_integrated',
     label: 'GHL subaccount correctly integrated',
     section: 'funnel',
     confirmType: 'checkbox',
-    profiles: ['marketing_core', 'marketing_lead_gen'],
+    profiles: AD_PROFILES,
   },
   {
     key: 'fn_privacy_compliant_footer',
     label: 'Privacy policy and compliant footer added',
     section: 'funnel',
     confirmType: 'checkbox',
-    profiles: ['marketing_core', 'marketing_lead_gen'],
+    profiles: AD_PROFILES,
   },
   {
     key: 'fn_sms_compliant_checkbox',
     label: "Compliant checkbox for sending SMS with client's name",
     section: 'funnel',
     confirmType: 'checkbox',
-    profiles: ['marketing_core', 'marketing_lead_gen'],
+    profiles: AD_PROFILES,
   },
-  // GHL Subaccount
   {
     key: 'ghl_client_info_not_updated',
     label: 'Client info NOT updated — client assigned user with HP tag (call center model)',
     section: 'ghl_subaccount',
     confirmType: 'type_yes',
-    helpText: 'Verify you did not change client info; confirm assigned user has HP tag if on call center model.',
     profiles: ['marketing_core', 'call_center'],
   },
   {
@@ -137,7 +248,6 @@ export const LAUNCH_CHECKLIST_ITEMS: LaunchChecklistItemDef[] = [
     confirmType: 'type_yes',
     profiles: ALL_PROFILES,
   },
-  // Admin
   {
     key: 'adm_mrw_clickup_complete',
     label: 'Mr. Waiz and ClickUp fields fully filled out',
@@ -150,7 +260,7 @@ export const LAUNCH_CHECKLIST_ITEMS: LaunchChecklistItemDef[] = [
     label: 'Make scenario for Facebook is active',
     section: 'admin',
     confirmType: 'checkbox',
-    profiles: ['marketing_core', 'marketing_lead_gen'],
+    profiles: AD_PROFILES,
   },
   {
     key: 'adm_full_test_lead_flow',
@@ -199,6 +309,8 @@ export type LaunchFormDraft = {
   completed_by_label: string;
   /** GHL subaccount phone we prospect with — written to clients.phone_ghl on launch. */
   phone_ghl: string;
+  /** Required before the walkthrough can be filled on ad-running accounts. */
+  ads_ready: LaunchAdsReady | '';
   recording_url: string;
   transcript: string;
   notes: string;
@@ -219,9 +331,67 @@ export function getLaunchItemsForProfile(profile: OnboardingFormProfile): Launch
   return LAUNCH_CHECKLIST_ITEMS.filter(item => itemAppliesToProfile(item, profile));
 }
 
+function legacyLaunchItemsForProfile(profile: OnboardingFormProfile): LaunchChecklistItemDef[] {
+  return LEGACY_LAUNCH_CHECKLIST_ITEMS.filter(item => itemAppliesToProfile(item, profile));
+}
+
+/** Ad-running accounts stay locked until ads are scheduled or published. Dial-only does not. */
+export function launchAdsGateApplies(profile: OnboardingFormProfile): boolean {
+  return profile === 'marketing_core' || profile === 'marketing_lead_gen';
+}
+
+export function isLaunchAdsReady(value: unknown): value is LaunchAdsReady {
+  return value === 'scheduled' || value === 'published';
+}
+
+export function launchAdsReadyLabel(value: LaunchAdsReady): string {
+  return value === 'scheduled' ? 'Scheduled' : 'Published';
+}
+
+export function launchWalkthroughBlurb(profile: OnboardingFormProfile): string {
+  if (profile === 'call_center') {
+    return 'This account does not run ads. Walk the dial path before going live so a lead can be worked and booked.';
+  }
+  if (profile === 'marketing_lead_gen') {
+    return 'Creative and the funnel are already signed off. This stays locked until the ads are scheduled or published, then confirm a lead from the ad reaches the client.';
+  }
+  return 'Creative and the funnel are already signed off. This stays locked until the ads are scheduled or published. Then spot-check that a lead gets through and a test text books an appointment.';
+}
+
 export function getLaunchSectionsForProfile(profile: OnboardingFormProfile) {
-  const itemSections = new Set(getLaunchItemsForProfile(profile).map(i => i.section));
-  return LAUNCH_SECTIONS.filter(s => itemSections.has(s.id));
+  return sectionsForItems(getLaunchItemsForProfile(profile));
+}
+
+export function sectionsForItems(items: LaunchChecklistItemDef[]) {
+  const seen: LaunchSectionId[] = [];
+  for (const item of items) {
+    if (!seen.includes(item.section)) seen.push(item.section);
+  }
+  return seen.map(id => ({ id, label: LAUNCH_SECTION_LABELS[id] }));
+}
+
+function checklistKeys(responses: Record<string, unknown>): string[] {
+  const raw = responses.checklist;
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return [];
+  return Object.keys(raw as Record<string, unknown>);
+}
+
+/** New walkthrough, unless this submission was filed on the old creative checklist. */
+export function itemsForLaunchResponses(
+  responses: Record<string, unknown>,
+  profileOverride?: OnboardingFormProfile,
+): LaunchChecklistItemDef[] {
+  const profile = profileOverride ?? profileFromLaunchResponses(responses);
+  const live = getLaunchItemsForProfile(profile);
+  const keys = checklistKeys(responses);
+  const liveKeys = new Set(live.map(item => item.key));
+  if (keys.some(key => liveKeys.has(key)) || isLaunchAdsReady(responses.ads_ready) || keys.length === 0) {
+    return live;
+  }
+  const legacy = legacyLaunchItemsForProfile(profile);
+  const legacyKeys = new Set(legacy.map(item => item.key));
+  if (keys.some(key => legacyKeys.has(key))) return legacy;
+  return live;
 }
 
 export function profileFromLaunchResponses(responses: Record<string, unknown>): OnboardingFormProfile {
@@ -261,6 +431,7 @@ export function emptyLaunchDraft(
     completed_by_user_id: completedByUserId,
     completed_by_label: completedByLabel,
     phone_ghl: phoneGhl,
+    ads_ready: '',
     recording_url: '',
     transcript: '',
     notes: '',
@@ -309,6 +480,7 @@ export function isLaunchChecklistComplete(
   if (!draft.completed_by_user_id.trim()) return false;
   if (!draft.phone_ghl.trim()) return false;
   if (!draft.recording_url.trim()) return false;
+  if (launchAdsGateApplies(profile) && !isLaunchAdsReady(draft.ads_ready)) return false;
   if (draft.final_confirmation.trim().toUpperCase() !== LAUNCH_FINAL_CONFIRMATION) return false;
   return getLaunchItemsForProfile(profile).every(item => isLaunchItemSatisfied(item, draft));
 }
@@ -336,6 +508,7 @@ export function launchDraftToResponses(
     completed_by_user_id: draft.completed_by_user_id,
     completed_by_label: draft.completed_by_label.trim() || null,
     phone_ghl: draft.phone_ghl.trim() || null,
+    ads_ready: isLaunchAdsReady(draft.ads_ready) ? draft.ads_ready : null,
     recording_url: draft.recording_url.trim() || null,
     transcript: draft.transcript.trim() || null,
     notes: draft.notes.trim() || null,
@@ -353,6 +526,7 @@ export function launchResponsesToDraft(
   profileOverride?: OnboardingFormProfile,
 ): LaunchFormDraft {
   const profile = profileOverride ?? profileFromLaunchResponses(responses);
+  const items = itemsForLaunchResponses(responses, profile);
   const draft = emptyLaunchDraft(
     profile,
     typeof responses.launch_date === 'string' ? responses.launch_date : undefined,
@@ -360,22 +534,25 @@ export function launchResponsesToDraft(
     typeof responses.completed_by_label === 'string' ? responses.completed_by_label : '',
     typeof responses.phone_ghl === 'string' ? responses.phone_ghl : '',
   );
+  draft.ads_ready = isLaunchAdsReady(responses.ads_ready) ? responses.ads_ready : '';
   draft.recording_url = typeof responses.recording_url === 'string' ? responses.recording_url : '';
   draft.transcript = typeof responses.transcript === 'string' ? responses.transcript : '';
   draft.notes = typeof responses.notes === 'string' ? responses.notes : '';
   draft.final_confirmation =
     typeof responses.final_confirmation === 'string' ? responses.final_confirmation : '';
+  draft.checklist = {};
+  draft.confirmations = {};
 
   const rawChecklist = responses.checklist;
   if (rawChecklist && typeof rawChecklist === 'object') {
-    for (const item of getLaunchItemsForProfile(profile)) {
+    for (const item of items) {
       draft.checklist[item.key] = !!(rawChecklist as Record<string, boolean>)[item.key];
     }
   }
 
   const rawConfirmations = responses.confirmations;
   if (rawConfirmations && typeof rawConfirmations === 'object') {
-    for (const item of getLaunchItemsForProfile(profile)) {
+    for (const item of items) {
       if (item.confirmType === 'type_yes') {
         const val = (rawConfirmations as Record<string, string>)[item.key];
         draft.confirmations[item.key] = typeof val === 'string' ? val : '';
@@ -387,9 +564,8 @@ export function launchResponsesToDraft(
 }
 
 export function launchChecklistSummary(responses: Record<string, unknown>): string[] {
-  const profile = profileFromLaunchResponses(responses);
-  const draft = launchResponsesToDraft(responses, profile);
-  return getLaunchItemsForProfile(profile)
+  const draft = launchResponsesToDraft(responses);
+  return itemsForLaunchResponses(responses)
     .filter(item => isLaunchItemSatisfied(item, draft))
     .map(item => item.label);
 }
@@ -410,6 +586,7 @@ export function launchClientFileNoteSections(
   add('Launch date', draft.launch_date);
   add('Completed by', draft.completed_by_label);
   add('GHL prospecting phone', draft.phone_ghl);
+  if (isLaunchAdsReady(draft.ads_ready)) add('Ads', launchAdsReadyLabel(draft.ads_ready));
   add('Launch call recording', draft.recording_url);
   add('Launch call transcript', draft.transcript);
   add('Notes', draft.notes);
@@ -463,14 +640,17 @@ export function formatLaunchClickUpComment(
 }
 
 export function formatLaunchSlackChecklist(responses: Record<string, unknown>): string {
-  const profile = profileFromLaunchResponses(responses);
-  const draft = launchResponsesToDraft(responses, profile);
+  const draft = launchResponsesToDraft(responses);
+  const items = itemsForLaunchResponses(responses);
   const lines: string[] = [];
+  if (isLaunchAdsReady(draft.ads_ready)) {
+    lines.push(`Ads: ${launchAdsReadyLabel(draft.ads_ready)}`, '');
+  }
 
-  for (const section of getLaunchSectionsForProfile(profile)) {
+  for (const section of sectionsForItems(items)) {
     lines.push(section.label);
-    const items = getLaunchItemsForProfile(profile).filter(item => item.section === section.id);
-    for (const item of items) {
+    const sectionItems = items.filter(item => item.section === section.id);
+    for (const item of sectionItems) {
       const status = formatLaunchItemStatus(item, draft);
       if (status === 'missing') {
         lines.push(`  — ${item.label}`);

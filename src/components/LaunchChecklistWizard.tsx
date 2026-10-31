@@ -9,9 +9,14 @@ import {
   emptyLaunchDraft,
   getLaunchItemsForProfile,
   getLaunchSectionsForProfile,
+  isLaunchAdsReady,
   isLaunchChecklistComplete,
   isLaunchItemSatisfied,
   isTypedYes,
+  launchAdsGateApplies,
+  launchAdsReadyLabel,
+  launchWalkthroughBlurb,
+  LAUNCH_ADS_READY,
   LAUNCH_FINAL_CONFIRMATION,
   type LaunchChecklistItemDef,
   type LaunchFormDraft,
@@ -132,6 +137,10 @@ export default function LaunchChecklistWizard({ clientId, fallbackName, onClose,
       setSaveError("Complete the kick-off call before launching.");
       return;
     }
+    if (launchAdsGateApplies(formProfile) && !isLaunchAdsReady(draft.ads_ready)) {
+      setSaveError("Ads have to be scheduled or published before this checklist can be filled.");
+      return;
+    }
     if (!isLaunchChecklistComplete(draft, formProfile)) {
       setSaveError("Confirm every checklist item, add the Go High Level number, add the launch call recording link, select completed-by, and type LAUNCH before going live.");
       const items = getLaunchItemsForProfile(formProfile);
@@ -158,6 +167,8 @@ export default function LaunchChecklistWizard({ clientId, fallbackName, onClose,
 
   const totalItems = checklistConfig?.items.length ?? getLaunchItemsForProfile(formProfile).length;
   const satisfiedCount = countSatisfiedItems(draft, formProfile);
+  const adsGateApplies = launchAdsGateApplies(formProfile);
+  const adsReady = isLaunchAdsReady(draft.ads_ready);
   const canSubmit = kickoffComplete && isLaunchChecklistComplete(draft, formProfile) && !saving;
   const sections = checklistConfig?.sections ?? getLaunchSectionsForProfile(formProfile);
 
@@ -205,12 +216,53 @@ export default function LaunchChecklistWizard({ clientId, fallbackName, onClose,
                   Kick-off is not complete yet (GHL mapping + OB recording required).
                 </p>
               )}
+              <p className="text-sm rounded-lg px-4 py-3 text-sky-200 bg-sky-950/40 border border-sky-500/30">
+                {launchWalkthroughBlurb(formProfile)}
+              </p>
+
+              {adsGateApplies && (
+                <fieldset className="rounded-lg px-4 py-3 space-y-2" style={{ border: "1px solid rgba(255,255,255,0.08)", background: "#0a1628" }}>
+                  <legend className="text-sm font-semibold text-slate-200 px-1">Ads</legend>
+                  <p className="text-xs text-slate-500">The checklist stays locked until the ads are scheduled or already published.</p>
+                  <div className="flex flex-wrap gap-2">
+                    {LAUNCH_ADS_READY.map(value => {
+                      const selected = draft.ads_ready === value;
+                      return (
+                        <label
+                          key={value}
+                          className="text-sm font-medium px-3 py-1.5 rounded-lg cursor-pointer"
+                          style={{
+                            color: selected ? "#e2e8f0" : "#94a3b8",
+                            background: selected ? "rgba(34,197,94,0.16)" : "#0f2040",
+                            border: selected ? "1px solid rgba(34,197,94,0.4)" : "1px solid rgba(255,255,255,0.12)",
+                          }}
+                        >
+                          <input
+                            type="radio"
+                            name="ads_ready"
+                            value={value}
+                            checked={selected}
+                            onChange={() => {
+                              setDraft(prev => ({ ...prev, ads_ready: value }));
+                              setSaveError(null);
+                            }}
+                            className="sr-only"
+                          />
+                          {launchAdsReadyLabel(value)}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </fieldset>
+              )}
+
               {!hasLaunchKit && (
                 <p className="text-sm text-sky-300 rounded-lg px-4 py-3 bg-sky-950/40 border border-sky-500/30">
                   No Launch Kit has been generated for this client. The kit is the leave-behind for the Launch Call — open <strong>Kit</strong> from the roster actions to generate it. You can still mark the client live.
                 </p>
               )}
 
+              <div className={adsGateApplies && !adsReady ? "space-y-5 opacity-50 pointer-events-none" : "space-y-5"}>
               <div className="grid gap-4 sm:grid-cols-2">
                 <label className="block space-y-1.5">
                   <span className="text-sm font-medium text-slate-400">Launch date</span>
@@ -326,6 +378,7 @@ export default function LaunchChecklistWizard({ clientId, fallbackName, onClose,
                   autoComplete="off"
                 />
               </label>
+              </div>
             </>
           )}
 
@@ -453,6 +506,22 @@ function ChecklistItemRow({
           )}
         </span>
       </label>
+      {item.links && item.links.length > 0 && (
+        <div className="mt-2 ml-7 flex flex-col gap-1">
+          {item.links.map(link => (
+            <a
+              key={link.href}
+              href={link.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs underline underline-offset-2"
+              style={{ color: "#38bdf8" }}
+            >
+              {link.label}
+            </a>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

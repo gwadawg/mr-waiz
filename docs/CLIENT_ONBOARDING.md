@@ -411,39 +411,36 @@ and
 [`2026-10-07-client-landing-builder.md`](superpowers/plans/2026-10-07-client-landing-builder.md).
 
 ## 4. Launch checklist
-Open **Launch** from Client Roster when kickoff is complete. The wizard is a 4-department checklist (18 items). Checklist answers live in `client_form_submissions.responses` JSON. On submit the form also writes `clients.phone_ghl` (Go High Level prospecting number) plus lifecycle / launch date.
+Open **Launch** from Client Roster when kickoff is complete. This is the last walkthrough before go-live. Creative and funnel QA are already signed off, so the form does not re-check headlines, budgets, pixels, or footer copy. Checklist answers live in `client_form_submissions.responses` JSON. On submit the form also writes `clients.phone_ghl` (Go High Level prospecting number) plus lifecycle / launch date.
+
+Ad-running accounts (Call Center and Leads Only) stay locked until ads are **Scheduled** or **Published**. Dial-only Call Center Lead accounts do not have that gate.
 
 If the client has a built landing page, republish it from Client File
 with search indexing on before ads go live. The wizard does not block
 on that republish.
 
-### Departments
+### Call Center (ads + booking)
 
-**Media Buying**
-- Headline / primary text aligned with creative message
-- Correct states are being targeted
-- Correct budget is set
-- Campaign scheduled for launch at midnight *(type yes)*
-- Correct funnel is in the ad and tested funnel is live correctly
+**Ads**
+- Scheduled or Published — required before the rest of the form can be filled
 
-**Funnel**
-- Funnel headline congruent to ad message / angle
-- Split test between two headlines is on
-- Pixel data working with correct conversion event *(type yes)*
-- GHL subaccount correctly integrated
-- Privacy policy and compliant footer added
-- Compliant checkbox for sending SMS with client's name
+**Lead flow**
+- The ad link opens the live funnel
+- A lead from this ad reaches Go High Level
+- Text (949) 518-0137 and the appointment books in the AI Contact inbox *(type yes)*. Inbox: `https://app.gohighlevel.com/v2/location/oUpd4eO1gisJSY1A49vP/conversations/conversations/q0KzN7xCasbmo94N2hRY?category=team-inbox&tab=all`
+- That appointment is on the client calendar
 
-**GHL Subaccount**
-- Client info NOT updated — client assigned user with HP tag *(type yes)*
-- Custom values all filled out
-- Calendar assigned to correct user
-- A2P approved *(type yes)*
+**Account**
+- Client info was not overwritten, and the assigned user still has the HP tag *(type yes)*
+- Mr. Waiz and ClickUp onboarding fields are filled out
 
-**Admin**
-- Mr. Waiz and ClickUp fields fully filled out
-- Make scenario for Facebook is active
-- Full test lead executed: perspective → SMS → AI booking → appointment booked *(type yes)*
+### Leads Only
+
+Same ads gate, then: the ad link opens the live funnel, a lead from the ad reaches Go High Level, a test lead lands in the client GHL and the client is notified *(type yes)*, and Mr. Waiz / ClickUp fields are filled out.
+
+### Call Center Lead (no ads)
+
+A test lead can be dialed, qualified, and booked *(type yes)*. New Lead Bonzo is active and the queue is clear. Claimed Bonzo is active. Client info was not overwritten and the HP tag is still on the assigned user *(type yes)*. Mr. Waiz and ClickUp fields are filled out.
 
 ### Confirmation rules
 
