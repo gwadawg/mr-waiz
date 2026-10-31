@@ -115,9 +115,13 @@ function workspaceHref(clientId: string, start: string, end: string): string {
   return `/dashboard?${params.toString()}`;
 }
 
-async function fetchBundle(start: string, end: string): Promise<Bundle> {
-  const key = `${CACHE_PREFIX}:${start}:${end}`;
-  const qs = new URLSearchParams({ start, end });
+async function fetchBundle(
+  start: string,
+  end: string,
+  lens: "as_judged_then" | "on_todays_criteria",
+): Promise<Bundle> {
+  const key = `${CACHE_PREFIX}:${start}:${end}:${lens}`;
+  const qs = new URLSearchParams({ start, end, lens });
   return cachedJsonFetch<Bundle>(key, `/api/client-compare?${qs.toString()}`, {
     staleTime: STALE_MS,
     preferCache: false,
@@ -137,12 +141,13 @@ export default function ClientCompareTable() {
   const [query, setQuery] = useState("");
   const [sortKey, setSortKey] = useState<CompareTableV2Key>("health");
   const [sortDir, setSortDir] = useState<CompareV2SortDir>(defaultV2SortDir("health"));
+  const [criteriaLens, setCriteriaLens] = useState<"as_judged_then" | "on_todays_criteria">("as_judged_then");
 
   const { start, end } = rangeForV2Preset(preset, today, preset === "custom" ? custom : undefined);
   const prev = previousRange(start, end);
 
   const [bundle, setBundle] = useState<Bundle | null>(() =>
-    peekCachedJson<Bundle>(`${CACHE_PREFIX}:${start}:${end}`) ?? null,
+    peekCachedJson<Bundle>(`${CACHE_PREFIX}:${start}:${end}:as_judged_then`) ?? null,
   );
   const [prevBundle, setPrevBundle] = useState<Bundle | null>(null);
   const [loading, setLoading] = useState(!bundle);
@@ -153,7 +158,7 @@ export default function ClientCompareTable() {
 
   const load = useCallback(async () => {
     try {
-      const current = await fetchBundle(start, end);
+      const current = await fetchBundle(start, end, criteriaLens);
       if (current.error) {
         setError(current.error);
         return;
@@ -163,7 +168,7 @@ export default function ClientCompareTable() {
       // Previous window loads after the main table so it never blocks it.
       if (prevStart && prevEnd) {
         try {
-          const before = await fetchBundle(prevStart, prevEnd);
+          const before = await fetchBundle(prevStart, prevEnd, criteriaLens);
           setPrevBundle(before.error ? null : before);
         } catch {
           setPrevBundle(null);
@@ -176,7 +181,7 @@ export default function ClientCompareTable() {
     } finally {
       setLoading(false);
     }
-  }, [start, end, prevStart, prevEnd]);
+  }, [start, end, prevStart, prevEnd, criteriaLens]);
 
   useEffect(() => {
     void load();
@@ -238,6 +243,31 @@ export default function ClientCompareTable() {
   return (
     <div className="space-y-4">
       <section className="rounded-xl px-4 py-3 space-y-3" style={CARD}>
+        <div className="flex flex-wrap items-center gap-2">
+          {([
+            ["as_judged_then", "As judged then"],
+            ["on_todays_criteria", "On today’s criteria"],
+          ] as const).map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setCriteriaLens(key)}
+              className="rounded-md px-2.5 py-1 text-xs font-semibold"
+              style={{
+                color: criteriaLens === key ? "#e2e8f0" : "#64748b",
+                background: criteriaLens === key ? "rgba(251,191,36,0.16)" : "transparent",
+                border: `1px solid ${criteriaLens === key ? "rgba(251,191,36,0.4)" : "rgba(255,255,255,0.08)"}`,
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        {criteriaLens === "on_todays_criteria" && (
+          <p className="text-xs" style={{ color: "#fbbf24" }}>
+            On today’s criteria. This is not the judgment that was made then. Switching back does not save.
+          </p>
+        )}
         <div className="flex flex-wrap items-center gap-2">
           {presets.map(p => (
             <button
@@ -481,7 +511,7 @@ function CompareRow({
         const meta = COLUMN_META[key];
         const isName = key === "name";
         const isHealth = key === "health";
-        const grade = gradeForColumn(row, key);
+        const grade = row.criteria_split ? null : gradeForColumn(row, key);
         const raw = tableV2ValueFor(row, key);
         const delta = COMPARE_V2_DELTA_KEYS.has(key) && prev
           ? deltaFor(
@@ -510,8 +540,30 @@ function CompareRow({
             }}
           >
             {isHealth ? (
+              row.criteria_split && row.criteria_segments && row.criteria_segments.length > 1 ? (
+                <span className="flex flex-col gap-1 items-start">
+                  {row.criteria_segments.map(seg => (
+                    <span key={`${seg.stock_version_id}-${seg.start}`} className="inline-flex items-center gap-1">
+                      <span
+                        className="inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold"
+                        style={{
+                          color: TIER_FILL[seg.tier ?? "insufficient"],
+                          background: `${TIER_FILL[seg.tier ?? "insufficient"]}1f`,
+                          border: `1px solid ${TIER_FILL[seg.tier ?? "insufficient"]}55`,
+                        }}
+                      >
+                        {TIER_LABEL[seg.tier ?? "insufficient"]}
+                      </span>
+                      <span className="text-[10px]" style={{ color: "#64748b" }}>
+                        {seg.start.slice(5)}–{seg.end.slice(5)}
+                      </span>
+                    </span>
+                  ))}
+                </span>
+              ) : (
               <span
                 className="inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold"
+                title={row.criteria_caption ?? undefined}
                 style={{
                   color: TIER_FILL[row.north_star_grade],
                   background: `${TIER_FILL[row.north_star_grade]}1f`,
@@ -520,6 +572,7 @@ function CompareRow({
               >
                 {TIER_LABEL[row.north_star_grade]}
               </span>
+              )
             ) : isName ? (
               <button
                 type="button"

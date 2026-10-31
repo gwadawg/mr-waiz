@@ -320,8 +320,15 @@ export function simulateFunnel(inputs: SimulatorInputs): SimulatorResult {
   };
 }
 
-function bandMidpoint(key: KpiKey, preset: WaizPreset): number {
-  const { bands, higherIsBetter } = DEFAULT_KPI_BANDS[key];
+export type StockBandSource = Partial<
+  Record<KpiKey, { bands: { critical?: number; below?: number; at?: number }; higherIsBetter: boolean }>
+>;
+
+function bandMidpoint(key: KpiKey, preset: WaizPreset, stock?: StockBandSource): number {
+  const fallback = DEFAULT_KPI_BANDS[key];
+  const spec = stock?.[key];
+  const bands = spec?.bands ?? fallback.bands;
+  const higherIsBetter = spec?.higherIsBetter ?? fallback.higherIsBetter;
   if (preset === 'above') {
     if (higherIsBetter) return (bands.at ?? 0) + 5;
     return Math.max(1, (bands.at ?? 0) - 3);
@@ -340,22 +347,22 @@ export function defaultSimulatorInputs(): SimulatorInputs {
   return applyWaizPreset('at_kpi');
 }
 
-export function applyWaizPreset(preset: WaizPreset): SimulatorInputs {
+export function applyWaizPreset(preset: WaizPreset, stock?: StockBandSource): SimulatorInputs {
   return {
     funnel_mode: 'conversation',
     cost_anchor: 'spend_cpl',
     ad_spend: 5000,
-    cpl: bandMidpoint('cpl', preset === 'above' ? 'above' : preset === 'below' ? 'below' : 'at_kpi'),
+    cpl: bandMidpoint('cpl', preset === 'above' ? 'above' : preset === 'below' ? 'below' : 'at_kpi', stock),
     total_leads: 0,
-    lead_to_qual_pct: bandMidpoint('lead_to_qualified', preset),
-    booking_rate_pct: bandMidpoint('hand_raise_rate', preset),
-    net_show_rate_pct: bandMidpoint('show_rate', preset),
+    lead_to_qual_pct: bandMidpoint('lead_to_qualified', preset, stock),
+    booking_rate_pct: bandMidpoint('hand_raise_rate', preset, stock),
+    net_show_rate_pct: bandMidpoint('show_rate', preset, stock),
     live_transfer_pct: 3,
     claimed_pct: 2,
-    conversation_close_rate_pct: bandMidpoint('close_rate', preset),
+    conversation_close_rate_pct: bandMidpoint('close_rate', preset, stock),
     proposal_rate_pct: 55,
     submission_rate_pct: 65,
-    funded_rate_pct: bandMidpoint('close_rate', preset),
+    funded_rate_pct: bandMidpoint('close_rate', preset, stock),
     avg_commission: 8500,
   };
 }

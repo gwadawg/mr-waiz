@@ -121,20 +121,25 @@ The **Client Success** view (`client_health`) splits clients by `reporting_type`
 
 | Segment | Clients | Graded KPIs | Account (Overview) tier |
 |---------|---------|-------------|-------------------------|
-| **Paid Ads (RM + DSCR)** | paid-ads reporting types | Lead-to-qualified, **unique hand-raise**, **Show Rate** (unique booked→spoke), close, CPL, CPQL, CPConv | North star = **CPConv** only |
-| **Call Center (HE)** | appointment-only / HE | **Unique hand-raise** (÷ total leads), **Show Rate** | Worst of hand-raise + Show Rate |
+| **RM, Call Center service, qualifying** | `service_program` core, or unset (judged as Call Center service), and `qualifies_leads` not false | Lead-to-qualified, **unique hand-raise** (÷ qualified), **Show Rate**, close, CPL, CPQL, CPConv | **CPConv** when there are at least 5 conversations. Close rate is graded and left out of the account tier. |
+| **RM or DSCR, all leads** | qualifying flag false. Unset DSCR is this pool. | CPL, hand-raise on the 3/5/8 lines, Show Rate, close, CPConv derived from that version’s CPL and 3/5/8. No qual % or CPQL. DSCR cost grades stay off until that version saves real 911 / Below / At. Qualifying DSCR rate lines are the shared RM copy and the screen says so. | **CPConv** when it has volume |
+| **DSCR, qualifying** | DSCR and the pool is qualified | Same graded keys as qualifying RM. Rate lines are the shared RM copy until DSCR rate stock is set. Cost grades stay off until a version saves real 911 / Below / At. | **CPConv** only when that version’s cost stock is approved |
+| **Leads only** | `service_program` lead_gen | CPL, plus qual % and CPQL only when the pool is qualified. No hand-raise, show, close, or CPConv. | Worst of the acquisition keys |
+| **Call Center (HE)** | appointment-only / HE | **Unique hand-raise** (÷ total leads, 3/5/8), **Show Rate** | Worst of hand-raise + Show Rate |
+
+Maturity for the health verdict is **3 days**. The leading window is **5 days**. Ops and the team dashboards use that same window. A past date range keeps the ruler that was in force then (**As judged then**). **On today’s criteria** replays the open stock and open custom goal and does not save.
 
 **Role lenses (same data, different 911):**
 
 | Lens | Status drivers | Does not grade |
 |------|----------------|----------------|
-| **Overview** | CPConv (RM) / hand-raise + **Show Rate** (HE). Focus **Act now** = north-star 911 only; leading cost/funnel reds → Monitor / Leading watch | — |
-| **Media Buyer** | Worst of CPL, CPQL, lead→qualified (leading 7d preferred) | CPConv, hand-raise, Show Rate |
-| **CCM** | Worst of **unique hand-raise**, **Show Rate**, conversation % | CPL, CPQL, CPConv, booking-only |
+| **Overview** | CPConv when the account mode is CPConv; otherwise the worst graded key except close. Focus **Act now** = north-star 911 only; leading reds on graded keys → Monitor / Leading watch | Keys outside that client’s graded set |
+| **Media Buyer** | Worst of the graded acquisition keys (CPL, CPQL, lead→qualified), leading 5d preferred when that key is graded | CPConv, hand-raise, Show Rate, and any key the ruler omits |
+| **CCM** | Worst of **unique hand-raise** and **Show Rate**, and only when those keys are graded | Conversation %, CPL, CPQL, CPConv, booking-only |
 
 **Conversion benchmark = unique hand-raise** (`Unique leads with booked ∪ claimed ∪ live_transfer`), not booking-only rate. **Graded show quality = Show Rate** (`unique booked ∩ spoke ÷ unique booked`). Multiple booking events for one lead count once. **True Show** (slot took-place) is booking-process secondary only — not Client Success grades.
 
-HE accounts have **no ad-cost grading** (CPL / CPQL / CPConv are omitted). **Outbound dials** are shown for volume context but are not tiered. Detail drill-down shows **Account** + **lane** badges when opened from Media / CCM so CPConv 911 is never mistaken for that seat’s scorecard. Per-client benchmark overrides in Admin → Client Roster allow CPL customization (CPQL / CPConv derive from CPL + global conversion bands).
+HE accounts have **no ad-cost grading** (CPL / CPQL / CPConv are omitted). **Outbound dials** are shown for volume context but are not tiered. Detail drill-down shows **Account** + **lane** badges when opened from Media / CCM so CPConv 911 is never mistaken for that seat’s scorecard. Custom goals and stock edits live on the Client Success **Criteria** tab. A save versions the ruler forward and does not regrade closed dates. Conversation % is visible and has no tier.
 
 ---
 

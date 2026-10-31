@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MetricsResult } from "@/lib/metrics";
 import { formatKpiValue } from "@/lib/kpi-layouts";
 import {
@@ -15,6 +15,7 @@ import {
   type CostAnchor,
   type FunnelMode,
   type SimulatorInputs,
+  type StockBandSource,
   type WaizPreset,
 } from "@/lib/kpi-simulator";
 import type { HealthTier, KpiGrade } from "@/lib/client-health";
@@ -282,6 +283,33 @@ export default function FunnelSimulatorView({
   });
   const [targetFunded, setTargetFunded] = useState(3);
   const [copied, setCopied] = useState(false);
+  const [rmStock, setRmStock] = useState<StockBandSource | undefined>(undefined);
+  const stockApplied = useRef(Boolean(initialEncoded));
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/kpi-criteria")
+      .then(res => (res.ok ? res.json() : null))
+      .then(data => {
+        if (cancelled || !data) return;
+        const stock = (data.stock ?? []) as Array<{
+          profileId?: string;
+          effectiveEnd?: string | null;
+          bands?: StockBandSource;
+        }>;
+        const open = stock.find(row => row.profileId === "RM" && row.effectiveEnd == null);
+        if (!open?.bands) return;
+        setRmStock(open.bands);
+        if (!stockApplied.current) {
+          stockApplied.current = true;
+          setInputs(prev => ({ ...applyWaizPreset("at_kpi", open.bands), funnel_mode: prev.funnel_mode }));
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const patch = useCallback((partial: Partial<SimulatorInputs>) => {
     setPreset("custom");
@@ -356,13 +384,15 @@ export default function FunnelSimulatorView({
 
   const applyPreset = (p: WaizPreset) => {
     setPreset(p);
-    setInputs(prev => ({ ...applyWaizPreset(p), funnel_mode: prev.funnel_mode }));
+    stockApplied.current = true;
+    setInputs(prev => ({ ...applyWaizPreset(p, rmStock), funnel_mode: prev.funnel_mode }));
     setMode("prospect");
   };
 
   const reset = () => {
     setPreset("at_kpi");
-    setInputs(defaultSimulatorInputs());
+    stockApplied.current = true;
+    setInputs({ ...applyWaizPreset("at_kpi", rmStock), funnel_mode: "conversation" });
     setMode("prospect");
   };
 

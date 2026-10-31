@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import {
   FOCUS_STYLES,
   KPI_META,
@@ -26,7 +27,6 @@ import ClientActionLog from "./ClientActionLog";
 import ClientTimelineChart from "./ClientTimelineChart";
 import ClientAiDiagnosis from "./ClientAiDiagnosis";
 import PeriodComparison from "./PeriodComparison";
-import ClientKpiStandardsPanel from "./ClientKpiStandardsPanel";
 
 type MaturityInfo = {
   days: number;
@@ -516,16 +516,21 @@ export default function ClientHealthDetail({
             </div>
           </div>
 
-          <ClientKpiStandardsPanel
-            clientId={clientId}
-            clientName={data.client_name}
-            isCallCenter={isHe}
-            snapshot={data.current}
-            benchmarks={data.kpi_benchmarks ?? null}
-            updatedAt={data.kpi_benchmarks_updated_at ?? null}
-            note={data.kpi_benchmarks_note ?? null}
-            onSaved={load}
-          />
+          <div className="rounded-xl px-5 py-4 flex items-center justify-between gap-3" style={cardStyle}>
+            <div>
+              <h3 className="text-sm font-semibold" style={{ color: "#e2e8f0" }}>Custom goals</h3>
+              <p className="text-xs mt-1" style={{ color: "#64748b" }}>
+                Stock and custom goals are versioned on Criteria. This file does not save a second bar.
+              </p>
+            </div>
+            <Link
+              href={`/dashboard?view=client_health&tab=criteria&client=${clientId}`}
+              className="text-xs font-semibold px-3 py-2 rounded-lg shrink-0"
+              style={{ color: "#38bdf8", background: "rgba(56,189,248,0.1)", border: "1px solid rgba(56,189,248,0.25)" }}
+            >
+              Open Criteria →
+            </Link>
+          </div>
 
           {/* CRM context */}
           {(crmNotes.length > 0 || crmCalls.length > 0) && (

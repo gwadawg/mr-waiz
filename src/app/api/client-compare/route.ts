@@ -24,7 +24,8 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'start and end must be YYYY-MM-DD' }, { status: 400 });
   }
 
-  const cacheKey = [start, end, extraIds.slice().sort().join(',')].join('|');
+  const lens = searchParams.get('lens') === 'on_todays_criteria' ? 'on_todays_criteria' : 'as_judged_then';
+  const cacheKey = [start, end, extraIds.slice().sort().join(','), lens].join('|');
   const cached = cache.get(cacheKey);
   if (cached) {
     return NextResponse.json(cached, {
@@ -37,6 +38,7 @@ export async function GET(req: Request) {
       start,
       end,
       extraIds,
+      lens,
     });
     cache.set(cacheKey, bundle);
     return NextResponse.json(bundle, {

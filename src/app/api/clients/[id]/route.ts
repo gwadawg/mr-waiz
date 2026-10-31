@@ -184,7 +184,17 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const { id } = await params;
   const body = await req.json();
 
-  // Client Success may update only KPI judgment standards; media/CS may toggle ads pause.
+  if (body && typeof body === 'object' && ('kpi_benchmarks' in body || 'kpi_benchmarks_note' in body)) {
+    return NextResponse.json(
+      {
+        error:
+          'Custom goals are saved on the Criteria tab. This route no longer writes kpi_benchmarks in place.',
+      },
+      { status: 400 },
+    );
+  }
+
+  // Media/CS may toggle ads pause. Full client edits stay admin (+ billing for billing fields).
   // Full client edits stay admin (+ billing for billing fields).
   const kpiOnlyKeys = new Set(['kpi_benchmarks', 'kpi_benchmarks_note']);
   const adsOnlyKeys = new Set(['ads_paused', 'ads_paused_note']);
@@ -235,10 +245,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     'contact_role', 'appointment_settings', 'facebook_page_name', 'offer_summary',
     'lead_nurturing_host', 'booking_hours', 'brand_colors',
     // Media buying account ops
-    'instagram_handle', 'ad_account_name', 'ad_account_url', 'meta_pixel_id',
+    'instagram_handle', 'ad_account_name', 'ad_account_url',     'meta_pixel_id',
     'thank_you_page_url', 'second_landing_page_url',
-    // Per-client KPI band overrides (Client Success benchmark editor)
-    'kpi_benchmarks',
   ];
   const numericFields = new Set(['mrr', 'contract_term_months', 'daily_adspend', 'billing_day', 'pay_per_show', 'pay_per_bailed']);
   const booleanFields = new Set(['live_transfer_approved', 'appointment_watch', 'billing_paused', 'ads_paused']);
@@ -302,7 +310,6 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         updates[k] = normalized;
       }
     }
-    else if (k === 'kpi_benchmarks') updates[k] = body[k] ?? null; // object or null, stored as-is
     else if (k === 'brand_subject') {
       const brand = normalizeBrandSubject(body[k]);
       if (brand === 'invalid') {
@@ -400,23 +407,6 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     updates.primary_contact = updates.primary_contact_name ?? null;
   } else if ('primary_contact' in body) {
     updates.primary_contact_name = updates.primary_contact ?? null;
-  }
-
-  // Governance stamp for the per-client KPI benchmark overrides: whenever the bands
-  // change, record who/when/why so a per-client bar can't silently rot to green (a
-  // >90d staleness flag in the Client Roster reads kpi_benchmarks_updated_at). On reset
-  // (kpi_benchmarks = null) the governance fields clear with it.
-  if ('kpi_benchmarks' in body) {
-    if (updates.kpi_benchmarks == null) {
-      updates.kpi_benchmarks_updated_at = null;
-      updates.kpi_benchmarks_updated_by = null;
-      updates.kpi_benchmarks_note = null;
-    } else {
-      updates.kpi_benchmarks_updated_at = new Date().toISOString();
-      updates.kpi_benchmarks_updated_by = ctx.userId;
-      const note = typeof body.kpi_benchmarks_note === 'string' ? body.kpi_benchmarks_note.trim() : '';
-      updates.kpi_benchmarks_note = note || null;
-    }
   }
 
   const newLifecycle =

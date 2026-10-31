@@ -9,6 +9,7 @@ import {
   heClientHealthSnapshotFromMetrics,
   recentLeadingFromMetrics,
   freshLaunchFromMetrics,
+  type CriteriaSegmentView,
   getPriorPeriod,
   getRecentPriorPeriod,
   groupEventsByClient,
@@ -20,6 +21,7 @@ import {
   filterEventsToRange,
   compareHealthTrend,
   computeFocus,
+  MATURITY_DAYS,
   FRESH_LAUNCH_DAYS,
   type ClientEventWithDate,
   type ClientHealthRow,
@@ -35,13 +37,23 @@ import { OPEN_ACTION_STATUSES, summarizeOpenAction, type ActionLogRow } from '@/
 import { normalizeReportingType, usesCallCenterKpiLayout } from '@/lib/kpi-layouts';
 import { getLiveClientIds, liveClientFilter } from '@/lib/db-helpers';
 import { enforceRowCap } from '@/lib/row-cap';
-import type { EventRow, MetricsResult, SpendRow } from '@/lib/metrics';
+import { calculateMetrics, type EventRow, type MetricsResult, type SpendRow } from '@/lib/metrics';
 import {
   emptySqlKpiCounts,
   metricsFromSqlCounts,
   parseSqlKpiCountsByClient,
   type SqlKpiCounts,
 } from '@/lib/metrics-from-sql';
+import {
+  gradeMetrics,
+  resolveCriteriaSpans,
+  seedStockVersions,
+  type CriteriaCatalog,
+  type CriteriaClient,
+  type CriteriaLens,
+  type SpanResolution,
+} from '@/lib/kpi-criteria';
+import { loadCriteriaCatalog } from '@/lib/kpi-criteria-store';
 import type { createServiceClient } from '@/lib/supabase';
 
 const EVENT_SELECT =
@@ -162,6 +174,30 @@ function snapshotFor(
   return isHe
     ? heClientHealthSnapshotFromMetrics(metrics, benchmarks)
     : clientHealthSnapshotFromMetrics(metrics, benchmarks);
+}
+
+function criteriaClient(c: {
+  id: string;
+  reporting_type: string | null;
+  service_program?: string | null;
+  qualifies_leads?: boolean | null;
+}): CriteriaClient {
+  return {
+    id: c.id,
+    reportingType: c.reporting_type,
+    serviceProgram: c.service_program,
+    qualifiesLeads: c.qualifies_leads,
+  };
+}
+
+function spansFor(
+  c: Parameters<typeof criteriaClient>[0],
+  start: string,
+  end: string,
+  catalog: CriteriaCatalog,
+  lens: CriteriaLens,
+): SpanResolution {
+  return resolveCriteriaSpans(criteriaClient(c), start, end, catalog, { lens });
 }
 
 export type ClientHealthBundle = {
@@ -288,9 +324,10 @@ function assembleBundle(
 
 export async function loadClientHealthBundle(
   service: ServiceClient,
-  opts: { start_date: string; end_date: string; live_only?: boolean },
+  opts: { start_date: string; end_date: string; live_only?: boolean; lens?: CriteriaLens },
 ): Promise<ClientHealthBundle> {
   const { start_date, end_date, live_only = false } = opts;
+  const lens: CriteriaLens = opts.lens ?? 'as_judged_then';
   const today = new Date().toISOString().split('T')[0];
   const matured = maturedWindow(start_date, end_date);
   const verdictPrior = getPriorPeriod(start_date, end_date);
@@ -299,7 +336,7 @@ export async function loadClientHealthBundle(
 
   let clientQuery = service
     .from('clients')
-    .select('id, name, is_live, reporting_type, kpi_benchmarks, launch_date, lifecycle_status')
+    .select('id, name, is_live, reporting_type, service_program, qualifies_leads, kpi_benchmarks, launch_date, lifecycle_status')
     .order('name');
 
   if (live_only) clientQuery = clientQuery.eq('is_live', true);
@@ -311,6 +348,11 @@ export async function loadClientHealthBundle(
 
   const { data: clients, error: clientsError } = await clientQuery;
   if (clientsError) throw new Error(clientsError.message);
+
+  const catalog: CriteriaCatalog = await loadCriteriaCatalog(service).catch(() => ({
+    stock: seedStockVersions(today),
+    custom: [],
+  }));
 
   const rangeStart = [verdictPrior?.start, leadingPrior?.start, start_date]
     .concat(
@@ -397,6 +439,48 @@ export async function loadClientHealthBundle(
       actionsByClient.set(a.client_id, list);
     }
 
+    const rangeKey = (start: string, end: string) => `${start}|${end}`;
+    const extraRanges = new Map<string, { start: string; end: string }>();
+    const noteSpans = (c: (typeof clients)[number], start: string, end: string) => {
+      const spans = spansFor(c, start, end, catalog, lens);
+      if (
+        spans.segments.length !== 1 ||
+        spans.segments[0].start !== start ||
+        spans.segments[0].end !== end
+      ) {
+        for (const seg of spans.segments) extraRanges.set(rangeKey(seg.start, seg.end), seg);
+      }
+      return spans;
+    };
+    for (const c of clients ?? []) {
+      noteSpans(c, start_date, end_date);
+      if (verdictPrior) noteSpans(c, verdictPrior.start, verdictPrior.end);
+      noteSpans(c, leading.start, leading.end);
+      if (leadingPrior) noteSpans(c, leadingPrior.start, leadingPrior.end);
+      if (c.launch_date && isFreshLaunchClient(c.launch_date as string | null, today)) {
+        const win = freshLaunchWindow(c.launch_date as string, today);
+        noteSpans(c, win.start, win.end);
+      }
+    }
+    const extraCounts = new Map<string, Map<string, SqlKpiCounts>>();
+    await Promise.all(
+      [...extraRanges.entries()].map(async ([key, range]) => {
+        const counts = await fetchCountsByClient(service, rpcClientIds, range.start, range.end);
+        if (counts) extraCounts.set(key, counts);
+      }),
+    );
+
+    const metricsForSpan = (
+      c: (typeof clients)[number],
+      start: string,
+      end: string,
+      fallback: Map<string, SqlKpiCounts>,
+      spend: SpendRow[],
+    ) => {
+      const counts = extraCounts.get(rangeKey(start, end)) ?? fallback;
+      return metricsForClient(counts, c.id, spend);
+    };
+
     const rows: ClientHealthRow[] = (clients ?? []).map(c => {
       const benchmarks = (c.kpi_benchmarks ?? null) as ClientKpiBenchmarks | null;
       const reporting_type = normalizeReportingType(c.reporting_type);
@@ -429,9 +513,45 @@ export async function loadClientHealthBundle(
           ? null
           : metricsForClient(recentPriorCounts, c.id, recentPriorSpendByClient.get(c.id) ?? []);
 
-      const current = snapshotFor(isHe, verdictMetrics, benchmarks);
-      const priorSnapshot =
-        priorMetrics != null ? snapshotFor(isHe, priorMetrics, benchmarks) : null;
+      const verdictSpans = spansFor(c, start_date, end_date, catalog, lens);
+      const priorSpans = verdictPrior
+        ? spansFor(c, verdictPrior.start, verdictPrior.end, catalog, lens)
+        : null;
+      const leadingSpans = spansFor(c, leading.start, leading.end, catalog, lens);
+      const criteriaSegments: CriteriaSegmentView[] | null = verdictSpans.segments.length > 1
+        ? verdictSpans.segments.map(seg => {
+            const segSpend = spendInRange(spendRows.filter(r => r.client_id === c.id), seg.start, seg.end)
+              .map(({ amount, platform }) => ({ amount, platform }));
+            const segSnap = gradeMetrics(
+              seg.criteria,
+              metricsForSpan(c, seg.start, seg.end, verdictCounts, segSpend),
+            );
+            return {
+              start: seg.start,
+              end: seg.end,
+              tier: segSnap.worst_tier,
+              stock_version_id: seg.criteria.stockVersionId,
+              custom_version_id: seg.criteria.customVersionId,
+              profile: seg.criteria.profile,
+              effective_start: seg.criteria.stockEffectiveStart,
+              custom: seg.criteria.customKeys.length > 0,
+            };
+          })
+        : null;
+      const current = verdictSpans.single
+        ? gradeMetrics(verdictSpans.single, verdictMetrics)
+        : snapshotFor(isHe, verdictMetrics, benchmarks);
+      const priorSnapshot = priorSpans?.single && priorMetrics != null
+        ? gradeMetrics(priorSpans.single, priorMetrics)
+        : priorMetrics != null
+          ? snapshotFor(isHe, priorMetrics, benchmarks)
+          : null;
+      const sameRuler = Boolean(
+        verdictSpans.single &&
+        priorSpans?.single &&
+        verdictSpans.single.stockVersionId === priorSpans.single.stockVersionId &&
+        verdictSpans.single.customVersionId === priorSpans.single.customVersionId,
+      );
 
       const recentPriorLeading =
         recentPriorMetrics != null && leadingPrior != null
@@ -443,6 +563,7 @@ export async function loadClientHealthBundle(
               windowDays: leading.window_days,
               reportingType: reporting_type,
               benchmarks,
+              criteria: leadingSpans.single?.gradePlan ?? null,
               prior: null,
               costWindow: costPriorMetrics
                 ? { ...leadingPrior, window_days: leading.window_days }
@@ -458,6 +579,7 @@ export async function loadClientHealthBundle(
         windowDays: leading.window_days,
         reportingType: reporting_type,
         benchmarks,
+        criteria: leadingSpans.single?.gradePlan ?? null,
         prior: recentPriorLeading,
         costWindow: costMetrics ? leading : null,
       });
@@ -478,11 +600,28 @@ export async function loadClientHealthBundle(
               reporting_type,
               benchmarks,
               today,
+              spansFor(
+                c,
+                freshLaunchWindow(launch_date, today).start,
+                freshLaunchWindow(launch_date, today).end,
+                catalog,
+                lens,
+              ).single?.gradePlan ?? null,
             )
           : null;
 
-      const { trend, trend_delta_score } = compareHealthTrend(current, priorSnapshot);
-      const focus = computeFocus(current, recentLeading, reporting_type);
+      const trendResult = sameRuler && !criteriaSegments
+        ? compareHealthTrend(current, priorSnapshot)
+        : { trend: 'insufficient' as const, trend_delta_score: 0 };
+      const { trend, trend_delta_score } = trendResult;
+      const focus = criteriaSegments
+        ? {
+            focus: 'monitor' as const,
+            label: 'Ruler changed',
+            verdict_critical: false,
+            leading_critical: false,
+          }
+        : computeFocus(current, recentLeading, reporting_type);
       const has_activity =
         current.metrics.new_leads > 0 ||
         current.metrics.booked_appointments > 0 ||
@@ -530,6 +669,18 @@ export async function loadClientHealthBundle(
         has_activity,
         is_fresh_launch: fresh != null,
         fresh,
+        graded_keys: verdictSpans.single?.gradedKeys,
+        criteria_lens: lens,
+        criteria_replay: lens === 'on_todays_criteria',
+        criteria_split: Boolean(criteriaSegments),
+        criteria_segments: criteriaSegments,
+        criteria_caption: criteriaSegments
+          ? 'This range crosses a criteria change. Each side is graded on its own ruler.'
+          : lens === 'on_todays_criteria'
+            ? 'On today’s criteria. This is not the judgment that was made then.'
+            : verdictSpans.single
+              ? `${verdictSpans.single.profile} from ${verdictSpans.single.stockEffectiveStart}${verdictSpans.single.customKeys.length ? ' · custom' : ' · stock'}`
+              : null,
       };
     });
 
@@ -641,7 +792,7 @@ export async function loadClientHealthBundle(
       events: ev ?? [],
       spend: spend ?? [],
     });
-    return buildClientHealthRow({
+    const built = buildClientHealthRow({
       client_id: c.id,
       client_name: c.name,
       is_live: c.is_live !== false,
@@ -679,6 +830,66 @@ export async function loadClientHealthBundle(
       freshLaunchSpend,
       today,
     });
+    const verdictSpans = spansFor(c, start_date, end_date, catalog, lens);
+    if (verdictSpans.segments.length > 1) {
+      const criteria_segments: CriteriaSegmentView[] = verdictSpans.segments.map(seg => {
+        const ev = ((currentByClient.get(c.id) ?? []) as EventRow[]).filter(e =>
+          inRange(e as ClientEventWithDate, seg.start, seg.end),
+        );
+        const spend = spendInRange(
+          spendRows.filter(r => r.client_id === c.id),
+          seg.start,
+          seg.end,
+        ).map(({ amount, platform }) => ({ amount, platform }));
+        const snap = gradeMetrics(seg.criteria, calculateMetrics(ev, spend));
+        return {
+          start: seg.start,
+          end: seg.end,
+          tier: snap.worst_tier,
+          stock_version_id: seg.criteria.stockVersionId,
+          custom_version_id: seg.criteria.customVersionId,
+          profile: seg.criteria.profile,
+          effective_start: seg.criteria.stockEffectiveStart,
+          custom: seg.criteria.customKeys.length > 0,
+        };
+      });
+      return {
+        ...built,
+        criteria_split: true,
+        criteria_segments,
+        criteria_lens: lens,
+        criteria_replay: lens === 'on_todays_criteria',
+        criteria_caption: 'This range crosses a criteria change. Each side is graded on its own ruler.',
+        trend: 'insufficient' as const,
+        trend_delta_score: 0,
+        focus: {
+          focus: 'monitor' as const,
+          label: 'Ruler changed',
+          verdict_critical: false,
+          leading_critical: false,
+        },
+      };
+    }
+    if (verdictSpans.single) {
+      const snap = gradeMetrics(
+        verdictSpans.single,
+        calculateMetrics(
+          (currentByClient.get(c.id) ?? []) as EventRow[],
+          currentSpendByClient.get(c.id) ?? [],
+        ),
+      );
+      return {
+        ...built,
+        current: snap,
+        graded_keys: verdictSpans.single.gradedKeys,
+        criteria_lens: lens,
+        criteria_replay: lens === 'on_todays_criteria',
+        criteria_caption: lens === 'on_todays_criteria'
+          ? 'On today’s criteria. This is not the judgment that was made then.'
+          : `${verdictSpans.single.profile} from ${verdictSpans.single.stockEffectiveStart}${verdictSpans.single.customKeys.length ? ' · custom' : ' · stock'}`,
+      };
+    }
+    return built;
   });
 
   return assembleBundle(
@@ -696,7 +907,7 @@ export async function loadClientHealthBundle(
 }
 
 /** Same matured 30d window Client Success uses by default (ends MATURITY_DAYS before today). */
-export function defaultHealthGradingRange(maturityDays = 7, windowDays = 30): {
+export function defaultHealthGradingRange(maturityDays = MATURITY_DAYS, windowDays = 30): {
   start: string;
   end: string;
 } {

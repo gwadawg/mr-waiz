@@ -15,6 +15,8 @@ import {
   type ClientEventWithDate,
   type ClientKpiBenchmarks,
 } from '@/lib/client-health';
+import { gradeMetrics, resolveCriteriaSpans, type CriteriaLens } from '@/lib/kpi-criteria';
+import { loadCriteriaCatalog } from '@/lib/kpi-criteria-store';
 import { normalizeReportingType } from '@/lib/kpi-layouts';
 import type { EventRow } from '@/lib/metrics';
 import {
@@ -41,6 +43,7 @@ type ClientRow = {
   billing_paused: boolean | null;
   kpi_benchmarks: unknown;
   qualifies_leads: boolean | null;
+  service_program?: string | null;
 };
 
 type DatedSpend = { client_id: string; spend_date: string; amount: number; platform?: string };
@@ -106,17 +109,35 @@ export type ClientCompareBundle = {
 
 export async function loadClientCompareBundle(
   service: ServiceClient,
-  opts: { start: string; end: string; extraIds?: string[] },
+  opts: { start: string; end: string; extraIds?: string[]; lens?: CriteriaLens },
 ): Promise<ClientCompareBundle> {
   const extraIds = new Set((opts.extraIds ?? []).filter(Boolean));
 
   const { data: clients, error: clientsError } = await service
     .from('clients')
-    .select('id, name, reporting_type, lifecycle_status, billing_paused, kpi_benchmarks, qualifies_leads')
+    .select('id, name, reporting_type, service_program, lifecycle_status, billing_paused, kpi_benchmarks, qualifies_leads')
     .order('name');
   if (clientsError) throw new Error(clientsError.message);
 
+  const lens: CriteriaLens = opts.lens ?? 'as_judged_then';
+  const catalog = await loadCriteriaCatalog(service).catch(() => ({ stock: [], custom: [] }));
   const roster = ((clients ?? []) as ClientRow[]).filter(c => includeClient(c, extraIds));
+  const criteriaFor = (c: ClientRow) => {
+    if (catalog.stock.length === 0) return null;
+    const spans = resolveCriteriaSpans(
+      {
+        id: c.id,
+        reportingType: c.reporting_type,
+        serviceProgram: c.service_program,
+        qualifiesLeads: c.qualifies_leads,
+      },
+      opts.start,
+      opts.end,
+      catalog,
+      { lens },
+    );
+    return spans;
+  };
 
   const [countsMap, spendRows] = await Promise.all([
     fetchCountsByClient(service, opts.start, opts.end),
@@ -128,9 +149,37 @@ export async function loadClientCompareBundle(
   let rows: ClientCompareRow[];
 
   if (countsMap) {
+    const spansByClient = new Map(roster.map(c => [c.id, criteriaFor(c)] as const));
+    const extraRanges = new Map<string, { start: string; end: string }>();
+    for (const spans of spansByClient.values()) {
+      if (!spans || spans.segments.length < 2) continue;
+      for (const seg of spans.segments) extraRanges.set(`${seg.start}|${seg.end}`, seg);
+    }
+    const extraCounts = new Map<string, Map<string, SqlKpiCounts>>();
+    await Promise.all(
+      [...extraRanges.entries()].map(async ([key, range]) => {
+        const counts = await fetchCountsByClient(service, range.start, range.end);
+        if (counts) extraCounts.set(key, counts);
+      }),
+    );
+    const datedSpend = new Map<string, DatedSpend[]>();
+    for (const row of spendRows) {
+      const list = datedSpend.get(row.client_id) ?? [];
+      list.push(row);
+      datedSpend.set(row.client_id, list);
+    }
     rows = roster.map(c => {
       const spend = spendByClient.get(c.id) ?? [];
       const metrics = metricsFromSqlCounts(countsMap.get(c.id) ?? emptySqlKpiCounts(), spend);
+      const spans = spansByClient.get(c.id) ?? null;
+      const metricsFor = (start: string, end: string) => {
+        const sliced = extraCounts.get(`${start}|${end}`)?.get(c.id);
+        if (!sliced) return metrics;
+        const segSpend = (datedSpend.get(c.id) ?? [])
+          .filter(row => row.spend_date >= start && row.spend_date <= end)
+          .map(row => ({ amount: row.amount, platform: row.platform }));
+        return metricsFromSqlCounts(sliced, segSpend);
+      };
       return compareRowFromMetrics({
         id: c.id,
         name: c.name,
@@ -140,6 +189,26 @@ export async function loadClientCompareBundle(
         metrics,
         benchmarks: (c.kpi_benchmarks ?? null) as ClientKpiBenchmarks | null,
         qualifies_leads: c.qualifies_leads,
+        criteria: spans?.single ?? null,
+        criteria_split: Boolean(spans && spans.segments.length > 1),
+        criteria_segments: spans && spans.segments.length > 1
+          ? spans.segments.map(seg => ({
+              start: seg.start,
+              end: seg.end,
+              tier: gradeMetrics(seg.criteria, metricsFor(seg.start, seg.end)).worst_tier,
+              stock_version_id: seg.criteria.stockVersionId,
+              custom_version_id: seg.criteria.customVersionId,
+              profile: seg.criteria.profile,
+              effective_start: seg.criteria.stockEffectiveStart,
+              custom: seg.criteria.customKeys.length > 0,
+            }))
+          : null,
+        criteria_replay: lens === 'on_todays_criteria',
+        criteria_caption: spans && spans.segments.length > 1
+          ? 'This range crosses a criteria change. Each side is graded on its own ruler.'
+          : lens === 'on_todays_criteria'
+            ? 'On today’s criteria. This is not the judgment that was made then.'
+            : null,
       });
     });
   } else {
@@ -157,6 +226,18 @@ export async function loadClientCompareBundle(
     rows = roster.map(c => {
       const spend = spendByClient.get(c.id) ?? [];
       const clientEvents = (byClient.get(c.id) ?? []) as EventRow[];
+      const spans = criteriaFor(c);
+      const metricsFor = (start: string, end: string) => {
+        const ev = clientEvents.filter(e => {
+          const at = (e as ClientEventWithDate).occurred_at ?? '';
+          return at >= `${start}T00:00:00.000Z` && at <= `${end}T23:59:59.999Z`;
+        });
+        const segSpend = spend.filter(row => {
+          const dated = row as { spend_date?: string };
+          return !dated.spend_date || (dated.spend_date >= start && dated.spend_date <= end);
+        });
+        return calculateMetrics(ev, segSpend);
+      };
       return compareRowFromMetrics({
         id: c.id,
         name: c.name,
@@ -166,6 +247,26 @@ export async function loadClientCompareBundle(
         metrics: calculateMetrics(clientEvents, spend),
         benchmarks: (c.kpi_benchmarks ?? null) as ClientKpiBenchmarks | null,
         qualifies_leads: c.qualifies_leads,
+        criteria: spans?.single ?? null,
+        criteria_split: Boolean(spans && spans.segments.length > 1),
+        criteria_segments: spans && spans.segments.length > 1
+          ? spans.segments.map(seg => ({
+              start: seg.start,
+              end: seg.end,
+              tier: gradeMetrics(seg.criteria, metricsFor(seg.start, seg.end)).worst_tier,
+              stock_version_id: seg.criteria.stockVersionId,
+              custom_version_id: seg.criteria.customVersionId,
+              profile: seg.criteria.profile,
+              effective_start: seg.criteria.stockEffectiveStart,
+              custom: seg.criteria.customKeys.length > 0,
+            }))
+          : null,
+        criteria_replay: lens === 'on_todays_criteria',
+        criteria_caption: spans && spans.segments.length > 1
+          ? 'This range crosses a criteria change. Each side is graded on its own ruler.'
+          : lens === 'on_todays_criteria'
+            ? 'On today’s criteria. This is not the judgment that was made then.'
+            : null,
       });
     });
   }
