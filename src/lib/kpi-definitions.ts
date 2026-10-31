@@ -12,6 +12,7 @@ import {
   type ClientKpiBenchmarks,
   type KpiKey,
 } from '@/lib/client-health';
+import { normalizeOverlay } from '@/lib/kpi-criteria';
 
 export type KpiOwner = 'media_buyer' | 'ccm' | 'client_lo' | 'shared';
 
@@ -261,22 +262,15 @@ export function deriveCostBenchmarksFromCpl(
 }
 
 /**
- * API boundary normalization: regardless of which editor submits benchmarks,
- * retain only CPL as the manual input and regenerate downstream cost bands.
+ * Keep a stored goal key only when this client's profile grades it.
+ * Keys the profile does not grade are dropped. Pass the graded set from the
+ * open criteria version — an empty list keeps nothing.
  */
 export function normalizeClientKpiBenchmarks(
   input: unknown,
+  gradedKeys: KpiKey[] = [],
 ): ClientKpiBenchmarks | null {
-  if (!input || typeof input !== 'object' || Array.isArray(input)) return null;
-  const candidate = input as ClientKpiBenchmarks;
-  const cpl: Bands = {};
-  for (const band of COST_BAND_KEYS) {
-    const value = candidate.cpl?.[band];
-    if (typeof value === 'number' && Number.isFinite(value) && value >= 0) {
-      cpl[band] = value;
-    }
-  }
-  return Object.keys(cpl).length > 0 ? { cpl } : null;
+  return normalizeOverlay(input, gradedKeys);
 }
 
 export function formatBandValue(key: KpiKey, value: number | undefined): string {

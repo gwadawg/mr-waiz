@@ -9,9 +9,11 @@ import {
   heClientHealthSnapshotFromMetrics,
   KPI_MIN_DENOMINATOR,
   type ClientKpiBenchmarks,
+  type CriteriaSegmentView,
   type HealthTier,
   type KpiKey,
 } from '@/lib/client-health';
+import { gradeMetrics, type ResolvedCriteria } from '@/lib/kpi-criteria';
 import { worstTier } from '@/lib/dept-health';
 import { dialPoolForClient, withDialPoolRates, type DialPool } from '@/lib/dial-pool';
 import { usesCallCenterKpiLayout, type ReportingType } from '@/lib/kpi-layouts';
@@ -71,6 +73,10 @@ export type ClientCompareRow = {
   is_call_center: boolean;
   /** Paid-ads dial pool for the two rates. Null on call center. */
   dial_pool: DialPool | null;
+  criteria_split?: boolean;
+  criteria_segments?: CriteriaSegmentView[] | null;
+  criteria_caption?: string | null;
+  criteria_replay?: boolean;
 };
 
 export type CompareMapPoint = {
@@ -127,14 +133,24 @@ export function compareRowFromMetrics(input: {
   /** Per-client Client Success overrides — used only to flag the tooltip. */
   benchmarks?: ClientKpiBenchmarks | null;
   qualifies_leads?: boolean | null;
+  /** Ruler in force for this row. When set, the grade uses it instead of the old CPL-only path. */
+  criteria?: ResolvedCriteria | null;
+  criteria_split?: boolean;
+  criteria_segments?: CriteriaSegmentView[] | null;
+  criteria_caption?: string | null;
+  criteria_replay?: boolean;
 }): ClientCompareRow {
   const isCc = usesCallCenterKpiLayout(input.reporting_type);
   const m = input.metrics;
-  const pool = dialPoolForClient(input.reporting_type, input.qualifies_leads);
+  const pool = input.criteria
+    ? input.criteria.pool
+    : dialPoolForClient(input.reporting_type, input.qualifies_leads);
   const reported = withDialPoolRates(m, pool);
-  const snap = isCc
-    ? heClientHealthSnapshotFromMetrics(m, null)
-    : clientHealthSnapshotFromMetrics(m, null);
+  const snap = input.criteria
+    ? gradeMetrics(input.criteria, m)
+    : isCc
+      ? heClientHealthSnapshotFromMetrics(m, null)
+      : clientHealthSnapshotFromMetrics(m, null);
 
   const spend = isCc ? null : m.ad_spend;
   const spendMissing = false;
@@ -163,9 +179,13 @@ export function compareRowFromMetrics(input: {
     grades.cpconv = gradeOf(snap.grades, 'cps');
   }
 
-  const northStar: HealthTier = isCc
-    ? worstTier(grades.hand_raise ?? 'insufficient', grades.show_rate ?? 'insufficient')
-    : grades.cpconv ?? 'insufficient';
+  const northStar: HealthTier = input.criteria_split
+    ? 'insufficient'
+    : input.criteria
+      ? snap.worst_tier
+      : isCc
+        ? worstTier(grades.hand_raise ?? 'insufficient', grades.show_rate ?? 'insufficient')
+        : grades.cpconv ?? 'insufficient';
 
   return {
     id: input.id,
@@ -190,9 +210,13 @@ export function compareRowFromMetrics(input: {
     dials_per_qualified: dialsPerQualified,
     grades,
     north_star_grade: northStar,
-    has_custom_cpl_benchmark: Boolean(input.benchmarks?.cpl),
+    has_custom_cpl_benchmark: Boolean(input.benchmarks?.cpl || input.criteria?.customKeys.includes('cpl')),
     is_call_center: isCc,
     dial_pool: pool,
+    criteria_split: input.criteria_split,
+    criteria_segments: input.criteria_segments ?? null,
+    criteria_caption: input.criteria_caption ?? null,
+    criteria_replay: input.criteria_replay,
   };
 }
 

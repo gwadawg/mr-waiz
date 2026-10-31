@@ -8,7 +8,7 @@ import {
   type MbPulseFlag,
   type MbPulseRow,
 } from "@/lib/team-dashboards/media";
-import type { SuccessMetricKey } from "@/lib/client-health";
+import { LEADING_WINDOW_DAYS, type SuccessMetricKey } from "@/lib/client-health";
 import type { BetCategoryId } from "@/lib/client-work-log";
 import { invalidateCachedJson } from "@/lib/client-fetch-cache";
 import WorkLogComposer from "@/components/WorkLogComposer";
@@ -262,7 +262,8 @@ export default function MbAccountPulse({
           {pulse.sync_age_days != null && pulse.sync_age_days > 0
             ? ` (${pulse.sync_age_days}d ago)`
             : ""}
-          {" · "}7d {pulse.window.start} → {pulse.window.end}
+          {" · "}7d spend {pulse.window.start} → {pulse.window.end}
+          {" · "}health leading (leads, CPL, tier) is {LEADING_WINDOW_DAYS}d
         </div>
       )}
 

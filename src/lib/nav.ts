@@ -9,7 +9,7 @@ export type AcquisitionTab = "appointments" | "credit_queue" | "sales_calls" | "
 export type AcquisitionDataExplorerTab = "leads" | "appointments" | "offers" | "dials" | "closes" | "ads";
 export type AcquisitionKpiTab = "overview" | "setters" | "closers" | "costs";
 export type AgentsTab = "performance" | "goals" | "credit_queue" | "recordings" | "examples" | "weekly_focus";
-export type ClientSuccessTab = "health" | "followups";
+export type ClientSuccessTab = "health" | "followups" | "criteria";
 /** Seat lenses inside the unified Team Command hub. */
 export type TeamDashboardTab = "cs" | "ccm" | "media";
 
@@ -193,6 +193,7 @@ export const AGENTS_TABS: HubTabDef<AgentsTab>[] = [
 export const CLIENT_SUCCESS_TABS: HubTabDef<ClientSuccessTab>[] = [
   { key: "health", label: "Health" },
   { key: "followups", label: "Follow-ups" },
+  { key: "criteria", label: "Criteria" },
 ];
 
 export const TEAM_DASHBOARD_TABS: HubTabDef<TeamDashboardTab>[] = [

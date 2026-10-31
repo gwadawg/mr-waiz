@@ -34,14 +34,7 @@ import { REPORTING_TYPE_META, REPORTING_TYPES } from "@/lib/reporting-types";
 import { normalizeSalesPackage } from "@/lib/offer-catalog";
 import ReportingTypeBadge, { ReportingTypeSelectOptions, SalesPackageBadge } from "@/components/ReportingTypeBadge";
 import { isQaLifecycle, type QaLane } from "@/lib/qa-form";
-import {
-  DEFAULT_KPI_BANDS,
-  HE_KPI_KEYS,
-  KPI_META,
-  RM_KPI_KEYS,
-  type ClientKpiBenchmarks,
-  type KpiKey,
-} from "@/lib/client-health";
+import { type ClientKpiBenchmarks } from "@/lib/client-health";
 import {
   countRosterAccounts,
   groupClientsIntoAccounts,
@@ -120,18 +113,6 @@ type Client = {
   } | null;
 };
 
-/** Benchmark overrides untouched for this long are flagged for review. */
-const BENCHMARK_STALE_DAYS = 90;
-
-/** A client's bands need review if overridden but never stamped, or stamped > 90d ago. */
-function benchmarksStale(c: Client): boolean {
-  const has = !!c.kpi_benchmarks && Object.keys(c.kpi_benchmarks).length > 0;
-  if (!has) return false;
-  if (!c.kpi_benchmarks_updated_at) return true; // overridden but untracked
-  const ageDays = (Date.now() - new Date(c.kpi_benchmarks_updated_at).getTime()) / 86_400_000;
-  return ageDays > BENCHMARK_STALE_DAYS;
-}
-
 /** Compact "3d ago" / "2mo ago" relative label. */
 function relativeAge(iso: string | null | undefined): string {
   if (!iso) return "never";
@@ -142,13 +123,6 @@ function relativeAge(iso: string | null | undefined): string {
   if (days < 365) return `${Math.floor(days / 30)}mo ago`;
   return `${Math.floor(days / 365)}y ago`;
 }
-
-function kpiOrderForClient(client: Client): KpiKey[] {
-  return usesCallCenterKpiLayout(client.reporting_type) ? HE_KPI_KEYS : RM_KPI_KEYS;
-}
-
-const BAND_KEYS: (keyof NonNullable<ClientKpiBenchmarks[KpiKey]>)[] = ["critical", "below", "at"];
-const BAND_LABEL: Record<string, string> = { critical: "911 / critical", below: "Below KPI", at: "At KPI" };
 
 const ROSTER_SECTIONS = [
   { key: "onboarding", label: "Onboarding", statuses: ["new_account", "onboarding"] },
@@ -582,7 +556,6 @@ export default function ClientRoster({ canViewRevenue: initialCanViewRevenue = f
   const [deleteSummary, setDeleteSummary] = useState<{ id: string; name: string; summary: DataSummary } | null>(null);
   const [mergeTargetId, setMergeTargetId] = useState("");
   const [showAdd, setShowAdd] = useState(false);
-  const [benchmarksFor, setBenchmarksFor] = useState<string | null>(null);
   const [fileFor, setFileFor] = useState<{
     id: string;
     name: string;
@@ -936,7 +909,6 @@ export default function ClientRoster({ canViewRevenue: initialCanViewRevenue = f
         deleteSummary={confirmDelete === c.id ? deleteSummary : null}
         mergeTargetId={mergeTargetId}
         onMergeTargetChange={setMergeTargetId}
-        benchmarksOpen={benchmarksFor === c.id}
         actionsOpen={actionsFor === c.id}
         onToggleActions={() => setActionsFor(prev => (prev === c.id ? null : c.id))}
         onRequestStatusChange={target => requestStatusChange(c, target)}
@@ -965,7 +937,6 @@ export default function ClientRoster({ canViewRevenue: initialCanViewRevenue = f
             accountGroupId: c.account_group_id ?? undefined,
           })
         }
-        onToggleBenchmarks={() => setBenchmarksFor(prev => (prev === c.id ? null : c.id))}
         onAskDelete={() => askDelete(c)}
         onCancelDelete={cancelDelete}
         onMerge={() => handleMerge(c.id)}
@@ -1654,7 +1625,7 @@ function AccountGroupHeaderRow({
 }
 
 function ClientRow({
-  client, allClients, striped, busy, confirmingDelete, deleteSummary, mergeTargetId, onMergeTargetChange,   columns, colSpan, benchmarksOpen, actionsOpen, onToggleActions, onRequestStatusChange, onPatch, onAdsUpdated, onOpenFile, onOpenKickoff, onOpenLaunch, onOpenTechQa, onOpenMediaQa, onOpenCreativeQa, onOpenLaunchKit, onOpenVirtualCard, onOpenOffboard, onOpenNotes, onOpenCalls, onLogCheckin, onAddOffer, onToggleBenchmarks, onAskDelete, onCancelDelete, onMerge, onDelete, variant = "standalone",
+  client, allClients, striped, busy, confirmingDelete, deleteSummary, mergeTargetId, onMergeTargetChange,   columns, colSpan, actionsOpen, onToggleActions, onRequestStatusChange, onPatch, onAdsUpdated, onOpenFile, onOpenKickoff, onOpenLaunch, onOpenTechQa, onOpenMediaQa, onOpenCreativeQa, onOpenLaunchKit, onOpenVirtualCard, onOpenOffboard, onOpenNotes, onOpenCalls, onLogCheckin, onAddOffer, onAskDelete, onCancelDelete, onMerge, onDelete, variant = "standalone",
 }: {
   client: Client;
   allClients: Client[];
@@ -1667,7 +1638,6 @@ function ClientRow({
   deleteSummary: { id: string; name: string; summary: DataSummary } | null;
   mergeTargetId: string;
   onMergeTargetChange: (id: string) => void;
-  benchmarksOpen: boolean;
   actionsOpen: boolean;
   onToggleActions: () => void;
   onRequestStatusChange: (target: string) => void;
@@ -1686,7 +1656,6 @@ function ClientRow({
   onOpenCalls: () => void;
   onLogCheckin: () => void;
   onAddOffer: () => void;
-  onToggleBenchmarks: () => void;
   onAskDelete: () => void;
   onCancelDelete: () => void;
   onMerge: () => void;
@@ -1697,8 +1666,7 @@ function ClientRow({
   const rowBg = striped ? "bg-[#0b1424]" : "bg-[#080f1e]";
   const cell = `px-3 py-2.5 align-middle${isSubaccount ? " pl-10" : ""}`;
   const clientName = c.primary_contact_name ?? c.primary_contact ?? "";
-  const hasOverrides = !!c.kpi_benchmarks && Object.keys(c.kpi_benchmarks).length > 0;
-  const stale = benchmarksStale(c);
+  const usesCustomGoal = !!c.kpi_benchmarks?.cpl && Object.keys(c.kpi_benchmarks.cpl).length > 0;
   const kickoffPending = isKickoffIncomplete(c, null, !!c.form_progress?.kickoff);
   const needsGhlMapping = clientNeedsGhlMapping(c);
   const showKickoffAction = isKickoffLifecycle(c.lifecycle_status) || kickoffPending;
@@ -1992,13 +1960,14 @@ function ClientRow({
             <ActionButton onClick={onLogCheckin} color="#38bdf8" title="Log a client check-in call">Check-in</ActionButton>
             <ActionButton onClick={onOpenCalls} color="#f59e0b" title="Add or view account calls">Calls</ActionButton>
             <ActionButton onClick={onOpenNotes} color="#a78bfa" title="Add or view client notes">Notes</ActionButton>
-            <ActionButton
-              onClick={onToggleBenchmarks}
-              color={benchmarksOpen ? "#38bdf8" : stale ? "#f59e0b" : hasOverrides ? "#38bdf8" : "#94a3b8"}
-              title={stale ? `Benchmarks last reviewed ${relativeAge(c.kpi_benchmarks_updated_at)} — review` : "Per-client KPI benchmark overrides"}
+            <Link
+              href={`/dashboard?view=client_health&tab=criteria&client=${c.id}`}
+              className="text-xs font-semibold"
+              style={{ color: usesCustomGoal ? "#38bdf8" : "#94a3b8" }}
+              title={usesCustomGoal ? "Open custom goal on Criteria" : "Open Criteria"}
             >
-              {benchmarksOpen ? "Close bands" : stale ? "KPI bands ⚠" : hasOverrides ? "KPI bands ●" : "KPI bands"}
-            </ActionButton>
+              {usesCustomGoal ? "Criteria ●" : "Criteria"}
+            </Link>
             {(c.onboarding_clickup_task_id || c.clickup_task_id) && (
               <a
                 href={`https://app.clickup.com/t/${c.onboarding_clickup_task_id || c.clickup_task_id}`}
@@ -2018,17 +1987,6 @@ function ClientRow({
         </td>
       </tr>
     )}
-    {benchmarksOpen && (
-      <tr style={{ background: "#050c18" }}>
-        <td colSpan={colSpan} className="px-4 py-4">
-          <BenchmarkEditor
-            client={c}
-            busy={busy}
-            onSave={(benchmarks, note) => onPatch(c.id, { kpi_benchmarks: benchmarks, kpi_benchmarks_note: note })}
-          />
-        </td>
-      </tr>
-    )}
     </>
   );
 }
@@ -2045,142 +2003,6 @@ function ActionButton({ onClick, color, title, children }: { onClick: () => void
       {children}
     </button>
   );
-}
-
-function BenchmarkEditor({
-  client, busy, onSave,
-}: {
-  client: Client;
-  busy: boolean;
-  onSave: (benchmarks: ClientKpiBenchmarks | null, note: string | null) => void;
-}) {
-  const [draft, setDraft] = useState<ClientKpiBenchmarks>(() => structuredCopy(client.kpi_benchmarks));
-  const [note, setNote] = useState<string>(client.kpi_benchmarks_note ?? "");
-  const hasOverrides = !!client.kpi_benchmarks && Object.keys(client.kpi_benchmarks).length > 0;
-  const stale = benchmarksStale(client);
-
-  const setBand = (kpi: KpiKey, band: "critical" | "below" | "at", raw: string) => {
-    setDraft(prev => {
-      const next: ClientKpiBenchmarks = { ...prev, [kpi]: { ...(prev[kpi] ?? {}) } };
-      const num = Number(raw);
-      if (raw.trim() === "" || Number.isNaN(num)) {
-        delete next[kpi]![band];
-      } else {
-        next[kpi]![band] = num;
-      }
-      if (next[kpi] && Object.keys(next[kpi]!).length === 0) delete next[kpi];
-      return next;
-    });
-  };
-
-  const overrideCount = Object.values(draft).reduce((n, b) => n + Object.keys(b ?? {}).length, 0);
-
-  const kpiOrder = kpiOrderForClient(client);
-  const isCallCenter = usesCallCenterKpiLayout(client.reporting_type);
-
-  return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between flex-wrap gap-2">
-        <div>
-          <p className="text-sm font-semibold" style={{ color: "#e2e8f0" }}>
-            KPI benchmarks for {client.name}
-          </p>
-          <p className="text-xs mt-0.5 max-w-2xl" style={{ color: "#475569" }}>
-            Leave a field blank to use the global default (shown as the placeholder). Overrides let you judge each
-            client against its own bar — measurement stays identical, only the thresholds move.
-            {isCallCenter ? " Call Center clients grade booking (÷ total leads) and show rate only." : ""}
-          </p>
-          {hasOverrides && (
-            <p className="text-xs mt-1" style={{ color: stale ? "#f59e0b" : "#64748b" }}>
-              {stale ? "⚠ Needs review · " : ""}
-              Last set {relativeAge(client.kpi_benchmarks_updated_at)}
-              {client.kpi_benchmarks_note ? ` · “${client.kpi_benchmarks_note}”` : " · no reason recorded"}
-              {stale ? ` (overrides untouched > ${BENCHMARK_STALE_DAYS}d — confirm they still hold)` : ""}
-            </p>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => { setDraft({}); setNote(""); onSave(null, null); }}
-            disabled={busy}
-            className="text-xs px-3 py-1.5 rounded-lg"
-            style={{ color: "#94a3b8", background: "#0f2040", border: "1px solid rgba(255,255,255,0.12)" }}
-          >
-            Reset to defaults
-          </button>
-          <button
-            onClick={() => onSave(overrideCount > 0 ? draft : null, overrideCount > 0 ? (note.trim() || null) : null)}
-            disabled={busy}
-            className="text-xs font-semibold px-3 py-1.5 rounded-lg"
-            style={{ color: "#22c55e", background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.25)", opacity: busy ? 0.5 : 1 }}
-          >
-            {busy ? "Saving…" : `Save${overrideCount ? ` (${overrideCount})` : ""}`}
-          </button>
-        </div>
-      </div>
-
-      <Field label="Reason for these overrides (recorded with your name + date)">
-        <input
-          value={note}
-          onChange={e => setNote(e.target.value)}
-          disabled={busy}
-          placeholder="e.g. High-cost CA market — CPQL/CPConv bars raised vs global"
-          className="px-2 py-1.5 rounded-lg text-xs outline-none w-full max-w-2xl"
-          style={fieldStyle()}
-        />
-      </Field>
-
-      <div className="overflow-x-auto">
-        <table className="text-xs" style={{ minWidth: 640 }}>
-          <thead>
-            <tr style={{ color: "#334155" }}>
-              <th className="text-left px-2 py-1 font-semibold uppercase tracking-wider">KPI</th>
-              <th className="text-left px-2 py-1 font-semibold uppercase tracking-wider">Direction</th>
-              {BAND_KEYS.map(b => (
-                <th key={b} className="text-left px-2 py-1 font-semibold uppercase tracking-wider">{BAND_LABEL[b]}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {kpiOrder.map(kpi => {
-              const spec = DEFAULT_KPI_BANDS[kpi];
-              return (
-                <tr key={kpi} style={{ borderTop: "1px solid rgba(255,255,255,0.04)" }}>
-                  <td className="px-2 py-1.5 whitespace-nowrap" style={{ color: "#e2e8f0" }}>{KPI_META[kpi].label}</td>
-                  <td className="px-2 py-1.5 whitespace-nowrap" style={{ color: "#64748b" }}>
-                    {spec.higherIsBetter ? "higher better" : "lower better"} · {spec.unit === "money" ? "$" : "%"}
-                  </td>
-                  {BAND_KEYS.map(band => (
-                    <td key={band} className="px-2 py-1.5">
-                      <input
-                        type="number"
-                        value={draft[kpi]?.[band] ?? ""}
-                        placeholder={String(spec.bands[band] ?? "—")}
-                        disabled={busy}
-                        onChange={e => setBand(kpi, band, e.target.value)}
-                        className="px-2 py-1 rounded-lg text-xs outline-none w-20"
-                        style={fieldStyle()}
-                      />
-                    </td>
-                  ))}
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
-
-/** Shallow-clone the per-client overrides so the editor draft is isolated. */
-function structuredCopy(b: ClientKpiBenchmarks | null | undefined): ClientKpiBenchmarks {
-  const out: ClientKpiBenchmarks = {};
-  if (!b) return out;
-  for (const k of Object.keys(b) as KpiKey[]) {
-    if (b[k]) out[k] = { ...b[k] };
-  }
-  return out;
 }
 
 function AddClientForm({

@@ -15,12 +15,13 @@ export async function GET(req: Request) {
   const start_date = searchParams.get('start_date');
   const end_date = searchParams.get('end_date');
   const live_only = searchParams.get('live_only') === 'true';
+  const lens = searchParams.get('lens') === 'on_todays_criteria' ? 'on_todays_criteria' : 'as_judged_then';
 
   if (!start_date || !end_date) {
     return NextResponse.json({ error: 'start_date and end_date are required' }, { status: 400 });
   }
 
-  const cacheKey = [start_date, end_date, live_only ? '1' : '0'].join('|');
+  const cacheKey = [start_date, end_date, live_only ? '1' : '0', lens].join('|');
   const cached = clientHealthCache.get(cacheKey);
   if (cached) {
     return NextResponse.json(cached, {
@@ -33,6 +34,7 @@ export async function GET(req: Request) {
       start_date,
       end_date,
       live_only,
+      lens,
     });
     clientHealthCache.set(cacheKey, bundle);
     return NextResponse.json(bundle, {

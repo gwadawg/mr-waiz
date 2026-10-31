@@ -31,7 +31,7 @@ import {
   TIER_WEIGHT,
   deptStatus,
   gradesForLens,
-  rateTierFromBands,
+  leadingOrBaseline,
   type DeptLens,
 } from "@/lib/dept-health";
 import Link from "next/link";
@@ -206,9 +206,26 @@ const DEPT_TABS: {
   {
     key: "ccm",
     label: "CCM",
-    blurb: "Your lane only — unique hand-raise, show, and conversation rate. Account CPConv is on Overview.",
+    blurb: "Your lane only — unique hand-raise and show. Conversation % is shown and not graded. Account CPConv is on Overview.",
   },
 ];
+
+function CriteriaSplitTiers({ row }: { row: ClientHealthRow }) {
+  const segments = row.criteria_segments ?? [];
+  if (segments.length === 0) return <TierBadge tier="insufficient" />;
+  return (
+    <div className="flex flex-col gap-1 items-start">
+      {segments.map(seg => (
+        <span key={`${seg.stock_version_id}-${seg.start}`} className="inline-flex items-center gap-1">
+          <TierBadge tier={seg.tier ?? "insufficient"} />
+          <span className="text-[10px] tabular-nums" style={{ color: "#64748b" }}>
+            {seg.start.slice(5)}–{seg.end.slice(5)}
+          </span>
+        </span>
+      ))}
+    </div>
+  );
+}
 
 function TierBadge({ tier }: { tier: HealthTier }) {
   const s = TIER_STYLES[tier];
@@ -277,6 +294,7 @@ export default function ClientHealthDashboard(_props: Props) {
   } | null>(null);
   const [loading, setLoading] = useState(false);
   const [liveOnly, setLiveOnly] = useState(true);
+  const [criteriaLens, setCriteriaLens] = useState<"as_judged_then" | "on_todays_criteria">("as_judged_then");
   const [sortKey, setSortKey] = useState<SortKey>("priority");
   const [sortAsc, setSortAsc] = useState(false);
   const [chartMetric, setChartMetric] = useState<SortKey>("priority");
@@ -304,7 +322,7 @@ export default function ClientHealthDashboard(_props: Props) {
 
   useEffect(() => {
     if (!startDate || !endDate) return;
-    const params = new URLSearchParams({ start_date: startDate, end_date: endDate });
+    const params = new URLSearchParams({ start_date: startDate, end_date: endDate, lens: criteriaLens });
     if (liveOnly) params.set("live_only", "true");
     const cacheKey = `client-health|${params.toString()}`;
 
@@ -374,7 +392,7 @@ export default function ClientHealthDashboard(_props: Props) {
         if (!ac.signal.aborted) setLoading(false);
       });
     return () => ac.abort();
-  }, [startDate, endDate, liveOnly]);
+  }, [startDate, endDate, liveOnly, criteriaLens]);
 
   const isCallCenterSegment = clientSegment === "CALL_CENTER";
   /** Media Buyer lens only makes sense on paid-ads clients. */
@@ -713,6 +731,26 @@ export default function ClientHealthDashboard(_props: Props) {
             <span style={{ color: "#64748b" }}> · vs prior ({priorLabel})</span>
           ) : null}
         </p>
+        <div className="flex gap-1 mt-3 p-1 rounded-lg w-fit" style={{ background: "#0a1628" }}>
+          {([
+            ["as_judged_then", "As judged then"],
+            ["on_todays_criteria", "On today’s criteria"],
+          ] as const).map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setCriteriaLens(key)}
+              className="px-3 py-1.5 rounded-md text-xs font-semibold"
+              style={
+                criteriaLens === key
+                  ? { background: "rgba(56,189,248,0.16)", color: "#e2e8f0" }
+                  : { color: "#64748b" }
+              }
+            >
+              {label}
+            </button>
+          ))}
+        </div>
         </div>
         <Link
           href={churnFormHref()}
@@ -774,7 +812,7 @@ export default function ClientHealthDashboard(_props: Props) {
         ) : effectiveLens === "ccm" ? (
           <>
             <span style={{ color: "#38bdf8", fontWeight: 600 }}>CCM lens.</span>{" "}
-            Status = worst of unique hand-raise, <strong>Show rate</strong> (unique booked who eventually spoke to LO — not True Show), and conversation rate. Booking-only is not graded. Account CPConv lives on Overview — not your scorecard.
+            Status = worst of unique hand-raise and <strong>Show rate</strong> (unique booked who eventually spoke to LO — not True Show). Conversation % is shown and not graded. Booking-only is not graded. Account CPConv lives on Overview — not your scorecard.
           </>
         ) : (
           <>
@@ -1096,19 +1134,22 @@ export default function ClientHealthDashboard(_props: Props) {
                 sorted.map(row => {
                   const expanded = expandedId === row.client_id;
                   const m = row.current.metrics;
-                  const grade = (key: KpiKey) =>
-                    row.current.grades.find(g => g.key === key);
+                  const grade = (key: KpiKey) => {
+                    const found = row.current.grades.find(g => g.key === key);
+                    if (!found || !row.criteria_split) return found;
+                    return { ...found, tier: "insufficient" as const };
+                  };
                   const lead = row.recent;
-                  const leadGrade = (key: KpiKey) => leadingGradeFor(lead, key);
+                  const leadGrade = (key: KpiKey) =>
+                    row.criteria_split ? "insufficient" : leadingGradeFor(lead, key);
                   const status = deptStatus(row, effectiveLens, isCallCenterSegment);
                   const handPct = isCallCenterSegment ? m.lead_hand_raise_rate : m.hand_raise_rate;
-                  const handTier = grade("hand_raise_rate")?.tier ?? "insufficient";
-                  const convTier = rateTierFromBands(
-                    "hand_raise_rate",
-                    m.conversation_rate,
-                    m.qualified_leads,
-                    5,
-                  );
+                  const handTier = row.criteria_split
+                    ? "insufficient"
+                    : (grade("hand_raise_rate")?.tier ?? "insufficient");
+                  const qualTier = row.criteria_split
+                    ? "insufficient"
+                    : leadingOrBaseline(row, "lead_to_qualified");
 
                   return (
                     <Fragment key={row.client_id}>
@@ -1125,6 +1166,11 @@ export default function ClientHealthDashboard(_props: Props) {
                       >
                         <td className="px-4 py-3 font-medium" style={{ color: "#e2e8f0" }}>
                           {row.client_name}
+                          {row.criteria_caption ? (
+                            <p className="text-[10px] mt-0.5 max-w-xs" style={{ color: row.criteria_replay ? "#fbbf24" : "#64748b" }}>
+                              {row.criteria_caption}
+                            </p>
+                          ) : null}
                           {!row.is_live && (
                             <span className="ml-2 text-[10px]" style={{ color: "#475569" }}>
                               offline
@@ -1135,7 +1181,7 @@ export default function ClientHealthDashboard(_props: Props) {
                         {effectiveLens === "media_buyer" ? (
                           <>
                             <td className="px-4 py-3">
-                              <TierBadge tier={status} />
+                              {row.criteria_split ? <CriteriaSplitTiers row={row} /> : <TierBadge tier={status} />}
                             </td>
                             <td className="px-4 py-3">
                               <div className="flex items-center gap-2 tabular-nums" style={{ color: "#94a3b8" }}>
@@ -1166,7 +1212,7 @@ export default function ClientHealthDashboard(_props: Props) {
                             </td>
                             <td className="px-4 py-3">
                               <div className="flex items-center gap-2 tabular-nums" style={{ color: "#94a3b8" }}>
-                                <KpiDot tier={grade("lead_to_qualified")?.tier ?? "insufficient"} />
+                                <KpiDot tier={qualTier} />
                                 {row.current.lead_to_qualified_pct.toFixed(0)}%
                               </div>
                             </td>
@@ -1174,7 +1220,7 @@ export default function ClientHealthDashboard(_props: Props) {
                         ) : effectiveLens === "ccm" ? (
                           <>
                             <td className="px-4 py-3">
-                              <TierBadge tier={status} />
+                              {row.criteria_split ? <CriteriaSplitTiers row={row} /> : <TierBadge tier={status} />}
                             </td>
                             <td className="px-4 py-3">
                               <div className="flex items-center gap-2 tabular-nums" style={{ color: "#94a3b8" }}>
@@ -1206,8 +1252,7 @@ export default function ClientHealthDashboard(_props: Props) {
                             ) : (
                               <>
                                 <td className="px-4 py-3">
-                                  <div className="flex items-center gap-2 tabular-nums" style={{ color: "#94a3b8" }}>
-                                    <KpiDot tier={convTier} />
+                                  <div className="tabular-nums" style={{ color: "#94a3b8" }} title="Conversation % is shown and not graded">
                                     {m.conversation_rate.toFixed(0)}%
                                   </div>
                                 </td>
@@ -1223,11 +1268,15 @@ export default function ClientHealthDashboard(_props: Props) {
                         ) : (
                           <>
                             <td className="px-4 py-3">
-                              <FocusBadge focus={row.focus} />
+                              {row.criteria_split ? <CriteriaSplitTiers row={row} /> : <FocusBadge focus={row.focus} />}
                             </td>
                             <td className="px-4 py-3">
                               {isCallCenterSegment ? (
-                                <TierBadge tier={row.current.worst_tier} />
+                                row.criteria_split ? (
+                                  <span className="text-[10px]" style={{ color: "#64748b" }}>Split</span>
+                                ) : (
+                                  <TierBadge tier={row.current.worst_tier} />
+                                )
                               ) : (
                                 <div className="flex items-center gap-2 tabular-nums" style={{ color: "#94a3b8" }}>
                                   <KpiDot tier={grade("cps")?.tier ?? "insufficient"} />
@@ -1442,7 +1491,7 @@ export default function ClientHealthDashboard(_props: Props) {
           <>Media Buyer: status = worst of CPL / CPQL / lead→qualified. Expanded grades show your lane only.</>
         ) : effectiveLens === "ccm" ? (
           <>
-            CCM: status = worst of unique hand-raise, show, and conversation %
+            CCM: status = worst of unique hand-raise and show. Conversation % is not graded
             {isCallCenterSegment ? " (HE hand-raise ÷ total leads)." : " (RM hand-raise ÷ qualified)."}{" "}
             Booking-only is not graded. Account CPConv is on Overview.
           </>

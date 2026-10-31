@@ -1,3 +1,4 @@
+import { withDialPoolRates, type DialPool } from '@/lib/dial-pool';
 import { calculateMetrics, type EventRow, type MetricsResult, type SpendRow } from '@/lib/metrics';
 import { normalizeReportingType, usesCallCenterKpiLayout, type ReportingType } from '@/lib/kpi-layouts';
 
@@ -31,6 +32,8 @@ export type KpiGrade = {
   display: string;
   tier: HealthTier;
   tierLabel: string;
+  /** Why a grade is insufficient, when the number itself is not the reason. */
+  note?: string;
 };
 
 export type ClientHealthSnapshot = {
@@ -49,6 +52,8 @@ export type ClientHealthSnapshot = {
   attention_score: number;
   constraint: ConstraintLayer;
   constraint_label: string;
+  /** Tier edges the grade actually used. Diagnosis copy reads these. */
+  ruler_edges?: Partial<Record<KpiKey, { critical?: number; below?: number; at?: number }>>;
 };
 
 /** Opt-in rate = new leads ÷ ad clicks to landing page. */
@@ -124,6 +129,18 @@ export type PendingIntervention = {
   review_due: boolean;
 };
 
+/** One piece of a date range that crossed a criteria version boundary. */
+export type CriteriaSegmentView = {
+  start: string;
+  end: string;
+  tier: HealthTier | null;
+  stock_version_id: string;
+  custom_version_id: string | null;
+  profile: string;
+  effective_start: string;
+  custom: boolean;
+};
+
 export type ClientHealthRow = {
   client_id: string;
   client_name: string;
@@ -147,6 +164,14 @@ export type ClientHealthRow = {
   is_fresh_launch: boolean;
   /** Launch-to-date snapshot (CPL / CPQL / booking — no CPConv). */
   fresh: FreshLaunchSnapshot | null;
+  /** Keys the ruler in force actually grades. Dept lenses honor this list. */
+  graded_keys?: KpiKey[];
+  criteria_lens?: 'as_judged_then' | 'on_todays_criteria';
+  /** True when the row is a replay on the open ruler and nothing was saved. */
+  criteria_replay?: boolean;
+  criteria_caption?: string | null;
+  criteria_split?: boolean;
+  criteria_segments?: CriteriaSegmentView[] | null;
 };
 
 /** First N days after launch use leading KPIs instead of matured CPConv grading. */
@@ -340,7 +365,7 @@ function resolveBands(key: KpiKey, overrides?: ClientKpiBenchmarks | null): KpiB
 type ClientEventRow = EventRow & { client_id: string };
 type ClientSpendRow = SpendRow & { client_id: string };
 
-function tierFromBands(
+export function tierFromBands(
   value: number,
   bands: { critical?: number; below?: number; at?: number; above?: number },
   higherIsBetter: boolean,
@@ -491,6 +516,133 @@ export function clientHealthSnapshotFromMetrics(
   };
 }
 
+export type CriteriaAccountMode = 'cpconv' | 'worst' | 'acquisition';
+
+export type CriteriaGradePlan = {
+  gradedKeys: KpiKey[];
+  bands: Partial<Record<KpiKey, KpiBandSpec & { minDenominator?: number }>>;
+  /** Null on call center (all-leads hand-raise is already on the metrics). */
+  pool: DialPool | null;
+  accountMode: CriteriaAccountMode;
+  notes?: Partial<Record<KpiKey, string>>;
+};
+
+function accountTierForCriteria(grades: KpiGrade[], mode: CriteriaAccountMode): HealthTier {
+  const usable = grades.filter(g => g.tier !== 'insufficient' && g.key !== 'close_rate');
+  if (usable.length === 0) return 'insufficient';
+  if (mode === 'cpconv') {
+    const north = usable.find(g => g.key === 'cps');
+    if (north) return north.tier;
+    if (usable.some(g => g.tier === 'critical')) return 'critical';
+    const avg = usable.reduce((sum, g) => sum + TIER_WEIGHT[g.tier], 0) / usable.length;
+    if (avg < 1.5) return 'above';
+    if (avg < 2.5) return 'at';
+    return 'below';
+  }
+  return usable.reduce(
+    (worst, g) => (TIER_WEIGHT[g.tier] > TIER_WEIGHT[worst] ? g.tier : worst),
+    'above' as HealthTier,
+  );
+}
+
+/**
+ * Grade one window with an already-resolved ruler. Close rate can appear in
+ * `grades` and stays out of the account tier. Missing bands grade insufficient.
+ */
+export function clientHealthSnapshotForCriteria(
+  metrics: MetricsResult,
+  plan: CriteriaGradePlan,
+): ClientHealthSnapshot {
+  const m = plan.pool === 'all' ? withDialPoolRates(metrics, 'all') : metrics;
+  const lead_to_qualified_pct =
+    m.new_leads > 0 ? (m.qualified_leads / m.new_leads) * 100 : 0;
+  const close_rate_pct = m.shows > 0 ? (m.closed / m.shows) * 100 : 0;
+  const cpql = m.qualified_leads > 0 ? m.ad_spend / m.qualified_leads : 0;
+  const cpconv = m.cp_conversation;
+  const conversation_yield =
+    m.qualified_leads > 0 ? m.unique_conversations / m.qualified_leads : 0;
+
+  const measure = (key: KpiKey): { value: number; display: string; denominator: number } => {
+    switch (key) {
+      case 'lead_to_qualified':
+        return { value: lead_to_qualified_pct, display: formatPct(lead_to_qualified_pct), denominator: m.new_leads };
+      case 'hand_raise_rate':
+        if (plan.pool == null) {
+          return {
+            value: m.lead_hand_raise_rate,
+            display: formatPct(m.lead_hand_raise_rate),
+            denominator: m.new_leads,
+          };
+        }
+        return {
+          value: m.hand_raise_rate,
+          display: formatPct(m.hand_raise_rate),
+          denominator: plan.pool === 'all' ? m.new_leads : m.qualified_leads,
+        };
+      case 'show_rate':
+        return {
+          value: m.booked_to_conversation_rate,
+          display: formatPct(m.booked_to_conversation_rate),
+          denominator: m.unique_booked_appointments,
+        };
+      case 'close_rate':
+        return { value: close_rate_pct, display: formatPct(close_rate_pct), denominator: m.shows };
+      case 'cpl':
+        return { value: m.cpl, display: formatMoney(m.cpl), denominator: m.new_leads };
+      case 'cpql':
+        return { value: cpql, display: formatMoney(cpql), denominator: m.qualified_leads };
+      case 'cps':
+        return { value: cpconv, display: formatMoney(cpconv), denominator: m.unique_conversations };
+      default:
+        return { value: 0, display: '—', denominator: 0 };
+    }
+  };
+
+  const ruler_edges: NonNullable<ClientHealthSnapshot['ruler_edges']> = {};
+  const grades: KpiGrade[] = plan.gradedKeys.map(key => {
+    const measured = measure(key);
+    const spec = plan.bands[key];
+    const note = plan.notes?.[key];
+    if (spec?.bands) {
+      ruler_edges[key] = spec.bands;
+    }
+    const tier =
+      note || !spec
+        ? 'insufficient'
+        : tierFromBands(
+            measured.value,
+            spec.bands,
+            spec.higherIsBetter,
+            spec.minDenominator ?? KPI_MIN_DENOMINATOR[key],
+            measured.denominator,
+          );
+    return { ...gradeKpi(key, measured.value, measured.display, tier), ...(note ? { note } : {}) };
+  });
+
+  const graded = grades.filter(g => g.tier !== 'insufficient');
+  const worst_tier = accountTierForCriteria(grades, plan.accountMode);
+  const attention_score = graded.reduce((sum, g) => sum + TIER_WEIGHT[g.tier], 0);
+  const constraintInput = plan.accountMode === 'worst'
+    ? inferHeConstraint(m, grades)
+    : inferConstraint(m, grades, lead_to_qualified_pct, cpql);
+
+  return {
+    metrics: m,
+    lead_to_qualified_pct,
+    close_rate_pct,
+    cpql,
+    cpconv,
+    conversation_yield,
+    optin_rate_pct: 0,
+    grades,
+    worst_tier,
+    attention_score,
+    constraint: constraintInput.constraint,
+    constraint_label: constraintInput.constraint_label,
+    ruler_edges,
+  };
+}
+
 /** HE (appointment-only) health snapshot — grades unique hand-raise + show only. */
 export function buildHeClientHealthSnapshot(
   events: EventRow[],
@@ -612,7 +764,7 @@ function inferConstraint(
   if (individualOk && cpsBad) {
     return { constraint: 'data_issue', constraint_label: 'Check attribution — metrics OK but CPS high' };
   }
-  if (qualBad && leadToQual < 50) {
+  if (qualBad) {
     return { constraint: 'lead_quality', constraint_label: 'Lead quality — targeting / messaging' };
   }
   if (cplBad && cpqlBad) {
@@ -672,6 +824,24 @@ const CONSTRAINT_LAYER: Record<ConstraintLayer, FunnelLayer> = {
  * payload. The numbers come from the deterministic engine; this only frames
  * them and attaches the right levers + owners from the diagnostic playbook.
  */
+function rulerEdge(
+  snapshot: ClientHealthSnapshot,
+  key: KpiKey,
+): { critical?: number; below?: number; at?: number } {
+  return snapshot.ruler_edges?.[key] ?? DEFAULT_KPI_BANDS[key].bands;
+}
+
+function atKpiPhrase(snapshot: ClientHealthSnapshot, key: KpiKey): string {
+  const edge = rulerEdge(snapshot, key);
+  const spec = DEFAULT_KPI_BANDS[key];
+  const fmt = (n: number | undefined) =>
+    n == null ? '—' : spec.unit === 'money' ? formatMoney(n) : `${n}%`;
+  if (spec.higherIsBetter) {
+    return `At KPI is ${fmt(edge.below)} up to under ${fmt(edge.at)}`;
+  }
+  return `At KPI is above ${fmt(edge.at)} through ${fmt(edge.below)}`;
+}
+
 export function buildConstraintGuidance(
   snapshot: ClientHealthSnapshot,
   reportingType: ReportingType = 'RM',
@@ -702,7 +872,7 @@ export function buildConstraintGuidance(
       return {
         ...base,
         headline: 'Lead quality — too few leads qualify',
-        whatsWrong: `Only ${snapshot.lead_to_qualified_pct.toFixed(0)}% of leads qualify (target ≥ 50%). The ads are attracting the wrong people, so spend is wasted before the call center ever gets a fair shot. CPQL is ${formatMoney(
+        whatsWrong: `Only ${snapshot.lead_to_qualified_pct.toFixed(0)}% of leads qualify (${atKpiPhrase(snapshot, 'lead_to_qualified')}). The ads are attracting the wrong people, so spend is wasted before the call center ever gets a fair shot. CPQL is ${formatMoney(
           snapshot.cpql,
         )}.`,
         fixSteps: [
@@ -710,7 +880,7 @@ export function buildConstraintGuidance(
             owner: 'Media buyer (L1–L2)',
             action: 'Pull disqualification reasons and tighten audience/targeting toward the qualifying archetype.',
             timebox: '7 days',
-            successMetric: 'Lead-to-qualified ≥ 50%',
+            successMetric: atKpiPhrase(snapshot, 'lead_to_qualified'),
           },
           {
             owner: 'Media buyer (L2)',
@@ -733,7 +903,7 @@ export function buildConstraintGuidance(
         headline: 'Lead cost — qualified leads are too expensive',
         whatsWrong: `CPL is ${formatMoney(m.cpl)} and CPQL is ${formatMoney(
           snapshot.cpql,
-        )} — both above target. Leads qualify fine, they just cost too much, which drags CPConv to ${formatMoney(
+        )} — both above the ruler in force (${atKpiPhrase(snapshot, 'cpql')}). Leads qualify fine, they just cost too much, which drags CPConv to ${formatMoney(
           snapshot.cpconv,
         )}.`,
         fixSteps: [
@@ -741,7 +911,7 @@ export function buildConstraintGuidance(
             owner: 'Media buyer (L1)',
             action: 'Rotate 3–5 fresh creatives and widen the audience to lower acquisition cost.',
             timebox: '7 days',
-            successMetric: `CPQL → ≤ ${formatMoney(20)}`,
+            successMetric: atKpiPhrase(snapshot, 'cpql'),
           },
           {
             owner: 'Media buyer (L1)',
@@ -767,7 +937,7 @@ export function buildConstraintGuidance(
             owner: 'CSR manager (L3)',
             action: 'Audit booking script, live-transfer handoff, text/SMS follow-up, and speed-to-lead for qualified leads.',
             timebox: '5 business days',
-            successMetric: 'Hand-raise rate ≥ 28% of qualified leads',
+            successMetric: atKpiPhrase(snapshot, 'hand_raise_rate'),
           },
           {
             owner: 'CSR manager (L3)',
@@ -791,7 +961,7 @@ export function buildConstraintGuidance(
             owner: 'Client success (L4)',
             action: 'Audit and strengthen the GHL reminder/confirmation sequence (SMS + call) before each appointment.',
             timebox: '5 business days',
-            successMetric: 'Show Rate ≥ 70%',
+            successMetric: atKpiPhrase(snapshot, 'show_rate'),
           },
           {
             owner: 'Client success (L4)',
@@ -862,6 +1032,16 @@ export function buildConstraintGuidance(
 }
 
 function buildHeConstraintGuidance(snapshot: ClientHealthSnapshot): ConstraintGuidance {
+  const heSnapshot: ClientHealthSnapshot = snapshot.ruler_edges?.hand_raise_rate
+    ? snapshot
+    : {
+        ...snapshot,
+        ruler_edges: {
+          ...snapshot.ruler_edges,
+          hand_raise_rate: DEFAULT_KPI_BANDS.lead_booking_rate.bands,
+        },
+      };
+  const hePhrase = (key: KpiKey) => atKpiPhrase(heSnapshot, key);
   const m = snapshot.metrics;
   const heHandRaisePct = m.lead_hand_raise_rate;
   const base = {
@@ -883,7 +1063,7 @@ function buildHeConstraintGuidance(snapshot: ClientHealthSnapshot): ConstraintGu
             owner: 'CSR manager (L3)',
             action: 'Audit booking script and text/SMS cadence — many HE bookings happen without a long phone pickup.',
             timebox: '5 business days',
-            successMetric: 'Unique hand-raise rate ≥ 8% (÷ total leads)',
+            successMetric: hePhrase('hand_raise_rate'),
           },
           {
             owner: 'CSR manager (L3)',
@@ -905,7 +1085,7 @@ function buildHeConstraintGuidance(snapshot: ClientHealthSnapshot): ConstraintGu
             owner: 'Client success (L4)',
             action: 'Audit and strengthen the GHL reminder/confirmation sequence (SMS + call) before each appointment.',
             timebox: '5 business days',
-            successMetric: 'Show Rate ≥ 70%',
+            successMetric: hePhrase('show_rate'),
           },
           {
             owner: 'Client success (L4)',
@@ -1384,18 +1564,27 @@ export function recentLeadingFromMetrics(input: {
   benchmarks?: ClientKpiBenchmarks | null;
   prior?: RecentLeading | null;
   costWindow?: { start: string; end: string; window_days: number } | null;
+  criteria?: CriteriaGradePlan | null;
 }): RecentLeading {
   const reportingType = input.reportingType ?? 'RM';
   const isHe = usesCallCenterKpiLayout(reportingType);
-  const funnelSnap = isHe
-    ? heClientHealthSnapshotFromMetrics(input.funnel, input.benchmarks)
-    : clientHealthSnapshotFromMetrics(input.funnel, input.benchmarks);
+  const funnelSnap = input.criteria
+    ? clientHealthSnapshotForCriteria(input.funnel, input.criteria)
+    : isHe
+      ? heClientHealthSnapshotFromMetrics(input.funnel, input.benchmarks)
+      : clientHealthSnapshotFromMetrics(input.funnel, input.benchmarks);
 
   let cpl = funnelSnap.metrics.cpl;
   let cpql = isHe ? 0 : funnelSnap.cpql;
   let leading_grades: KpiGrade[];
 
-  if (isHe) {
+  if (input.criteria) {
+    const allowed = new Set(input.criteria.gradedKeys);
+    const leadingKeys = (isHe ? LEADING_HE_KEYS : LEADING_RM_KEYS).filter(key => allowed.has(key));
+    cpl = funnelSnap.metrics.cpl;
+    cpql = funnelSnap.cpql;
+    leading_grades = funnelSnap.grades.filter(g => leadingKeys.includes(g.key));
+  } else if (isHe) {
     leading_grades = gradeLeadingOnly(funnelSnap, LEADING_HE_KEYS, input.benchmarks);
   } else if (input.cost) {
     const costSnap = clientHealthSnapshotFromMetrics(input.cost, input.benchmarks);
@@ -1444,13 +1633,19 @@ export function freshLaunchFromMetrics(
   reportingType: ReportingType = 'RM',
   benchmarks?: ClientKpiBenchmarks | null,
   today: string = utcToday(),
+  criteria?: CriteriaGradePlan | null,
 ): FreshLaunchSnapshot {
   const isHe = usesCallCenterKpiLayout(reportingType);
-  const snap = isHe
-    ? heClientHealthSnapshotFromMetrics(metrics, benchmarks)
-    : clientHealthSnapshotFromMetrics(metrics, benchmarks);
+  const snap = criteria
+    ? clientHealthSnapshotForCriteria(metrics, criteria)
+    : isHe
+      ? heClientHealthSnapshotFromMetrics(metrics, benchmarks)
+      : clientHealthSnapshotFromMetrics(metrics, benchmarks);
   const win = freshLaunchWindow(launchDate, today);
-  const keys = isHe ? FRESH_LAUNCH_HE_KEYS : FRESH_LAUNCH_RM_KEYS;
+  const allowed = criteria ? new Set(criteria.gradedKeys) : null;
+  const keys = (isHe ? FRESH_LAUNCH_HE_KEYS : FRESH_LAUNCH_RM_KEYS).filter(
+    key => !allowed || allowed.has(key),
+  );
   const grades = snap.grades.filter(g => keys.includes(g.key));
   const graded = grades.filter(g => g.tier !== 'insufficient');
   return {

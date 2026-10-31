@@ -1,6 +1,8 @@
 "use client";
 
+import { Suspense } from "react";
 import ClientHealthDashboard from "@/components/ClientHealthDashboard";
+import CriteriaRoom from "@/components/CriteriaRoom";
 import CsTouchpointsQueue from "@/components/CsTouchpointsQueue";
 import ViewHub from "@/components/nav/ViewHub";
 import {
@@ -27,6 +29,11 @@ export default function ClientSuccessHub({
     >
       {tab === "health" && <ClientHealthDashboard />}
       {tab === "followups" && <CsTouchpointsQueue onOpenClient={onOpenClient} />}
+      {tab === "criteria" && (
+        <Suspense fallback={null}>
+          <CriteriaRoom />
+        </Suspense>
+      )}
     </ViewHub>
   );
 }

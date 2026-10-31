@@ -57,8 +57,8 @@ function gradeOf(row: ClientHealthRow, key: KpiKey): HealthTier {
   return row.current.grades.find(g => g.key === key)?.tier ?? 'insufficient';
 }
 
-/** Prefer leading grade when available; else baseline. */
-function leadingOrBaseline(row: ClientHealthRow, key: KpiKey): HealthTier {
+/** Prefer leading grade when available; else baseline. Media status and the Qual % cell share this. */
+export function leadingOrBaseline(row: ClientHealthRow, key: KpiKey): HealthTier {
   const lead = leadingGradeFor(row.recent, key);
   return lead !== 'insufficient' ? lead : gradeOf(row, key);
 }
@@ -68,7 +68,10 @@ function leadingOrBaseline(row: ClientHealthRow, key: KpiKey): HealthTier {
  * Prefer leading when graded. Never CPConv.
  */
 export function mediaBuyerStatus(row: ClientHealthRow): HealthTier {
-  const graded = (['cpl', 'cpql', 'lead_to_qualified'] as const)
+  const owned = (['cpl', 'cpql', 'lead_to_qualified'] as const).filter(
+    key => !row.graded_keys || row.graded_keys.includes(key),
+  );
+  const graded = owned
     .map(key => leadingOrBaseline(row, key))
     .filter(t => t !== 'insufficient');
   if (graded.length === 0) return 'insufficient';
@@ -80,19 +83,13 @@ export function mediaBuyerStatus(row: ClientHealthRow): HealthTier {
  * who spoke via show∪claim∪LT), conversation rate. Not True Show (slot
  * took-place attendance). Booking-only rate is not graded. Never CPL / CPQL / CPConv.
  */
-export function ccmStatus(row: ClientHealthRow, isHe: boolean): HealthTier {
-  const m = row.current.metrics;
-  const show = gradeOf(row, 'show_rate');
-  const hand = gradeOf(row, 'hand_raise_rate');
-  const conv = isHe
-    ? 'insufficient'
-    : rateTierFromBands(
-        'hand_raise_rate',
-        m.conversation_rate,
-        m.qualified_leads,
-        5,
-      );
-  const graded = [show, hand, conv].filter(t => t !== 'insufficient');
+export function ccmStatus(row: ClientHealthRow, _isHe: boolean): HealthTier {
+  const gradesHand = !row.graded_keys || row.graded_keys.includes('hand_raise_rate');
+  const gradesShow = !row.graded_keys || row.graded_keys.includes('show_rate');
+  if (!gradesHand && !gradesShow) return 'insufficient';
+  const show = gradesShow ? gradeOf(row, 'show_rate') : 'insufficient';
+  const hand = gradesHand ? gradeOf(row, 'hand_raise_rate') : 'insufficient';
+  const graded = [show, hand].filter(t => t !== 'insufficient');
   if (graded.length === 0) return 'insufficient';
   return worstTier(...graded);
 }
