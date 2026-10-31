@@ -1,4 +1,5 @@
 import { latestReinstateCutoffIso, mapCycleProgress } from '@/lib/reinstate-progress';
+import { usesCallCenterKpiLayout } from '@/lib/reporting-types';
 
 export const QA_SKELETON_VERSION = 'qa-skeleton-v0';
 export const QA_FINAL_CONFIRMATION = 'QA';
@@ -403,3 +404,239 @@ export function formatQaClickUpComment(
 
   return lines.join('\n');
 }
+/** Ads QA the media buyer fills after the build. Not the five-line skeleton. */
+export const MEDIA_QA_VERSION = 'media-buying-qa-v1';
+
+export type MediaQaItem = {
+  key: string;
+  number: string;
+  label: string;
+  helpText: string;
+  required: boolean;
+  /** Rendered once, above the first item in the group. */
+  groupLabel?: string;
+};
+
+export const MEDIA_QA_ITEMS: MediaQaItem[] = [
+  {
+    key: 'dummy_account',
+    number: '2',
+    label: 'Dummy account setup with a $5 budget',
+    helpText: 'A dummy ad account exists and its budget is $5. A live campaign set to $5 does not count. This box does not save a dollar amount.',
+    required: false,
+  },
+  {
+    key: 'states_targeted',
+    number: '3',
+    label: 'Correct states being targeted',
+    helpText: 'Locations on the ad set match the licensed states already on the client file. You are not typing a new state list.',
+    required: false,
+  },
+  {
+    key: 'placements',
+    number: '4',
+    label: 'Only targeting feeds, stories, and reels',
+    helpText: 'The ad set placements are only feeds, stories, and reels.',
+    required: false,
+  },
+  {
+    key: 'title_matches_creative',
+    number: '5',
+    label: 'Title for the ad matches the creative',
+    helpText: 'The ad title matches the words on the creative (the image or video). This is not the headline field. Headlines are check 6.',
+    required: false,
+  },
+  {
+    key: 'headlines_and_primary',
+    number: '6',
+    label: '2 headlines and 2 primary text',
+    helpText: 'Two headline fields are filled and two primary text fields are filled. One of each is not done.',
+    required: false,
+  },
+  {
+    key: 'fb_profile_pic',
+    number: '7',
+    label: 'Profile picture is up',
+    helpText: 'The page shows a real profile photo. A blank or default image is not done.',
+    required: true,
+    groupLabel: 'Facebook page updated with profile pic, description, and banner',
+  },
+  {
+    key: 'fb_description',
+    number: '7',
+    label: 'Page description is written',
+    helpText: 'The Facebook page About / description is filled in. This is the page, not the ad description in check 11.',
+    required: true,
+  },
+  {
+    key: 'fb_banner',
+    number: '7',
+    label: 'Banner is up',
+    helpText: 'The page cover image is set. A bare cover is not done.',
+    required: true,
+  },
+  {
+    key: 'utm_placed',
+    number: '8',
+    label: 'UTM accurately placed',
+    helpText: 'The website URL on the ad includes UTM tags, and those tags are for this client. No UTM template is stored on the client, so you are checking the URL on the ad.',
+    required: true,
+  },
+  {
+    key: 'make_subaccount_name',
+    number: '9',
+    label: 'MAKE scenario uses the exact sub-account name in the node',
+    helpText: 'The Make node text is the exact sub-account name on the client file. Same spelling and spacing. Not a nickname.',
+    required: true,
+  },
+  {
+    key: 'creative_matches_headline',
+    number: '10',
+    label: 'Creative matches the funnel headline',
+    helpText: 'The headline on the creative is the same sentence as the funnel headline. This box does not collect the funnel link.',
+    required: false,
+  },
+  {
+    key: 'ad_description_identity',
+    number: '11',
+    label: 'NMLS, full name, and business name in the ad description',
+    helpText: 'The ad description field shows the NMLS number, the client’s full name, and the business name. This is the ad, not the Facebook page description in check 7.',
+    required: false,
+  },
+];
+
+export type MediaQaDraft = {
+  completed_by_label: string;
+  ad_account_url: string;
+  ad_account_skipped: boolean;
+  done: Record<string, boolean>;
+  skipped: Record<string, boolean>;
+  final_confirmation: string;
+};
+
+/** Call-center lead product (no ad-gen) does not fill this pass. */
+export function mediaBuyingQaApplies(reportingType: unknown): boolean {
+  if (reportingType == null || String(reportingType).trim() === '') return true;
+  return !usesCallCenterKpiLayout(reportingType);
+}
+
+export function emptyMediaQaDraft(completedByLabel = '', adAccountUrl = ''): MediaQaDraft {
+  return {
+    completed_by_label: completedByLabel,
+    ad_account_url: adAccountUrl,
+    ad_account_skipped: false,
+    done: {},
+    skipped: {},
+    final_confirmation: '',
+  };
+}
+
+export function normalizeAdAccountUrl(raw: string): string | null {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  const withScheme = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  try {
+    const url = new URL(withScheme);
+    if (!url.hostname.includes('.')) return null;
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
+function flagMap(value: unknown): Record<string, boolean> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>).map(([key, flag]) => [key, flag === true]),
+  );
+}
+
+export function parseMediaQaBody(body: Record<string, unknown>): MediaQaDraft {
+  return {
+    completed_by_label: typeof body.completed_by_label === 'string' ? body.completed_by_label.trim() : '',
+    ad_account_url: typeof body.ad_account_url === 'string' ? body.ad_account_url.trim() : '',
+    ad_account_skipped: body.ad_account_skipped === true,
+    done: flagMap(body.done),
+    skipped: flagMap(body.skipped),
+    final_confirmation: typeof body.final_confirmation === 'string' ? body.final_confirmation.trim() : '',
+  };
+}
+
+export function validateMediaQaDraft(draft: MediaQaDraft): string | null {
+  if (!draft.completed_by_label.trim()) return 'Add who completed this QA.';
+  if (draft.final_confirmation.trim().toUpperCase() !== QA_FINAL_CONFIRMATION) {
+    return `Type ${QA_FINAL_CONFIRMATION} to submit.`;
+  }
+  if (!draft.ad_account_skipped && !normalizeAdAccountUrl(draft.ad_account_url)) {
+    return 'Paste the ad account link, or mark it does not apply.';
+  }
+  for (const item of MEDIA_QA_ITEMS) {
+    const done = draft.done[item.key] === true;
+    const skipped = draft.skipped[item.key] === true;
+    if (item.required) {
+      if (!done || skipped) return `${item.label} is required.`;
+      continue;
+    }
+    if (done && skipped) return `Confirm ${item.label}, or mark it does not apply.`;
+    if (!done && !skipped) return `Confirm ${item.label}, or mark it does not apply.`;
+  }
+  return null;
+}
+
+export function mediaQaToResponses(draft: MediaQaDraft): Record<string, unknown> {
+  const checklist: Record<string, boolean> = {};
+  const skipped: string[] = [];
+  for (const item of MEDIA_QA_ITEMS) {
+    if (item.required || draft.done[item.key] === true) {
+      if (draft.skipped[item.key] === true && !item.required) continue;
+      if (draft.done[item.key] === true) checklist[item.key] = true;
+    } else if (draft.skipped[item.key] === true) {
+      skipped.push(item.key);
+    }
+  }
+  const url = draft.ad_account_skipped ? null : normalizeAdAccountUrl(draft.ad_account_url);
+  return {
+    qa_lane: 'media_buying',
+    skeleton_version: MEDIA_QA_VERSION,
+    completed_by_label: draft.completed_by_label.trim(),
+    ad_account_url: url,
+    ad_account_skipped: draft.ad_account_skipped,
+    checklist,
+    skipped,
+    final_confirmation: QA_FINAL_CONFIRMATION,
+  };
+}
+
+export function formatMediaQaClickUpComment(
+  client: { id: string; name: string },
+  draft: MediaQaDraft,
+): string {
+  const lines = [
+    'Media Buying QA submitted',
+    '',
+    `Client (Mr. Waiz): ${client.name}`,
+    `Mr. Waiz ID: ${client.id}`,
+    `Version: ${MEDIA_QA_VERSION}`,
+    `Completed by: ${draft.completed_by_label.trim() || '—'}`,
+    '',
+    '— Ad account link —',
+    draft.ad_account_skipped
+      ? 'Skipped. Roster link unchanged.'
+      : (normalizeAdAccountUrl(draft.ad_account_url) ?? '—'),
+    '',
+    '— Checks —',
+  ];
+  for (const item of MEDIA_QA_ITEMS) {
+    if (draft.done[item.key] === true && !(draft.skipped[item.key] === true && !item.required)) {
+      lines.push(`✓ ${item.number}. ${item.label}`);
+    } else if (!item.required && draft.skipped[item.key] === true) {
+      lines.push(`Skipped ${item.number}. ${item.label}`);
+    }
+  }
+  return lines.join('\n');
+}
+
+export function isMediaQaV1(responses: Record<string, unknown>): boolean {
+  return responses.skeleton_version === MEDIA_QA_VERSION;
+}
+

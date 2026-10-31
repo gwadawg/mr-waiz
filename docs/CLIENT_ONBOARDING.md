@@ -201,7 +201,18 @@ Added 2026-09-29 as automation skeletons, not final SOP-derived QA.
 | Media Buying QA | `/api/clients/[id]/qa/media_buying` | `marketing_qa` | `marketing_qa` | `Complete` |
 | Creative QA | `/api/clients/[id]/qa/creative` | `creative` | `creative_qa` (`creative` only if `creative_qa` is absent) | `Complete` |
 
-Creative QA is a third form. It does not change the Media Buying QA checklist.
+Media Buying QA is the ads checklist the media buyer fills after the build
+(`skeleton_version = media-buying-qa-v1`). Each check is Done or Does not
+apply. A skipped line is omitted, not stored as No. Facebook page (profile
+picture, page description, and banner), UTM, and the MAKE sub-account name
+are required. HE clients do not see this form. Leads and Call Center use the
+same lines. The ad account link is the only roster write: when it is not
+skipped, submit saves it to `clients.ad_account_url`. Page, pixel, and UTM
+stay confirmations. Submit still sets ClickUp `marketing_qa` to `Complete`
+and posts a comment. It does not move the task to Ready to review and it
+does not post to Slack.
+
+Creative QA is a separate form. It does not change the Media Buying QA checklist.
 Creatives and Funnel lines are confirm checkboxes. A line left unchecked is
 omitted from `responses.checklist` and is not stored as no. Funnel link rows
 stay links: Perspective funnel link is editable and stored on
@@ -225,9 +236,10 @@ It does not change ClickUp status or post to Slack. Run
 These forms are client-scoped admin wizards opened from Client Roster or
 Client File. They do not create per-client form definitions. One shared
 config in `src/lib/qa-form.ts` is reused for every client. The submitted
-answers are saved in `client_form_submissions.responses` with
-`skeleton_version = qa-skeleton-v0`. When a ClickUp field is written, the
-onboarding task also receives a comment with the checklist evidence.
+answers are saved in `client_form_submissions.responses`. Tech Setup QA
+and Creative QA use `skeleton_version = qa-skeleton-v0`. Media Buying QA
+uses `media-buying-qa-v1`. When a ClickUp field is written, the onboarding
+task also receives a comment with the checklist evidence.
 
 QA actions only appear while `lifecycle_status` is `new_account` or
 `onboarding`. A reinstate starts a new QA cycle. ClickUp writes go only to
@@ -241,9 +253,9 @@ None of the QA forms change ClickUp status or post to Slack.
 Run `supabase/migrations/add_onboarding_qa_form_types.sql` so
 `client_form_submissions` accepts `tech_qa` and `marketing_qa`.
 
-Replace the skeleton checklist content later from the Tech/A2P and
-Media Buying/Funnel SOP done-definitions. Keep the write contract the
-same unless the ClickUp field architecture changes.
+Tech Setup QA is still the five-item skeleton. Replace that checklist later
+from the Tech/A2P done-definitions. Keep the ClickUp write contract the
+same unless the field architecture changes.
 
 After `POST /api/admin/onboard` stores `onboarding_clickup_task_id`, Mr. Waiz
 writes two dropdowns on that task:
@@ -411,39 +423,36 @@ and
 [`2026-10-07-client-landing-builder.md`](superpowers/plans/2026-10-07-client-landing-builder.md).
 
 ## 4. Launch checklist
-Open **Launch** from Client Roster when kickoff is complete. The wizard is a 4-department checklist (18 items). Checklist answers live in `client_form_submissions.responses` JSON. On submit the form also writes `clients.phone_ghl` (Go High Level prospecting number) plus lifecycle / launch date.
+Open **Launch** from Client Roster when kickoff is complete. This is the last walkthrough before go-live. Creative and funnel QA are already signed off, so the form does not re-check headlines, budgets, pixels, or footer copy. Checklist answers live in `client_form_submissions.responses` JSON. On submit the form also writes `clients.phone_ghl` (Go High Level prospecting number) plus lifecycle / launch date.
+
+Ad-running accounts (Call Center and Leads Only) stay locked until ads are **Scheduled** or **Published**. Dial-only Call Center Lead accounts do not have that gate.
 
 If the client has a built landing page, republish it from Client File
 with search indexing on before ads go live. The wizard does not block
 on that republish.
 
-### Departments
+### Call Center (ads + booking)
 
-**Media Buying**
-- Headline / primary text aligned with creative message
-- Correct states are being targeted
-- Correct budget is set
-- Campaign scheduled for launch at midnight *(type yes)*
-- Correct funnel is in the ad and tested funnel is live correctly
+**Ads**
+- Scheduled or Published — required before the rest of the form can be filled
 
-**Funnel**
-- Funnel headline congruent to ad message / angle
-- Split test between two headlines is on
-- Pixel data working with correct conversion event *(type yes)*
-- GHL subaccount correctly integrated
-- Privacy policy and compliant footer added
-- Compliant checkbox for sending SMS with client's name
+**Lead flow**
+- The ad link opens the live funnel
+- A lead from this ad reaches Go High Level
+- Text (949) 518-0137 and the appointment books in the AI Contact inbox *(type yes)*. Inbox: `https://app.gohighlevel.com/v2/location/oUpd4eO1gisJSY1A49vP/conversations/conversations/q0KzN7xCasbmo94N2hRY?category=team-inbox&tab=all`
+- That appointment is on the client calendar
 
-**GHL Subaccount**
-- Client info NOT updated — client assigned user with HP tag *(type yes)*
-- Custom values all filled out
-- Calendar assigned to correct user
-- A2P approved *(type yes)*
+**Account**
+- Client info was not overwritten, and the assigned user still has the HP tag *(type yes)*
+- Mr. Waiz and ClickUp onboarding fields are filled out
 
-**Admin**
-- Mr. Waiz and ClickUp fields fully filled out
-- Make scenario for Facebook is active
-- Full test lead executed: perspective → SMS → AI booking → appointment booked *(type yes)*
+### Leads Only
+
+Same ads gate, then: the ad link opens the live funnel, a lead from the ad reaches Go High Level, a test lead lands in the client GHL and the client is notified *(type yes)*, and Mr. Waiz / ClickUp fields are filled out.
+
+### Call Center Lead (no ads)
+
+A test lead can be dialed, qualified, and booked *(type yes)*. New Lead Bonzo is active and the queue is clear. Claimed Bonzo is active. Client info was not overwritten and the HP tag is still on the assigned user *(type yes)*. Mr. Waiz and ClickUp fields are filled out.
 
 ### Confirmation rules
 
@@ -504,7 +513,7 @@ Roster shows progress strip: Sign | OB | KO | Kit | Live. Launch Kit rows in Cli
 | `GET/POST /api/form-submissions/pending` | Admin session | Unmapped OB queue |
 | `POST /api/clients/[id]/kickoff` | Admin session | Kickoff wizard |
 | `GET/POST /api/clients/[id]/qa/tech_setup` | Admin session (`admin_clients` / `admin_billing`) | Tech Setup QA skeleton |
-| `GET/POST /api/clients/[id]/qa/media_buying` | Admin session (`admin_clients` / `admin_billing`) | Media Buying QA skeleton |
+| `GET/POST /api/clients/[id]/qa/media_buying` | Admin session (`admin_clients` / `admin_billing`) | Media Buying QA. Saves `clients.ad_account_url` when the link is not skipped |
 | `GET/POST /api/clients/[id]/launch-kit` | Admin session (`admin_clients` / `admin_billing`) | Prefill + versions / `{ mode: 'draft' \| 'generate', draft }` |
 | `POST /api/clients/[id]/launch-kit/send` | Admin session | Post a kit version to the client Slack channel |
 | `GET /api/clients/[id]/launch-kit/download?submission=` | Admin session (+ `client_health`) | Redirect to a fresh 15-min signed URL |

@@ -9,16 +9,18 @@ import {
 } from "@/lib/reinstate-form";
 import {
   formatLaunchItemStatus,
-  getLaunchItemsForProfile,
-  getLaunchSectionsForProfile,
+  isLaunchAdsReady,
+  itemsForLaunchResponses,
+  launchAdsReadyLabel,
   launchResponsesToDraft,
   profileFromLaunchResponses,
+  sectionsForItems,
 } from "@/lib/launch-form";
 import { CC_KICKOFF_FIELD_LABELS } from "@/lib/kickoff";
 import { getReportingTypeLabel } from "@/lib/reporting-types";
 import { getServiceProgramLabel } from "@/lib/service-program";
 import { formatStatesLicensed } from "@/lib/us-states";
-import { getQaFormConfig, type QaLane } from "@/lib/qa-form";
+import { getQaFormConfig, isMediaQaV1, MEDIA_QA_ITEMS, type QaLane } from "@/lib/qa-form";
 
 export type FormSubmissionSummary = {
   id: string;
@@ -72,6 +74,9 @@ function humanizeLaunchResponses(responses: Record<string, unknown>): { label: s
   if (responses.launch_date) {
     rows.push({ label: "Launch date", value: String(responses.launch_date) });
   }
+  if (isLaunchAdsReady(responses.ads_ready)) {
+    rows.push({ label: "Ads", value: launchAdsReadyLabel(responses.ads_ready) });
+  }
   if (responses.recording_url) {
     rows.push({ label: "Launch call recording", value: String(responses.recording_url) });
   }
@@ -79,9 +84,10 @@ function humanizeLaunchResponses(responses: Record<string, unknown>): { label: s
     rows.push({ label: "Launch call transcript", value: String(responses.transcript) });
   }
 
-  for (const section of getLaunchSectionsForProfile(profile)) {
+  const itemsForView = itemsForLaunchResponses(responses, profile);
+  for (const section of sectionsForItems(itemsForView)) {
     rows.push({ label: section.label, value: "", section: section.label });
-    const items = getLaunchItemsForProfile(profile).filter(item => item.section === section.id);
+    const items = itemsForView.filter(item => item.section === section.id);
     for (const item of items) {
       const status = formatLaunchItemStatus(item, draft);
       const value =
@@ -182,7 +188,40 @@ function humanizeReinstateResponses(responses: Record<string, unknown>): { label
   return rows;
 }
 
+function humanizeMediaQaV1(responses: Record<string, unknown>): { label: string; value: string; section?: string }[] {
+  const checklist = responses.checklist && typeof responses.checklist === "object"
+    ? responses.checklist as Record<string, unknown>
+    : {};
+  const skipped = Array.isArray(responses.skipped)
+    ? responses.skipped.filter((key): key is string => typeof key === "string")
+    : [];
+  const rows: { label: string; value: string; section?: string }[] = [
+    { label: "Version", value: formatValue("skeleton_version", responses.skeleton_version) },
+    { label: "Completed by", value: formatValue("completed_by_label", responses.completed_by_label) },
+    {
+      label: "Ad account link",
+      value: responses.ad_account_skipped === true
+        ? "Skipped"
+        : formatValue("ad_account_url", responses.ad_account_url),
+    },
+  ];
+  for (const item of MEDIA_QA_ITEMS) {
+    const value = checklist[item.key] === true
+      ? "Done"
+      : skipped.includes(item.key)
+        ? "Does not apply"
+        : "—";
+    rows.push({
+      label: `${item.number}. ${item.label}`,
+      value,
+      section: "Ads checks",
+    });
+  }
+  return rows;
+}
+
 function humanizeQaResponses(formType: FormType, responses: Record<string, unknown>): { label: string; value: string; section?: string }[] {
+  if (isMediaQaV1(responses)) return humanizeMediaQaV1(responses);
   const lane =
     responses.qa_lane === "tech_setup" || responses.qa_lane === "media_buying" || responses.qa_lane === "creative"
       ? responses.qa_lane

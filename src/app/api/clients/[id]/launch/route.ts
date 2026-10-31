@@ -15,8 +15,10 @@ import {
   getLaunchChecklistConfig,
   getFirstIncompleteItemKey,
   getLaunchItemsForProfile,
+  isLaunchAdsReady,
   isLaunchChecklistComplete,
   isLaunchItemSatisfied,
+  launchAdsGateApplies,
   LAUNCH_CLIENT_NOTE_MARKER,
   LAUNCH_FINAL_CONFIRMATION,
   LAUNCH_FORM_CLICKUP_KEY,
@@ -156,6 +158,7 @@ function parseLaunchDraft(body: Record<string, unknown>, profile: OnboardingForm
     completed_by_user_id: optionalText(body.completed_by_user_id) ?? '',
     completed_by_label: optionalText(body.completed_by_label) ?? '',
     phone_ghl: optionalText(body.phone_ghl) ?? '',
+    ads_ready: isLaunchAdsReady(body.ads_ready) ? body.ads_ready : '',
     recording_url: optionalText(body.recording_url) ?? '',
     transcript: optionalText(body.transcript) ?? '',
     notes: optionalText(body.notes) ?? '',
@@ -181,6 +184,13 @@ function validateLaunchDraft(
   if (!draft.phone_ghl.trim()) {
     return NextResponse.json(
       { error: 'Go High Level number is required (the number we prospect with)' },
+      { status: 400 },
+    );
+  }
+
+  if (launchAdsGateApplies(profile) && !isLaunchAdsReady(draft.ads_ready)) {
+    return NextResponse.json(
+      { error: 'Ads have to be scheduled or published before this checklist can be filled.' },
       { status: 400 },
     );
   }
