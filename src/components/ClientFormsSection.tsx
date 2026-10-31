@@ -184,11 +184,13 @@ function humanizeReinstateResponses(responses: Record<string, unknown>): { label
 
 function humanizeQaResponses(formType: FormType, responses: Record<string, unknown>): { label: string; value: string; section?: string }[] {
   const lane =
-    responses.qa_lane === "tech_setup" || responses.qa_lane === "media_buying"
+    responses.qa_lane === "tech_setup" || responses.qa_lane === "media_buying" || responses.qa_lane === "creative"
       ? responses.qa_lane
       : formType === "tech_qa"
         ? "tech_setup"
-        : "media_buying";
+        : formType === "creative"
+          ? "creative"
+          : "media_buying";
   const config = getQaFormConfig(lane as QaLane);
   const checklist = responses.checklist && typeof responses.checklist === "object"
     ? responses.checklist as Record<string, unknown>
@@ -199,9 +201,11 @@ function humanizeQaResponses(formType: FormType, responses: Record<string, unkno
     { label: "Checklist", value: "", section: "Checklist" },
   ];
   for (const item of config.items) {
+    const confirmed = checklist[item.key] === true;
+    if (config.omitUnchecked && !confirmed) continue;
     rows.push({
       label: item.label,
-      value: checklist[item.key] === true ? "✓ Confirmed" : "—",
+      value: confirmed ? "✓ Confirmed" : "—",
       section: "Checklist",
     });
   }
@@ -216,7 +220,7 @@ function humanizeResponses(formType: FormType, responses: Record<string, unknown
     return humanizeLaunchResponses(responses);
   }
 
-  if (formType === "tech_qa" || formType === "marketing_qa") {
+  if (formType === "tech_qa" || formType === "marketing_qa" || formType === "creative") {
     return humanizeQaResponses(formType, responses);
   }
 

@@ -112,7 +112,7 @@ type Client = {
   account_primary_email?: string | null;
   engagement_kind?: string | null;
   total_paid?: number;
-  form_progress?: Partial<Record<"new_client" | "onboarding" | "kickoff" | "tech_qa" | "marketing_qa" | "launch_kit" | "virtual_card" | "launch", boolean>>;
+  form_progress?: Partial<Record<"new_client" | "onboarding" | "kickoff" | "tech_qa" | "marketing_qa" | "creative" | "launch_kit" | "virtual_card" | "launch", boolean>>;
   next_cs_call?: {
     scheduled_at: string;
     call_type: "onboarding" | "launch" | "checkin" | null;
@@ -948,6 +948,7 @@ export default function ClientRoster({ canViewRevenue: initialCanViewRevenue = f
         onOpenLaunch={() => setLaunchFor({ id: c.id, name: c.name })}
         onOpenTechQa={() => setQaFor({ id: c.id, name: c.name, lane: "tech_setup" })}
         onOpenMediaQa={() => setQaFor({ id: c.id, name: c.name, lane: "media_buying" })}
+        onOpenCreativeQa={() => setQaFor({ id: c.id, name: c.name, lane: "creative" })}
         onOpenLaunchKit={() => setLaunchKitFor({ id: c.id, name: c.name })}
         onOpenVirtualCard={() => setVirtualCardFor({ id: c.id, name: c.name })}
         onOpenOffboard={() => setOffboardFor({ id: c.id, name: c.name })}
@@ -1643,7 +1644,7 @@ function AccountGroupHeaderRow({
 }
 
 function ClientRow({
-  client, allClients, striped, busy, confirmingDelete, deleteSummary, mergeTargetId, onMergeTargetChange,   columns, colSpan, benchmarksOpen, actionsOpen, onToggleActions, onRequestStatusChange, onPatch, onAdsUpdated, onOpenFile, onOpenKickoff, onOpenLaunch, onOpenTechQa, onOpenMediaQa, onOpenLaunchKit, onOpenVirtualCard, onOpenOffboard, onOpenNotes, onOpenCalls, onLogCheckin, onAddOffer, onToggleBenchmarks, onAskDelete, onCancelDelete, onMerge, onDelete, variant = "standalone",
+  client, allClients, striped, busy, confirmingDelete, deleteSummary, mergeTargetId, onMergeTargetChange,   columns, colSpan, benchmarksOpen, actionsOpen, onToggleActions, onRequestStatusChange, onPatch, onAdsUpdated, onOpenFile, onOpenKickoff, onOpenLaunch, onOpenTechQa, onOpenMediaQa, onOpenCreativeQa, onOpenLaunchKit, onOpenVirtualCard, onOpenOffboard, onOpenNotes, onOpenCalls, onLogCheckin, onAddOffer, onToggleBenchmarks, onAskDelete, onCancelDelete, onMerge, onDelete, variant = "standalone",
 }: {
   client: Client;
   allClients: Client[];
@@ -1667,6 +1668,7 @@ function ClientRow({
   onOpenLaunch: () => void;
   onOpenTechQa: () => void;
   onOpenMediaQa: () => void;
+  onOpenCreativeQa: () => void;
   onOpenLaunchKit: () => void;
   onOpenVirtualCard: () => void;
   onOpenOffboard: () => void;
@@ -1695,6 +1697,7 @@ function ClientRow({
   const showLaunchKitAction = isLaunchKitLifecycle(c.lifecycle_status);
   const techQaDone = !!c.form_progress?.tech_qa;
   const mediaQaDone = !!c.form_progress?.marketing_qa;
+  const creativeQaDone = !!c.form_progress?.creative;
   const launchKitDone = !!c.form_progress?.launch_kit;
   const virtualCardDone = !!c.virtual_business_card_url || !!c.form_progress?.virtual_card;
   const showOffboardAction = isChurnOffboardEligible(c.lifecycle_status);
@@ -1946,6 +1949,13 @@ function ClientRow({
                   title="Media Buying QA skeleton — writes Marketing QA complete to ClickUp"
                 >
                   Media QA{mediaQaDone ? " ✓" : ""}
+                </ActionButton>
+                <ActionButton
+                  onClick={onOpenCreativeQa}
+                  color={creativeQaDone ? "#22c55e" : "#e879f9"}
+                  title="Creative QA — drive upload, NMLS fine line, and offer copy. Separate from Media Buying QA."
+                >
+                  Creative QA{creativeQaDone ? " ✓" : ""}
                 </ActionButton>
               </>
             )}

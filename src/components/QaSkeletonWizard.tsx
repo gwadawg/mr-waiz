@@ -85,7 +85,11 @@ export default function QaSkeletonWizard({
 
   async function submit() {
     if (!isQaChecklistComplete(draft, config)) {
-      setSaveError(`Confirm every item, add completed-by, and type ${QA_FINAL_CONFIRMATION}.`);
+      setSaveError(
+        config.requireEveryItem
+          ? `Confirm every item, add completed-by, and type ${QA_FINAL_CONFIRMATION}.`
+          : `Add completed-by and type ${QA_FINAL_CONFIRMATION}.`,
+      );
       const firstIncomplete = getFirstIncompleteQaItemKey(draft, config);
       if (firstIncomplete) scrollToItem(firstIncomplete);
       return;
@@ -191,6 +195,7 @@ export default function QaSkeletonWizard({
                             checked={checked}
                             onChange={e => patchChecklist(item.key, e.target.checked)}
                             className="mt-1"
+                            data-qa-item={item.key}
                           />
                           <span className="text-sm text-slate-200">
                             {item.label}

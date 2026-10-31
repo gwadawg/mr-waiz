@@ -802,6 +802,7 @@ export default function ClientFile({
   const latestReinstate = formSubmissions.find(s => s.form_type === "reinstate") ?? null;
   const techQaDone = formSubmissions.some(s => s.form_type === "tech_qa" && s.status === "applied");
   const mediaQaDone = formSubmissions.some(s => s.form_type === "marketing_qa" && s.status === "applied");
+  const creativeQaDone = formSubmissions.some(s => s.form_type === "creative" && s.status === "applied");
   const welcomeBackObDone = !!(
     latestReinstate &&
     formSubmissions.some(
@@ -1607,6 +1608,35 @@ export default function ClientFile({
                 }}
               >
                 Open Media QA{mediaQaDone ? " ✓" : ""}
+              </button>
+            </div>
+
+            <div
+              className="rounded-lg px-4 py-3 flex items-start justify-between gap-4 flex-wrap"
+              style={{
+                background: "rgba(232,121,249,0.08)",
+                border: "1px solid rgba(232,121,249,0.25)",
+              }}
+            >
+              <div>
+                <p className="text-sm font-semibold" style={{ color: creativeQaDone ? "#22c55e" : "#e879f9" }}>
+                  Creative QA{creativeQaDone ? " complete" : ""}
+                </p>
+                <p className="text-xs mt-1" style={{ color: "#94a3b8" }}>
+                  Confirm ads are on the client drive, the fine line includes the NMLS#, and the offer and message are clean. Separate from Media Buying QA. A line that does not apply is left unchecked.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowQaLane("creative")}
+                className="text-xs font-semibold px-3 py-1.5 rounded-lg whitespace-nowrap"
+                style={{
+                  color: creativeQaDone ? "#22c55e" : "#e879f9",
+                  background: creativeQaDone ? "rgba(34,197,94,0.12)" : "rgba(232,121,249,0.12)",
+                  border: creativeQaDone ? "1px solid rgba(34,197,94,0.3)" : "1px solid rgba(232,121,249,0.3)",
+                }}
+              >
+                Open Creative QA{creativeQaDone ? " ✓" : ""}
               </button>
             </div>
             </div>

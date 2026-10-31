@@ -4,6 +4,7 @@ import {
   addClickUpTaskComment,
   applyClickUpFieldMap,
   getClickUpToken,
+  parseClickUpObFieldMap,
 } from '@/lib/clickup';
 import { insertFormSubmission } from '@/lib/form-submissions';
 import {
@@ -13,33 +14,13 @@ import {
   isQaCompleteForCycle,
   isQaLane,
   isQaLifecycle,
+  qaDraftFromSubmitBody,
   qaDraftToResponses,
-  type QaFormDraft,
+  resolveQaClickUpFieldKey,
 } from '@/lib/qa-form';
 
 const QA_PERMISSION_KEYS = ['admin_clients', 'admin_billing'];
-const QA_CYCLE_FORM_TYPES = ['tech_qa', 'marketing_qa', 'reinstate'] as const;
-
-function optionalText(value: unknown): string {
-  return typeof value === 'string' ? value.trim() : '';
-}
-
-function parseQaDraft(body: Record<string, unknown>): QaFormDraft {
-  const rawChecklist = body.checklist;
-  return {
-    completed_by_label: optionalText(body.completed_by_label),
-    checklist:
-      rawChecklist && typeof rawChecklist === 'object' && !Array.isArray(rawChecklist)
-        ? Object.fromEntries(
-            Object.entries(rawChecklist as Record<string, unknown>).map(([key, value]) => [key, value === true]),
-          )
-        : {},
-    evidence: optionalText(body.evidence),
-    blockers: optionalText(body.blockers),
-    notes: optionalText(body.notes),
-    final_confirmation: optionalText(body.final_confirmation),
-  };
-}
+const QA_CYCLE_FORM_TYPES = ['tech_qa', 'marketing_qa', 'creative', 'reinstate'] as const;
 
 export async function GET(
   _req: Request,
@@ -107,11 +88,15 @@ export async function POST(
 
   const config = getQaFormConfig(lane);
   const body = await req.json();
-  const draft = parseQaDraft(body);
+  const draft = qaDraftFromSubmitBody(body);
 
   if (!isQaChecklistComplete(draft, config)) {
     return NextResponse.json(
-      { error: `Complete every ${config.shortLabel} item and type QA to submit.` },
+      {
+        error: config.requireEveryItem
+          ? `Complete every ${config.shortLabel} item and type QA to submit.`
+          : `Add who completed ${config.shortLabel} and type QA to submit.`,
+      },
       { status: 400 },
     );
   }
@@ -146,42 +131,48 @@ export async function POST(
     );
   }
 
-  const taskId = clientRes.data.onboarding_clickup_task_id?.trim();
-  if (!taskId) {
-    return NextResponse.json(
-      { error: 'Client is missing a ClickUp onboarding task ID. QA writes only to the onboarding task, not the retired Client Hub task.' },
-      { status: 400 },
+  const taskId = clientRes.data.onboarding_clickup_task_id?.trim() || null;
+  const clickupFieldKey = resolveQaClickUpFieldKey(config, parseClickUpObFieldMap());
+
+  // Tech and Media always have a field key, so a missing task or token still
+  // blocks those submits. Creative with no mapped field records the row only.
+  if (clickupFieldKey) {
+    if (!taskId) {
+      return NextResponse.json(
+        { error: 'Client is missing a ClickUp onboarding task ID. QA writes only to the onboarding task, not the retired Client Hub task.' },
+        { status: 400 },
+      );
+    }
+
+    const token = getClickUpToken();
+    if (!token) {
+      return NextResponse.json(
+        { error: 'CLICKUP_API_TOKEN is not configured; QA cannot trigger ClickUp automation.' },
+        { status: 500 },
+      );
+    }
+
+    const wrote = await applyClickUpFieldMap(
+      taskId,
+      token,
+      { [clickupFieldKey]: 'Complete' },
+      '[qa-form]',
+    );
+    if (wrote < 1) {
+      return NextResponse.json(
+        {
+          error: `${config.shortLabel} ClickUp field is not configured in CLICKUP_OB_FIELD_MAP.`,
+        },
+        { status: 500 },
+      );
+    }
+
+    await addClickUpTaskComment(
+      taskId,
+      token,
+      formatQaClickUpComment(clientRes.data, config, draft),
     );
   }
-
-  const token = getClickUpToken();
-  if (!token) {
-    return NextResponse.json(
-      { error: 'CLICKUP_API_TOKEN is not configured; QA cannot trigger ClickUp automation.' },
-      { status: 500 },
-    );
-  }
-
-  const wrote = await applyClickUpFieldMap(
-    taskId,
-    token,
-    { [config.clickupFieldKey]: 'Complete' },
-    '[qa-form]',
-  );
-  if (wrote < 1) {
-    return NextResponse.json(
-      {
-        error: `${config.shortLabel} ClickUp field is not configured in CLICKUP_OB_FIELD_MAP.`,
-      },
-      { status: 500 },
-    );
-  }
-
-  await addClickUpTaskComment(
-    taskId,
-    token,
-    formatQaClickUpComment(clientRes.data, config, draft),
-  );
 
   const responses = qaDraftToResponses(draft, config);
   const submission = await insertFormSubmission(ctx.service, {
@@ -190,13 +181,19 @@ export async function POST(
     status: 'applied',
     submitted_by: ctx.userId,
     responses,
-    applied_patch: {
-      onboarding_clickup_task_id: taskId,
-      clickup_field: config.clickupFieldKey,
-      clickup_value: 'Complete',
-    },
+    applied_patch: clickupFieldKey
+      ? {
+          onboarding_clickup_task_id: taskId,
+          clickup_field: clickupFieldKey,
+          clickup_value: 'Complete',
+        }
+      : { clickup_field: null },
   });
 
-  return NextResponse.json({ submission, clickup_task_id: taskId });
+  return NextResponse.json({
+    submission,
+    clickup_task_id: clickupFieldKey ? taskId : null,
+    clickup_field: clickupFieldKey,
+  });
 }
 
