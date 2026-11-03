@@ -14,7 +14,9 @@ import {
   mbFulfillment,
   mbLastWeekRange,
   mbPackage,
+  parseMbRange,
   parseMbSpendRange,
+  resolveMbPerformanceRange,
   rollupMbClientSpend,
   toMbPerformance,
 } from './mb-api';
@@ -156,6 +158,29 @@ describe('weekly client spend report', () => {
           '2026-10-26',
         ),
       /not both/,
+    );
+  });
+
+  it('honors a preset for one client, including since launch', () => {
+    assert.deepEqual(
+      resolveMbPerformanceRange(new URLSearchParams('preset=last_week'), '2026-10-26'),
+      mbLastWeekRange('2026-10-26'),
+    );
+    assert.deepEqual(
+      resolveMbPerformanceRange(
+        new URLSearchParams('preset=since_launch'),
+        '2026-10-26',
+        '2026-03-01T00:00:00.000Z',
+      ),
+      { start_date: '2026-03-01', end_date: '2026-10-26' },
+    );
+    assert.deepEqual(
+      resolveMbPerformanceRange(new URLSearchParams('preset=since_launch'), '2026-10-26', null),
+      { start_date: '2026-10-26', end_date: '2026-10-26' },
+    );
+    assert.deepEqual(
+      resolveMbPerformanceRange(new URLSearchParams(), '2026-10-26'),
+      parseMbRange(new URLSearchParams()),
     );
   });
 
