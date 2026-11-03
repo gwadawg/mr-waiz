@@ -30,4 +30,8 @@ export const offerLetters: Record<string, OfferLetter> = {
     token: '4456aca5ff14d6d36dc32d93d04f1c24',
     file: 'cfnb/index.html',
   },
+  'bryan-robinovitz': {
+    token: '0479c7f10a43dedd26903c9b0468d285',
+    file: 'bryan-robinovitz/index.html',
+  },
 };
