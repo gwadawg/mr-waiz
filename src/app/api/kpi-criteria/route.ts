@@ -116,8 +116,15 @@ export async function POST(req: Request) {
       }
       const open = catalog.stock.find(v => v.profileId === profileId && v.effectiveEnd == null);
       if (!open) return NextResponse.json({ error: 'No open stock version' }, { status: 409 });
-      if (catalog.stock.some(v => v.profileId === profileId && v.effectiveStart === effectiveStart)) {
+      const revisingUpcoming = open.effectiveStart === effectiveStart && open.effectiveStart > today;
+      if (!revisingUpcoming && catalog.stock.some(v => v.profileId === profileId && v.effectiveStart === effectiveStart)) {
         return NextResponse.json({ error: 'That start date is already a version. Pick a later date.' }, { status: 409 });
+      }
+      if (!revisingUpcoming && effectiveStart <= open.effectiveStart) {
+        return NextResponse.json(
+          { error: `Pick a date after ${open.effectiveStart} so days already covered keep their standards.` },
+          { status: 409 },
+        );
       }
       const patch = body.bands ?? {};
       const bands = applyStockEdit(open.bands, patch);
@@ -154,8 +161,15 @@ export async function POST(req: Request) {
       );
       const graded = resolved?.gradedKeys ?? [];
       const open = catalog.custom.find(v => v.clientId === clientId && v.effectiveEnd == null);
-      if (catalog.custom.some(v => v.clientId === clientId && v.effectiveStart === effectiveStart)) {
+      const revisingUpcoming = !!open && open.effectiveStart === effectiveStart && open.effectiveStart > today;
+      if (!revisingUpcoming && catalog.custom.some(v => v.clientId === clientId && v.effectiveStart === effectiveStart)) {
         return NextResponse.json({ error: 'That start date is already a version. Pick a later date.' }, { status: 409 });
+      }
+      if (open && !revisingUpcoming && effectiveStart <= open.effectiveStart) {
+        return NextResponse.json(
+          { error: `Pick a date after ${open.effectiveStart} so days already covered keep their standards.` },
+          { status: 409 },
+        );
       }
       let bands: Partial<Record<KpiKey, { critical?: number; below?: number; at?: number }>> = {};
       if (body.action === 'use_stock') {
