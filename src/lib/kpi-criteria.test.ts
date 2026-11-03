@@ -6,8 +6,10 @@ import { deptStatus } from './dept-health';
 import {
   assertVersionUpdate,
   ClosedVersionError,
+  applyStockEdit,
   gradeMetrics,
   gradeRange,
+  placeholdersAfterStockEdit,
   planStockSave,
   resolveClientCriteria,
   resolveCriteriaSpans,
@@ -100,6 +102,42 @@ describe('criteria resolver', () => {
     const focus = computeFocus(snap, null, 'DSCR');
     assert.notEqual(focus.focus, 'monitor');
     assert.notEqual(focus.focus, 'act_now');
+  });
+
+  it('grades DSCR cost once stock CPL has 911, Below, and At', () => {
+    const stock = seedStockVersions(CUTOVER);
+    const open = stock.find(row => row.id === 'stock-dscr-open');
+    assert.ok(open);
+    const patch = { cpl: { critical: 90, below: 70, at: 50 } };
+    const bands = applyStockEdit(open.bands, patch);
+    const placeholders = placeholdersAfterStockEdit(open.placeholders, patch, bands);
+    const next = stock.map(row => (row.id === open.id ? { ...row, bands, placeholders } : row));
+    const criteria = resolveClientCriteria(
+      client({ id: 'dscr-cost', reportingType: 'DSCR', qualifiesLeads: true }),
+      '2026-11-15',
+      { stock: next, custom: [] },
+    );
+    assert.ok(criteria);
+    assert.equal(criteria.costUnapproved, false);
+    assert.equal(criteria.placeholders?.cpl, undefined);
+    assert.equal(criteria.rateLinesShared, true);
+    const snap = gradeMetrics(criteria, metrics({
+      new_leads: 20,
+      qualified_leads: 16,
+      unique_hand_raises: 8,
+      hand_raise_rate: 50,
+      unique_conversations: 10,
+      unique_booked_appointments: 8,
+      booked_to_conversation_rate: 80,
+      shows: 8,
+      closed: 4,
+      ad_spend: 2000,
+      cpl: 100,
+      cp_conversation: 200,
+    }));
+    assert.equal(gradeOf(snap, 'cpl'), 'critical');
+    assert.notEqual(gradeOf(snap, 'cpql'), 'insufficient');
+    assert.notEqual(gradeOf(snap, 'cps'), 'insufficient');
   });
 
   it('does not let a weak hand-raise or high CPConv move a leads-only account', () => {

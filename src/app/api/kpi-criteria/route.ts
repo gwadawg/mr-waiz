@@ -3,6 +3,7 @@ import { getAuthContext, isAuthError, requireAnyPermission } from '@/lib/api-aut
 import type { KpiKey } from '@/lib/client-health';
 import {
   applyStockEdit,
+  placeholdersAfterStockEdit,
   customHistory,
   ignoredStoredKeys,
   normalizeOverlay,
@@ -118,12 +119,13 @@ export async function POST(req: Request) {
       if (catalog.stock.some(v => v.profileId === profileId && v.effectiveStart === effectiveStart)) {
         return NextResponse.json({ error: 'That start date is already a version. Pick a later date.' }, { status: 409 });
       }
-      const bands = applyStockEdit(open.bands, body.bands ?? {});
+      const patch = body.bands ?? {};
+      const bands = applyStockEdit(open.bands, patch);
       await saveStockVersion(ctx.service, {
         profileId,
         effectiveStart,
         bands,
-        placeholders: open.placeholders,
+        placeholders: placeholdersAfterStockEdit(open.placeholders, patch, bands),
         note,
         createdBy: ctx.userId,
       });

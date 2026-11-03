@@ -438,6 +438,10 @@ export function resolveClientCriteria(
       const derived = deriveQualifiedCosts(customBands.cpl, qualLines, handLines);
       if (shape.keys.includes('cpql') && !explicitCpql) bands.cpql = derived.cpql;
       if (shape.keys.includes('cps') && !explicitCps) bands.cps = derived.cps;
+    } else if (stock.ruler === 'current' && stockCostsApproved && pool !== 'all' && stock.bands.cpl?.bands) {
+      const derived = deriveQualifiedCosts(stock.bands.cpl.bands, qualLines, handLines);
+      if (shape.keys.includes('cpql') && !approved(stock.bands.cpql?.bands) && !explicitCpql) bands.cpql = derived.cpql;
+      if (shape.keys.includes('cps') && !approved(stock.bands.cps?.bands) && !explicitCps) bands.cps = derived.cps;
     } else if (stock.ruler === 'legacy' && customBands.cpl) {
       const legacy = deriveQualifiedCosts(
         customBands.cpl,
@@ -722,6 +726,23 @@ export function copyBands(bands: Partial<Record<KpiKey, StoredBand>>): Partial<R
     out[key] = { ...spec, bands: { ...spec.bands } };
   }
   return out;
+}
+
+/** Drop the DSCR “not a tier” citation once CPL has 911, Below, and At. Rate label stays until a rate line changes. */
+export function placeholdersAfterStockEdit(
+  previous: VersionPlaceholders,
+  patch: Partial<Record<KpiKey, { critical?: number; below?: number; at?: number } | null>>,
+  bands: Partial<Record<KpiKey, StoredBand>>,
+): VersionPlaceholders {
+  if (!previous) return previous;
+  const next: { cpl?: CplPlaceholder; rates?: { source: 'shared_rm' } } = {};
+  if (previous.cpl && !approved(bands.cpl?.bands)) next.cpl = previous.cpl;
+  const rateTouched = (['hand_raise_rate', 'show_rate', 'lead_to_qualified'] as const).some(
+    key => patch[key] != null,
+  );
+  if (previous.rates && !rateTouched) next.rates = previous.rates;
+  if (!next.cpl && !next.rates) return null;
+  return next;
 }
 
 export function applyStockEdit(
