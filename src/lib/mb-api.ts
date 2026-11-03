@@ -291,6 +291,47 @@ export function parseMbSpendRange(params: URLSearchParams, todayYmd: string): Mb
   return { start_date: start, end_date: end };
 }
 
+/**
+ * One-client performance window. Honors the same presets as the portfolio.
+ * `since_launch` starts at that client's launch date. No preset and no dates
+ * stays the last 30 days.
+ */
+export function resolveMbPerformanceRange(
+  params: URLSearchParams,
+  todayYmd: string,
+  launchDate?: string | null,
+): MbRange {
+  const preset = params.get('preset')?.trim() ?? '';
+  const start = params.get('start_date')?.trim() ?? '';
+  const end = params.get('end_date')?.trim() ?? '';
+  if ((start && !end) || (!start && end)) {
+    throw new Error('start_date and end_date must be YYYY-MM-DD');
+  }
+  if (preset && (start || end)) {
+    throw new Error('pass a preset or start_date and end_date, not both');
+  }
+  if (preset === 'since_launch') {
+    if (!DAY.test(todayYmd)) throw new Error('today must be YYYY-MM-DD');
+    const launch = launchDate?.slice(0, 10) ?? '';
+    const startDate = DAY.test(launch) && launch <= todayYmd ? launch : todayYmd;
+    return { start_date: startDate, end_date: todayYmd };
+  }
+  if (preset) return mbPresetRange(preset, todayYmd);
+  return parseMbRange(params);
+}
+
+export async function getMbLaunchDate(service: Service, clientId: string): Promise<string | null> {
+  const { data, error } = await service
+    .from('clients')
+    .select('launch_date')
+    .eq('id', clientId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error('Client not found');
+  const launch = typeof data.launch_date === 'string' ? data.launch_date.slice(0, 10) : '';
+  return DAY.test(launch) ? launch : null;
+}
+
 export type MbSpendClient = {
   client_id: string;
   name: string | null;
