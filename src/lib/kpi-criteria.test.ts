@@ -10,6 +10,7 @@ import {
   gradeMetrics,
   gradeRange,
   placeholdersAfterStockEdit,
+  criteriaStartBounds,
   planStockSave,
   resolveClientCriteria,
   resolveCriteriaSpans,
@@ -360,6 +361,94 @@ describe('criteria resolver', () => {
     assert.equal(criteria?.bands.hand_raise_rate?.bands.below, 5);
     assert.equal(criteria?.bands.hand_raise_rate?.bands.at, 8);
     assert.equal(criteria?.gradedKeys.includes('cpl'), false);
+  });
+
+  it('replaces a not-yet-started open version and keeps closed rows', () => {
+    const seeded = seedStockVersions(CUTOVER);
+    const open = seeded.find(v => v.id === 'stock-rm-open');
+    assert.ok(open);
+    const future = seeded.map(v => (
+      v.id === open.id ? { ...v, effectiveStart: '2026-11-25' } : v
+    ));
+    const edited = {
+      ...open.bands,
+      cpl: { ...open.bands.cpl!, bands: { critical: 30, below: 22, at: 12 } },
+    };
+    const saved = planStockSave(future, 'RM', '2026-11-25', '2026-11-20', edited, null, 'Before it starts');
+    assert.equal(saved.error, undefined);
+    const rm = saved.versions.filter(v => v.profileId === 'RM');
+    assert.equal(rm.length, 2);
+    const still = rm.find(v => v.effectiveEnd == null);
+    assert.equal(still?.id, 'stock-rm-open');
+    assert.equal(still?.effectiveStart, '2026-11-25');
+    assert.equal(still?.bands.cpl?.bands.critical, 30);
+    assert.equal(rm.find(v => v.id === 'stock-rm-legacy')?.effectiveEnd, CUTOVER);
+
+    const again = planStockSave(saved.versions, 'RM', '2026-11-25', '2026-11-20', {
+      ...edited,
+      cpl: { ...edited.cpl, bands: { critical: 28, below: 20, at: 11 } },
+    }, null, 'Still before it starts');
+    assert.equal(again.versions.filter(v => v.profileId === 'RM' && v.effectiveEnd == null).length, 1);
+    assert.equal(
+      again.versions.find(v => v.id === 'stock-rm-open')?.bands.cpl?.bands.critical,
+      28,
+    );
+  });
+
+  it('closes an in-force version when the next start is later', () => {
+    const seeded = seedStockVersions(CUTOVER);
+    const open = seeded.find(v => v.id === 'stock-rm-open');
+    assert.ok(open);
+    const saved = planStockSave(seeded, 'RM', '2026-11-21', '2026-11-20', open.bands, null, 'Next day');
+    assert.equal(saved.error, undefined);
+    const closed = saved.versions.find(v => v.id === 'stock-rm-open');
+    assert.equal(closed?.effectiveEnd, '2026-11-21');
+    const next = saved.versions.find(v => v.profileId === 'RM' && v.effectiveEnd == null);
+    assert.equal(next?.effectiveStart, '2026-11-21');
+    assert.notEqual(next?.id, 'stock-rm-open');
+  });
+
+  it('rejects a start on or before days already covered, and any start before today', () => {
+    const seeded = seedStockVersions(CUTOVER);
+    const open = seeded.find(v => v.id === 'stock-rm-open');
+    assert.ok(open);
+    const upcoming = seeded.map(v => (
+      v.id === open.id ? { ...v, effectiveStart: '2026-11-25' } : v
+    ));
+    const gap = planStockSave(upcoming, 'RM', '2026-11-22', '2026-11-20', open.bands, null, 'before it starts');
+    assert.match(gap.error ?? '', /days already covered/);
+    const startedToday = seeded.map(v => (
+      v.id === open.id ? { ...v, effectiveStart: '2026-11-20' } : v
+    ));
+    const sameDay = planStockSave(startedToday, 'RM', '2026-11-20', '2026-11-20', open.bands, null, 'today already open');
+    assert.match(sameDay.error ?? '', /already a version/);
+    const early = planStockSave(seeded, 'RM', '2026-11-19', '2026-11-20', open.bands, null, 'yesterday');
+    assert.match(early.error ?? '', /before today/);
+    const fromToday = planStockSave(seeded, 'RM', '2026-11-20', '2026-11-20', open.bands, null, 'from today');
+    assert.equal(fromToday.error, undefined);
+    assert.equal(
+      fromToday.versions.find(v => v.profileId === 'RM' && v.effectiveEnd == null)?.effectiveStart,
+      '2026-11-20',
+    );
+  });
+
+  it('suggests tomorrow once standards are in force, and the same date while they have not started', () => {
+    assert.deepEqual(criteriaStartBounds('2026-11-01', '2026-11-20'), {
+      min: '2026-11-20',
+      suggested: '2026-11-21',
+      revisingUpcoming: false,
+    });
+    assert.deepEqual(criteriaStartBounds('2026-11-20', '2026-11-20'), {
+      min: '2026-11-21',
+      suggested: '2026-11-21',
+      revisingUpcoming: false,
+    });
+    assert.deepEqual(criteriaStartBounds('2026-11-25', '2026-11-20'), {
+      min: '2026-11-25',
+      suggested: '2026-11-25',
+      revisingUpcoming: true,
+    });
+    assert.equal(criteriaStartBounds(null, '2026-11-20').suggested, '2026-11-21');
   });
 
   it('refuses to update a closed version', () => {

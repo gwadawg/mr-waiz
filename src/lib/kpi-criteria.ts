@@ -130,6 +130,21 @@ const SET_RULE_KEYS: KpiKey[] = ['hand_raise_rate', 'show_rate', 'lead_to_qualif
 const MARKET_KEYS: KpiKey[] = ['cpl', 'cpql', 'cps'];
 const COST_UNAPPROVED = 'DSCR cost stock is a placeholder, not 911 / Below / At.';
 
+/** Tomorrow, unless the open version already starts today or later — then the day after that start. A future open start can also be revised on that same date. */
+export function criteriaStartBounds(
+  openStart: string | null | undefined,
+  today: string,
+): { min: string; suggested: string; revisingUpcoming: boolean } {
+  const tomorrow = shiftYmd(today, 1);
+  if (!openStart || openStart < today) {
+    return { min: today, suggested: tomorrow, revisingUpcoming: false };
+  }
+  if (openStart === today) {
+    return { min: tomorrow, suggested: tomorrow, revisingUpcoming: false };
+  }
+  return { min: openStart, suggested: openStart, revisingUpcoming: true };
+}
+
 export function shiftYmd(date: string, days: number): string {
   const ms = Date.parse(`${date}T00:00:00.000Z`) + days * 86400000;
   return new Date(ms).toISOString().slice(0, 10);
@@ -695,13 +710,20 @@ export function planStockSave(
   if (!effectiveStart) return { versions, error: 'Effective start is required' };
   if (effectiveStart < today) return { versions, error: 'Effective start cannot be before today' };
   const mine = versions.filter(v => v.profileId === profile);
+  const open = mine.find(v => v.effectiveEnd == null);
+  if (!open) return { versions, error: 'No open stock version' };
+  if (effectiveStart === open.effectiveStart && open.effectiveStart > today) {
+    return {
+      versions: versions.map(v => (
+        v.id === open.id ? { ...v, bands, placeholders, note, ruler: 'current' as const } : v
+      )),
+    };
+  }
   if (mine.some(v => v.effectiveStart === effectiveStart)) {
     return { versions, error: 'That start date is already a version. Pick a later date.' };
   }
-  const open = mine.find(v => v.effectiveEnd == null);
-  if (!open) return { versions, error: 'No open stock version' };
   if (effectiveStart <= open.effectiveStart) {
-    return { versions, error: 'Effective start must be after the open version start' };
+    return { versions, error: `Pick a date after ${open.effectiveStart} so days already covered keep their standards.` };
   }
   const closed = { ...open, effectiveEnd: effectiveStart };
   const next: StockVersion = {

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { DEFAULT_KPI_BANDS, KPI_META, type KpiKey } from "@/lib/client-health";
-import type { HistoryRow } from "@/lib/kpi-criteria";
+import { criteriaStartBounds, type HistoryRow } from "@/lib/kpi-criteria";
 
 type Profile = "RM" | "DSCR" | "CALL_CENTER";
 
@@ -39,6 +39,7 @@ type Resolved = {
   costUnapproved: boolean;
   placeholders?: StockVersion["placeholders"];
   stockEffectiveStart: string;
+  customEffectiveStart?: string | null;
 };
 
 type Payload = {
@@ -66,6 +67,24 @@ const card = {
   background: "#0a1628",
   border: "1px solid rgba(255,255,255,0.06)",
 };
+
+function startBounds(openStart: string | null | undefined, today: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(today)) {
+    return { min: "", suggested: "", revisingUpcoming: false };
+  }
+  return criteriaStartBounds(openStart, today);
+}
+
+function startHelp(
+  bounds: { suggested: string; revisingUpcoming: boolean },
+  start: string,
+): string {
+  if (bounds.revisingUpcoming && start === bounds.suggested) {
+    return `These standards start ${start} and have not been used yet. Saving updates that date in place. You can change them again later.`;
+  }
+  const when = start || "the date you pick";
+  return `This update applies from ${when}. Days before that keep the standards already in force. You can change the numbers again later.`;
+}
 
 function edges(spec: StockVersion["bands"][KpiKey] | undefined) {
   return spec?.bands;
@@ -264,7 +283,7 @@ export default function CriteriaRoom() {
     <div className="space-y-6">
       <div className="rounded-xl px-4 py-3 text-xs leading-relaxed" style={{ ...card, border: "1px solid rgba(56,189,248,0.18)", color: "#94a3b8" }}>
         <span style={{ color: "#38bdf8", fontWeight: 600 }}>Criteria.</span>{" "}
-        Stock for RM, DSCR, and call center, plus a custom goal for one client. Set rules (hand-raise, show, qual / opt %) change rarely. Market lines (CPL, CPQL, CPConv) are expected to move. A save closes the open version and opens a new one. History is read-only. As judged then is that history.
+        Stock for RM, DSCR, and call center, plus a custom goal for one client. Change the numbers whenever you need to. Each update applies from the date you pick. Days before that keep the standards already in force. History is read-only.
       </div>
       {error && (
         <p className="text-sm" style={{ color: "#f87171" }} role="alert">{error}</p>
@@ -284,7 +303,6 @@ export default function CriteriaRoom() {
               showHistory={historyFor === item.id}
               onToggleHistory={() => setHistoryFor(current => (current === item.id ? null : item.id))}
               today={data?.today ?? ""}
-              defaultStart={data?.default_effective_start ?? ""}
               saving={saving}
               onSave={bands => post({
                 action: "save_stock",
@@ -317,12 +335,11 @@ export default function CriteriaRoom() {
         </div>
         {resolved && (
           <ClientGoals
-            key={`${clientId}-${resolved.stockEffectiveStart}`}
+            key={`${clientId}-${resolved.stockEffectiveStart}-${resolved.customEffectiveStart ?? "stock"}`}
             resolved={resolved}
             history={data?.custom_history ?? []}
             ignored={data?.ignored_keys ?? []}
             today={data?.today ?? ""}
-            defaultStart={data?.default_effective_start ?? ""}
             saving={saving}
             onUseStock={start => post({ action: "use_stock", client_id: clientId, effective_start: start, note: "Use stock" })}
             onChecklist={start => post({ action: "save_checklist", client_id: clientId, effective_start: start, note: "Forward save of stored goals" })}
@@ -342,7 +359,6 @@ function StockColumn({
   showHistory,
   onToggleHistory,
   today,
-  defaultStart,
   saving,
   onSave,
 }: {
@@ -353,15 +369,15 @@ function StockColumn({
   showHistory: boolean;
   onToggleHistory: () => void;
   today: string;
-  defaultStart: string;
   saving: boolean;
   onSave: (input: { effective_start: string; note: string; patch: Record<string, EdgePatch> }) => void;
 }) {
   const setRules = profile === "CALL_CENTER" ? SET_RULES.filter(key => key !== "lead_to_qualified") : SET_RULES;
   const market = profile === "CALL_CENTER" ? [] : MARKET;
   const keys = [...setRules, ...market];
+  const bounds = startBounds(open?.effectiveStart, today);
   const [drafts, setDrafts] = useState(() => draftsFor(keys, open?.bands));
-  const [start, setStart] = useState(defaultStart);
+  const [start, setStart] = useState(bounds.suggested);
   const [note, setNote] = useState("");
   const [localError, setLocalError] = useState<string | null>(null);
   const costsOpen = ["critical", "below", "at"].every(
@@ -460,7 +476,7 @@ function StockColumn({
           <input
             type="date"
             required
-            min={today || undefined}
+            min={bounds.min || undefined}
             value={start}
             onChange={e => setStart(e.target.value)}
             className="mt-1 block rounded-lg px-2 py-1 text-xs focus:outline focus:outline-1 focus:outline-[#38bdf8]"
@@ -468,7 +484,7 @@ function StockColumn({
           />
         </label>
         <p className="text-[11px]" style={{ color: "#64748b" }}>
-          Defaults to tomorrow. Today is allowed. Earlier dates are not. Saving closes the open version and leaves history read-only.
+          {startHelp(bounds, start)}
         </p>
         <label className="block text-[11px]" style={{ color: "#94a3b8" }}>
           Note
@@ -481,7 +497,7 @@ function StockColumn({
         </label>
         {localError && <p className="text-xs" style={{ color: "#f87171" }} role="alert">{localError}</p>}
         <button type="submit" disabled={saving} className="text-xs font-semibold rounded-lg px-3 py-1.5 disabled:opacity-50" style={{ background: "#0ea5e9", color: "#041018" }}>
-          {saving ? "Saving…" : "Save new version"}
+          {saving ? "Saving…" : start === bounds.suggested && bounds.revisingUpcoming ? "Update upcoming standards" : "Update standards"}
         </button>
       </form>
       {showHistory && (
@@ -499,7 +515,6 @@ function ClientGoals({
   history,
   ignored,
   today,
-  defaultStart,
   saving,
   onUseStock,
   onChecklist,
@@ -509,13 +524,13 @@ function ClientGoals({
   history: HistoryRow[];
   ignored: KpiKey[];
   today: string;
-  defaultStart: string;
   saving: boolean;
   onUseStock: (start: string) => void;
   onChecklist: (start: string) => void;
   onSave: (start: string, note: string, bands: Record<string, EdgePatch>) => void;
 }) {
-  const [start, setStart] = useState(defaultStart);
+  const bounds = startBounds(resolved.customEffectiveStart, today);
+  const [start, setStart] = useState(bounds.suggested);
   const [note, setNote] = useState("");
   const [drafts, setDrafts] = useState(() => draftsFor(resolved.gradedKeys, resolved.bands));
   const [localError, setLocalError] = useState<string | null>(null);
@@ -542,7 +557,7 @@ function ClientGoals({
             Stored keys the old grader ignored: {ignored.map(item => KPI_META[item]?.short ?? item).join(", ")}. Saving them forward does not rewrite last quarter.
           </p>
           <button type="button" disabled={saving} className="mt-2 text-xs font-semibold" style={{ color: "#38bdf8" }} onClick={() => onChecklist(start)}>
-            Save these on a new version from {start || "the start date"}
+            Save these from {start || "the start date"}
           </button>
         </div>
       )}
@@ -584,13 +599,16 @@ function ClientGoals({
           <input
             type="date"
             required
-            min={today || undefined}
+            min={bounds.min || undefined}
             value={start}
             onChange={e => setStart(e.target.value)}
             className="mt-1 block rounded-lg px-2 py-1 text-xs focus:outline focus:outline-1 focus:outline-[#38bdf8]"
             style={inputStyle}
           />
         </label>
+        <p className="text-[11px]" style={{ color: "#64748b" }}>
+          {startHelp(bounds, start)}
+        </p>
         <label className="block text-[11px]" style={{ color: "#94a3b8" }}>
           Note
           <input
@@ -603,7 +621,7 @@ function ClientGoals({
         {localError && <p className="text-xs" style={{ color: "#f87171" }} role="alert">{localError}</p>}
         <div className="flex flex-wrap gap-3">
           <button type="submit" disabled={saving} className="text-xs font-semibold rounded-lg px-3 py-1.5 disabled:opacity-50" style={{ background: "#0ea5e9", color: "#041018" }}>
-            {saving ? "Saving…" : "Save custom version"}
+            {saving ? "Saving…" : start === bounds.suggested && bounds.revisingUpcoming ? "Update upcoming goals" : "Update this client"}
           </button>
           <button type="button" disabled={saving} className="text-xs font-semibold" style={{ color: "#94a3b8" }} onClick={() => onUseStock(start)}>
             Use stock
