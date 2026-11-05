@@ -1,15 +1,20 @@
 import { NextResponse } from 'next/server';
 import { getAuthContext, isAuthError, requireAnyPermission } from '@/lib/api-auth';
-import type { KpiKey } from '@/lib/client-health';
+import { DEFAULT_KPI_BANDS, type KpiKey } from '@/lib/client-health';
 import {
   applyStockEdit,
+  costIdentityError,
+  pickCostDriver,
   placeholdersAfterStockEdit,
+  retainCostDriver,
   customHistory,
   ignoredStoredKeys,
   normalizeOverlay,
   profileFor,
   resolveClientCriteria,
   stockHistory,
+  type CostDriver,
+  type CostTriple,
   type CriteriaClient,
   type StockVersion,
 } from '@/lib/kpi-criteria';
@@ -127,12 +132,14 @@ export async function POST(req: Request) {
         );
       }
       const patch = body.bands ?? {};
-      const bands = applyStockEdit(open.bands, patch);
+      const merged = applyStockEdit(open.bands, patch);
+      const settled = settleStockCosts(merged, patch, body.cost_driver);
+      if (settled.error) return NextResponse.json({ error: settled.error }, { status: 400 });
       await saveStockVersion(ctx.service, {
         profileId,
         effectiveStart,
-        bands,
-        placeholders: placeholdersAfterStockEdit(open.placeholders, patch, bands),
+        bands: settled.bands,
+        placeholders: placeholdersAfterStockEdit(open.placeholders, patch, settled.bands),
         note,
         createdBy: ctx.userId,
       });
@@ -182,6 +189,12 @@ export async function POST(req: Request) {
         const merged = { ...(open?.bands ?? {}), ...(body.bands ?? {}) };
         bands = normalizeOverlay(merged, graded) ?? {};
       }
+      if (body.action !== 'use_stock') {
+        const stockOpen = catalog.stock.find(v => v.profileId === profileFor(client.reporting_type) && v.effectiveEnd == null);
+        const settled = settleCustomCosts(bands, stockOpen?.bands, body.cost_driver, resolved?.pool ?? null);
+        if (settled.error) return NextResponse.json({ error: settled.error }, { status: 400 });
+        bands = settled.bands;
+      }
       await saveCustomVersion(ctx.service, {
         clientId,
         effectiveStart,
@@ -197,4 +210,69 @@ export async function POST(req: Request) {
   }
 
   return NextResponse.json({ error: 'Unknown action' }, { status: 400 });
+}
+
+const COST_KEYS = ['cpl', 'cpql', 'cps'] as const;
+
+function asDriver(value: unknown): CostDriver | null {
+  return value === 'cpl' || value === 'cpql' || value === 'cps' ? value : null;
+}
+
+function rateTriple(bands: { critical?: number; below?: number; at?: number } | undefined, fallback: CostTriple): CostTriple {
+  return bands ?? fallback;
+}
+
+function settleStockCosts(
+  merged: StockVersion['bands'],
+  patch: Partial<Record<string, CostTriple>>,
+  requested: unknown,
+): { bands: StockVersion['bands']; error?: string } {
+  const patchKeys = COST_KEYS.filter(key => patch[key] && approvedTriple(patch[key]));
+  const requestedDriver = asDriver(requested);
+  const driver = (requestedDriver && approvedTriple(merged[requestedDriver]?.bands) ? requestedDriver : null)
+    ?? (patchKeys.includes('cpl') ? 'cpl' : patchKeys.includes('cpql') ? 'cpql' : patchKeys.includes('cps') ? 'cps' : pickCostDriver(null, merged));
+  if (patchKeys.length > 1) {
+    const issue = costIdentityError(
+      { cpl: patch.cpl, cpql: patch.cpql, cps: patch.cps },
+      {
+        qual: rateTriple(merged.lead_to_qualified?.bands, DEFAULT_KPI_BANDS.lead_to_qualified.bands),
+        hand: rateTriple(merged.hand_raise_rate?.bands, DEFAULT_KPI_BANDS.hand_raise_rate.bands),
+        yieldBands: rateTriple(merged.lead_booking_rate?.bands, DEFAULT_KPI_BANDS.lead_booking_rate.bands),
+      },
+    );
+    if (issue) return { bands: merged, error: issue };
+  }
+  return { bands: retainCostDriver(merged, driver) };
+}
+
+function settleCustomCosts(
+  bands: Partial<Record<KpiKey, CostTriple>>,
+  stock: StockVersion['bands'] | undefined,
+  requested: unknown,
+  pool: 'qualified' | 'all' | null,
+): { bands: Partial<Record<KpiKey, CostTriple>>; error?: string } {
+  const present = COST_KEYS.filter(key => approvedTriple(bands[key]));
+  const requestedDriver = asDriver(requested);
+  const driver = (requestedDriver && approvedTriple(bands[requestedDriver]) ? requestedDriver : null)
+    ?? (present.includes('cpl') ? 'cpl' : present.includes('cpql') ? 'cpql' : present.includes('cps') ? 'cps' : null);
+  if (present.length > 1) {
+    const qual = bands.lead_to_qualified ?? stock?.lead_to_qualified?.bands ?? DEFAULT_KPI_BANDS.lead_to_qualified.bands;
+    const hand = pool === 'all'
+      ? (bands.hand_raise_rate ?? stock?.lead_booking_rate?.bands ?? DEFAULT_KPI_BANDS.lead_booking_rate.bands)
+      : (bands.hand_raise_rate ?? stock?.hand_raise_rate?.bands ?? DEFAULT_KPI_BANDS.hand_raise_rate.bands);
+    const issue = costIdentityError(
+      { cpl: bands.cpl, cpql: bands.cpql, cps: bands.cps },
+      {
+        qual,
+        hand,
+        yieldBands: stock?.lead_booking_rate?.bands ?? DEFAULT_KPI_BANDS.lead_booking_rate.bands,
+      },
+    );
+    if (issue) return { bands, error: issue };
+  }
+  return { bands: retainCostDriver(bands, driver) };
+}
+
+function approvedTriple(bands: CostTriple | null | undefined): boolean {
+  return !!bands && [bands.critical, bands.below, bands.at].every(n => typeof n === 'number' && Number.isFinite(n));
 }

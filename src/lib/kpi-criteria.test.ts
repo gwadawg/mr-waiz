@@ -10,8 +10,12 @@ import {
   gradeMetrics,
   gradeRange,
   placeholdersAfterStockEdit,
+  costBandsFromDriver,
+  costIdentityError,
   criteriaStartBounds,
+  pickCostDriver,
   planStockSave,
+  retainCostDriver,
   resolveClientCriteria,
   resolveCriteriaSpans,
   seedStockVersions,
@@ -449,6 +453,52 @@ describe('criteria resolver', () => {
       revisingUpcoming: true,
     });
     assert.equal(criteriaStartBounds(null, '2026-11-20').suggested, '2026-11-21');
+  });
+
+  it('derives Gabe’s DSCR prices from CPL 70/60/55 and rejects a mismatched CPQL', () => {
+    const qual = { critical: 40, below: 50, at: 65 };
+    const hand = { critical: 20, below: 25, at: 30 };
+    const cpl = { critical: 70, below: 60, at: 55 };
+    const filled = costBandsFromDriver('cpl', cpl, qual, hand);
+    assert.deepEqual(filled.cpql, { critical: 175, below: 120, at: 84.62 });
+    assert.deepEqual(filled.cps, { critical: 875, below: 480, at: 282.05 });
+    assert.equal(costIdentityError({ cpl, cpql: filled.cpql, cps: filled.cps }, { qual, hand }), null);
+
+    const fromCpql = costBandsFromDriver('cpql', filled.cpql, qual, hand);
+    assert.equal(fromCpql.cpl.critical, 70);
+    assert.equal(fromCpql.cpl.below, 60);
+    assert.equal(fromCpql.cpl.at, 55);
+    assert.equal(fromCpql.cps.critical, 875);
+
+    const mismatch = costIdentityError(
+      { cpl, cpql: { critical: 100, below: 80, at: 70 } },
+      { qual, hand },
+    );
+    assert.ok(mismatch);
+    assert.match(mismatch, /CPL ÷ qual/);
+    assert.match(mismatch, /911 implies qual 70%/);
+    assert.match(mismatch, /set rule is 40%/);
+
+    const stock = seedStockVersions(CUTOVER);
+    const open = stock.find(row => row.id === 'stock-dscr-open');
+    assert.ok(open);
+    const saved = retainCostDriver(applyStockEdit(open.bands, { cpl }), 'cpl');
+    assert.equal(saved.cpql, undefined);
+    assert.equal(saved.cps, undefined);
+    assert.equal(pickCostDriver(null, saved), 'cpl');
+    const criteria = resolveClientCriteria(
+      client({ id: 'gabe-dscr', reportingType: 'DSCR', qualifiesLeads: true }),
+      '2026-11-15',
+      { stock: stock.map(row => (row.id === open.id ? { ...row, bands: saved, placeholders: null } : row)), custom: [] },
+    );
+    assert.equal(criteria?.costDriver, 'cpl');
+    assert.equal(criteria?.costUnapproved, false);
+    assert.equal(criteria?.bands.cpql?.bands.critical, 175);
+    assert.equal(criteria?.bands.cpql?.bands.below, 120);
+    assert.equal(criteria?.bands.cpql?.bands.at, 84.62);
+    assert.equal(criteria?.bands.cps?.bands.critical, 875);
+    assert.equal(criteria?.bands.cps?.bands.below, 480);
+    assert.equal(criteria?.bands.cps?.bands.at, 282.05);
   });
 
   it('refuses to update a closed version', () => {

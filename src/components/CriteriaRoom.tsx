@@ -3,7 +3,15 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { DEFAULT_KPI_BANDS, KPI_META, type KpiKey } from "@/lib/client-health";
-import { criteriaStartBounds, type HistoryRow } from "@/lib/kpi-criteria";
+import {
+  costBandsFromDriver,
+  costIdentityError,
+  criteriaStartBounds,
+  pickCostDriver,
+  type CostDriver,
+  type CostTriple,
+  type HistoryRow,
+} from "@/lib/kpi-criteria";
 
 type Profile = "RM" | "DSCR" | "CALL_CENTER";
 
@@ -37,6 +45,7 @@ type Resolved = {
   customKeys: KpiKey[];
   rateLinesShared: boolean;
   costUnapproved: boolean;
+  costDriver?: CostDriver | null;
   placeholders?: StockVersion["placeholders"];
   stockEffectiveStart: string;
   customEffectiveStart?: string | null;
@@ -175,12 +184,37 @@ function patchFromDrafts(
   return { patch };
 }
 
+const COST_DRIVERS: { id: CostDriver; label: string }[] = [
+  { id: "cpl", label: "CPL" },
+  { id: "cpql", label: "CPQL" },
+  { id: "cps", label: "CPConv" },
+];
+
+function draftNumbers(draft: EdgeDraft | undefined): CostTriple {
+  const num = (value: string | undefined) => {
+    if (!value?.trim()) return undefined;
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  };
+  return {
+    critical: num(draft?.critical),
+    below: num(draft?.below),
+    at: num(draft?.at),
+  };
+}
+
+function formatTriple(triple: CostTriple | undefined): EdgeDraft {
+  const text = (value: number | undefined) => (value == null ? "" : String(value));
+  return { critical: text(triple?.critical), below: text(triple?.below), at: text(triple?.at) };
+}
+
 function BandFields({
   kpi,
   label,
   spec,
   hint,
   draft,
+  locked,
   onChange,
 }: {
   kpi: KpiKey;
@@ -188,6 +222,7 @@ function BandFields({
   spec: StockVersion["bands"][KpiKey] | undefined;
   hint?: string;
   draft: EdgeDraft;
+  locked?: boolean;
   onChange: (edge: keyof EdgeDraft, value: string) => void;
 }) {
   const unit = spec?.unit ?? DEFAULT_KPI_BANDS[kpi].unit;
@@ -202,11 +237,12 @@ function BandFields({
             <input
               aria-label={`${label} ${edge === "critical" ? "911" : edge === "below" ? "Below" : "At"}`}
               inputMode="decimal"
+              readOnly={locked}
               value={draft[edge]}
               placeholder={unit === "money" ? "$" : "%"}
               onChange={e => onChange(edge, e.target.value)}
               className="mt-1 w-full rounded-md px-2 py-1 text-xs tabular-nums focus:outline focus:outline-1 focus:outline-[#38bdf8]"
-              style={inputStyle}
+              style={locked ? { ...inputStyle, color: "#94a3b8" } : inputStyle}
               data-kpi={kpi}
             />
           </label>
@@ -310,6 +346,7 @@ export default function CriteriaRoom() {
                 effective_start: bands.effective_start,
                 note: bands.note,
                 bands: bands.patch,
+                cost_driver: bands.cost_driver,
               })}
             />
           );
@@ -343,12 +380,127 @@ export default function CriteriaRoom() {
             saving={saving}
             onUseStock={start => post({ action: "use_stock", client_id: clientId, effective_start: start, note: "Use stock" })}
             onChecklist={start => post({ action: "save_checklist", client_id: clientId, effective_start: start, note: "Forward save of stored goals" })}
-            onSave={(start, note, bands) => post({ action: "save_custom", client_id: clientId, effective_start: start, note, bands })}
+            onSave={(start, note, bands, costDriver) => post({ action: "save_custom", client_id: clientId, effective_start: start, note, bands, cost_driver: costDriver })}
           />
         )}
       </section>
     </div>
   );
+}
+
+function lockHint(key: KpiKey, driver: CostDriver, poolAll: boolean): string {
+  if (poolAll && key === "cps") return "CPL ÷ hand-raise";
+  if (poolAll && key === "cpl") return "CPConv × hand-raise";
+  if (key === "cpql" && driver === "cps") return "CPConv × hand-raise";
+  if (key === "cpql") return "CPL ÷ qual";
+  if (key === "cps") return "CPQL ÷ hand-raise";
+  if (key === "cpl" && driver === "cps") return "CPQL × qual";
+  return "CPQL × qual";
+}
+
+function MarketPrices({
+  driver,
+  onDriver,
+  drafts,
+  onEdge,
+  drivers,
+  shownKeys,
+  qualDraft,
+  handDraft,
+  stored,
+  poolAll,
+}: {
+  driver: CostDriver;
+  onDriver: (next: CostDriver) => void;
+  drafts: Record<string, EdgeDraft>;
+  onEdge: (key: KpiKey, edge: keyof EdgeDraft, value: string) => void;
+  drivers: CostDriver[];
+  shownKeys: KpiKey[];
+  qualDraft: EdgeDraft;
+  handDraft: EdgeDraft;
+  stored: StockVersion["bands"] | undefined;
+  poolAll: boolean;
+}) {
+  const shown = shownKeys;
+  const qual = draftNumbers(qualDraft);
+  const hand = draftNumbers(handDraft);
+  const typed = draftNumbers(drafts[driver]);
+  const filled = poolAll
+    ? allLeadsFill(driver, typed, hand)
+    : costBandsFromDriver(driver, typed, qual, hand);
+  const storedIssue = costIdentityError(
+    {
+      cpl: stored?.cpl?.bands,
+      cpql: poolAll ? null : stored?.cpql?.bands,
+      cps: stored?.cps?.bands,
+    },
+    {
+      qual,
+      hand,
+      yieldBands: poolAll ? hand : undefined,
+    },
+  );
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap gap-1" role="group" aria-label="Cost driver">
+        {COST_DRIVERS.filter(item => drivers.includes(item.id)).map(item => (
+          <button
+            key={item.id}
+            type="button"
+            onClick={() => onDriver(item.id)}
+            className="text-[11px] font-semibold rounded-md px-2 py-1"
+            style={{
+              background: driver === item.id ? "#0ea5e9" : "#07111f",
+              color: driver === item.id ? "#041018" : "#94a3b8",
+              border: "1px solid rgba(255,255,255,0.08)",
+            }}
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+      <p className="text-[11px]" style={{ color: "#64748b" }}>
+        One price is typed. The others follow the rates and stay locked.
+      </p>
+      {storedIssue && (
+        <p className="text-[11px]" style={{ color: "#fbbf24" }} role="status">{storedIssue}</p>
+      )}
+      {shown.map(key => {
+        const locked = key !== driver;
+        const draft = locked ? formatTriple(filled[key as CostDriver]) : (drafts[key] ?? { critical: "", below: "", at: "" });
+        return (
+          <BandFields
+            key={key}
+            kpi={key}
+            label={KPI_META[key].short}
+            spec={stored?.[key] ?? { ...DEFAULT_KPI_BANDS[key], bands: {} }}
+            hint={locked ? lockHint(key, driver, poolAll) : "Typed"}
+            draft={draft}
+            locked={locked}
+            onChange={(edge, value) => onEdge(key, edge, value)}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
+function allLeadsFill(driver: CostDriver, typed: CostTriple, yieldDraft: CostTriple): { cpl: CostTriple; cpql: CostTriple; cps: CostTriple } {
+  const cpl: CostTriple = {};
+  const cps: CostTriple = {};
+  for (const edge of ["critical", "below", "at"] as const) {
+    const value = typed[edge];
+    const yieldPct = yieldDraft[edge];
+    if (value == null || yieldPct == null || yieldPct === 0) continue;
+    if (driver === "cps") {
+      cps[edge] = value;
+      cpl[edge] = Math.round(value * (yieldPct / 100) * 100) / 100;
+    } else {
+      cpl[edge] = value;
+      cps[edge] = Math.round((value / (yieldPct / 100)) * 100) / 100;
+    }
+  }
+  return { cpl, cpql: {}, cps };
 }
 
 function StockColumn({
@@ -370,12 +522,14 @@ function StockColumn({
   onToggleHistory: () => void;
   today: string;
   saving: boolean;
-  onSave: (input: { effective_start: string; note: string; patch: Record<string, EdgePatch> }) => void;
+  onSave: (input: { effective_start: string; note: string; patch: Record<string, EdgePatch>; cost_driver: CostDriver | null }) => void;
 }) {
   const setRules = profile === "CALL_CENTER" ? SET_RULES.filter(key => key !== "lead_to_qualified") : SET_RULES;
   const market = profile === "CALL_CENTER" ? [] : MARKET;
   const keys = [...setRules, ...market];
   const bounds = startBounds(open?.effectiveStart, today);
+  const storedDriver = pickCostDriver(null, open?.bands) ?? "cpl";
+  const [driver, setDriver] = useState<CostDriver>(storedDriver);
   const [drafts, setDrafts] = useState(() => draftsFor(keys, open?.bands));
   const [start, setStart] = useState(bounds.suggested);
   const [note, setNote] = useState("");
@@ -408,12 +562,19 @@ function StockColumn({
         className="space-y-3"
         onSubmit={e => {
           e.preventDefault();
-          const built = patchFromDrafts(keys, drafts, open?.bands);
-          if (built.error) {
-            setLocalError(built.error);
+          const rules = patchFromDrafts(setRules, drafts, open?.bands);
+          const typed = market.length ? patchFromDrafts([driver], drafts, open?.bands) : { patch: {} };
+          if (rules.error || typed.error) {
+            setLocalError(rules.error ?? typed.error ?? "Could not read the tiers.");
             return;
           }
-          if (Object.keys(built.patch).length === 0) {
+          const patch = { ...rules.patch, ...typed.patch };
+          const driverChanged = driver !== storedDriver;
+          if (driverChanged && drafts[driver]) {
+            const numbers = draftNumbers(drafts[driver]);
+            if (numbers.critical != null && numbers.below != null && numbers.at != null) patch[driver] = numbers;
+          }
+          if (Object.keys(patch).length === 0) {
             setLocalError("Change a 911, Below, or At line before saving.");
             return;
           }
@@ -422,7 +583,7 @@ function StockColumn({
             return;
           }
           setLocalError(null);
-          onSave({ effective_start: start, note, patch: built.patch });
+          onSave({ effective_start: start, note, patch, cost_driver: market.length ? driver : null });
         }}
       >
         <div>
@@ -457,17 +618,24 @@ function StockColumn({
                   Cost tiers are off. The ${open.placeholders.cpl.worst} / ${open.placeholders.cpl.demo} / ${open.placeholders.cpl.best} figures are a placeholder, not 911 / Below / At. Type real tiers below. Saving all three on CPL turns DSCR cost grading on.
                 </p>
               )}
-              {market.map(key => (
-                <BandFields
-                  key={key}
-                  kpi={key}
-                  label={KPI_META[key].short}
-                  spec={open?.bands[key]}
-                  hint={hintFor(key)}
-                  draft={drafts[key] ?? { critical: "", below: "", at: "" }}
-                  onChange={(edge, value) => setEdge(key, edge, value)}
-                />
-              ))}
+              <MarketPrices
+                driver={driver}
+                onDriver={next => {
+                  const qual = draftNumbers(drafts.lead_to_qualified);
+                  const hand = draftNumbers(drafts.hand_raise_rate);
+                  const filled = costBandsFromDriver(driver, draftNumbers(drafts[driver]), qual, hand);
+                  setDrafts(prev => ({ ...prev, [next]: formatTriple(filled[next]) }));
+                  setDriver(next);
+                }}
+                drafts={drafts}
+                onEdge={setEdge}
+                drivers={["cpl", "cpql", "cps"]}
+                shownKeys={["cpl", "cpql", "cps"]}
+                qualDraft={drafts.lead_to_qualified ?? { critical: "", below: "", at: "" }}
+                handDraft={drafts.hand_raise_rate ?? { critical: "", below: "", at: "" }}
+                stored={open?.bands}
+                poolAll={false}
+              />
             </div>
           )}
         </div>
@@ -527,9 +695,14 @@ function ClientGoals({
   saving: boolean;
   onUseStock: (start: string) => void;
   onChecklist: (start: string) => void;
-  onSave: (start: string, note: string, bands: Record<string, EdgePatch>) => void;
+  onSave: (start: string, note: string, bands: Record<string, EdgePatch>, costDriver: CostDriver | null) => void;
 }) {
   const bounds = startBounds(resolved.customEffectiveStart, today);
+  const poolAll = resolved.pool === "all";
+  const costKeys = (poolAll ? ["cpl", "cps"] : ["cpl", "cpql", "cps"]) as KpiKey[];
+  const gradedCosts = costKeys.filter(key => resolved.gradedKeys.includes(key));
+  const storedDriver = (gradedCosts.includes(resolved.costDriver ?? "cpl") ? resolved.costDriver : null) ?? "cpl";
+  const [driver, setDriver] = useState<CostDriver>(storedDriver);
   const [start, setStart] = useState(bounds.suggested);
   const [note, setNote] = useState("");
   const [drafts, setDrafts] = useState(() => draftsFor(resolved.gradedKeys, resolved.bands));
@@ -565,21 +738,27 @@ function ClientGoals({
         className="space-y-3"
         onSubmit={e => {
           e.preventDefault();
-          const built = patchFromDrafts(resolved.gradedKeys, drafts, resolved.bands);
+          const typedKeys = resolved.gradedKeys.filter(key => !costKeys.includes(key) || key === driver);
+          const built = patchFromDrafts(typedKeys, drafts, resolved.bands);
           if (built.error) {
             setLocalError(built.error);
             return;
           }
-          if (Object.keys(built.patch).length === 0) {
+          const patch = { ...built.patch };
+          if (gradedCosts.length > 0 && driver !== storedDriver) {
+            const numbers = draftNumbers(drafts[driver]);
+            if (numbers.critical != null && numbers.below != null && numbers.at != null) patch[driver] = numbers;
+          }
+          if (Object.keys(patch).length === 0) {
             setLocalError("Change a 911, Below, or At line before saving.");
             return;
           }
           setLocalError(null);
-          onSave(start, note, built.patch);
+          onSave(start, note, patch, gradedCosts.length ? driver : null);
         }}
       >
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-          {resolved.gradedKeys.map(item => (
+          {resolved.gradedKeys.filter(item => !costKeys.includes(item)).map(item => (
             <BandFields
               key={item}
               kpi={item}
@@ -594,6 +773,31 @@ function ClientGoals({
             />
           ))}
         </div>
+        {gradedCosts.length > 0 && (
+          <MarketPrices
+            driver={driver}
+            onDriver={next => {
+              const qual = draftNumbers(drafts.lead_to_qualified);
+              const hand = draftNumbers(drafts.hand_raise_rate);
+              const filled = poolAll
+                ? allLeadsFill(driver, draftNumbers(drafts[driver]), hand)
+                : costBandsFromDriver(driver, draftNumbers(drafts[driver]), qual, hand);
+              setDrafts(prev => ({ ...prev, [next]: formatTriple(filled[next]) }));
+              setDriver(next);
+            }}
+            drafts={drafts}
+            onEdge={(key, edge, value) => setDrafts(prev => ({
+              ...prev,
+              [key]: { ...(prev[key] ?? { critical: "", below: "", at: "" }), [edge]: value },
+            }))}
+            drivers={poolAll ? ["cpl", "cps"] : ["cpl", "cpql", "cps"]}
+            shownKeys={gradedCosts}
+            qualDraft={drafts.lead_to_qualified ?? { critical: "", below: "", at: "" }}
+            handDraft={drafts.hand_raise_rate ?? { critical: "", below: "", at: "" }}
+            stored={resolved.bands}
+            poolAll={poolAll}
+          />
+        )}
         <label className="block text-[11px]" style={{ color: "#94a3b8" }}>
           Effective start
           <input
