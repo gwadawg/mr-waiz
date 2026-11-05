@@ -98,6 +98,8 @@ export type ResolvedCriteria = {
   customEffectiveStart: string | null;
   rateLinesShared: boolean;
   costUnapproved: boolean;
+  /** Which stored price the other dollars are computed from. CPL when more than one is stored. */
+  costDriver: CostDriver | null;
   placeholders: VersionPlaceholders;
   accountMode: CriteriaAccountMode;
   gradePlan: CriteriaGradePlan;
@@ -154,8 +156,157 @@ export function dayBefore(date: string): string {
   return shiftYmd(date, -1);
 }
 
-function roundMoney(value: number): number {
+export function roundMoney(value: number): number {
   return Math.round(value * 100) / 100;
+}
+
+const COST_EDGES = ['critical', 'below', 'at'] as const;
+export type CostTriple = { critical?: number; below?: number; at?: number };
+export type CostDriver = 'cpl' | 'cpql' | 'cps';
+
+/** One typed price per tier. The other two are CPL ÷ qual and that CPQL ÷ hand-raise. */
+export function costBandsFromDriver(
+  driver: CostDriver,
+  typed: CostTriple,
+  qual: CostTriple,
+  hand: CostTriple,
+): { cpl: CostTriple; cpql: CostTriple; cps: CostTriple } {
+  const cpl: CostTriple = {};
+  const cpql: CostTriple = {};
+  const cps: CostTriple = {};
+  for (const edge of COST_EDGES) {
+    const value = typed[edge];
+    const qualPct = qual[edge];
+    const handPct = hand[edge];
+    if (value == null || qualPct == null || handPct == null || qualPct === 0 || handPct === 0) continue;
+    const qualRate = qualPct / 100;
+    const handRate = handPct / 100;
+    if (driver === 'cpl') {
+      const rawCpql = value / qualRate;
+      cpl[edge] = roundMoney(value);
+      cpql[edge] = roundMoney(rawCpql);
+      cps[edge] = roundMoney(rawCpql / handRate);
+    } else if (driver === 'cpql') {
+      cpl[edge] = roundMoney(value * qualRate);
+      cpql[edge] = roundMoney(value);
+      cps[edge] = roundMoney(value / handRate);
+    } else {
+      const rawCpql = value * handRate;
+      cpql[edge] = roundMoney(rawCpql);
+      cpl[edge] = roundMoney(rawCpql * qualRate);
+      cps[edge] = roundMoney(value);
+    }
+  }
+  return { cpl, cpql, cps };
+}
+
+export function impliedQualPercent(cpl: number, cpql: number): number {
+  return roundMoney((cpl / cpql) * 100);
+}
+
+function sameMoney(actual: CostTriple, expected: CostTriple): boolean {
+  return COST_EDGES.every(edge => {
+    const left = actual[edge];
+    const right = expected[edge];
+    if (left == null && right == null) return true;
+    if (left == null || right == null) return false;
+    return roundMoney(left) === roundMoney(right);
+  });
+}
+
+function tierLabel(edge: (typeof COST_EDGES)[number]): string {
+  if (edge === 'critical') return '911';
+  if (edge === 'below') return 'Below';
+  return 'At';
+}
+
+/** More than one stored price is allowed only when it matches the identity after cent rounding. */
+export function costIdentityError(
+  prices: { cpl?: CostTriple | null; cpql?: CostTriple | null; cps?: CostTriple | null },
+  rates: { qual: CostTriple; hand: CostTriple; yieldBands?: CostTriple },
+): string | null {
+  const cpl = approved(prices.cpl ?? undefined) ? prices.cpl! : null;
+  const cpql = approved(prices.cpql ?? undefined) ? prices.cpql! : null;
+  const cps = approved(prices.cps ?? undefined) ? prices.cps! : null;
+  const present = [cpl, cpql, cps].filter(Boolean).length;
+  if (present <= 1) return null;
+
+  if (cpl && cpql) {
+    const derived = costBandsFromDriver('cpl', cpl, rates.qual, rates.hand);
+      if (!sameMoney(cpql, derived.cpql)) {
+      const bits = COST_EDGES.flatMap(edge => {
+        const lead = cpl[edge];
+        const qualified = cpql[edge];
+        const rule = rates.qual[edge];
+        if (lead == null || qualified == null || qualified === 0) return [];
+        const implied = impliedQualPercent(lead, qualified);
+        if (rule != null && implied === roundMoney(rule)) return [];
+        const setRule = rule == null ? '' : ` (set rule is ${rule}%)`;
+        return [`${tierLabel(edge)} implies qual ${implied}%${setRule}`];
+      });
+      if (bits.length === 0) return 'CPQL does not match CPL ÷ qual after cent rounding.';
+      return `CPQL does not match CPL ÷ qual. ${bits.join('. ')}.`;
+    }
+  }
+
+  if (cpl && cps) {
+    const qualified = costBandsFromDriver('cpl', cpl, rates.qual, rates.hand);
+    const yielded = rates.yieldBands
+      ? COST_EDGES.reduce<CostTriple>((acc, edge) => {
+          const lead = cpl[edge];
+          const yieldPct = rates.yieldBands?.[edge];
+          if (lead == null || yieldPct == null || yieldPct === 0) return acc;
+          acc[edge] = roundMoney(lead / (yieldPct / 100));
+          return acc;
+        }, {})
+      : null;
+    const matchesQualified = sameMoney(cps, qualified.cps);
+    const matchesYield = yielded ? sameMoney(cps, yielded) : false;
+    if (cpql) {
+      if (!matchesQualified) return 'CPConv does not match CPQL ÷ hand-raise.';
+    } else if (!matchesQualified && !matchesYield) {
+      return 'CPConv does not match CPL ÷ qual ÷ hand-raise, or CPL ÷ the 3 / 5 / 8 yield.';
+    }
+  }
+
+  if (!cpl && cpql && cps) {
+    const derived = costBandsFromDriver('cpql', cpql, rates.qual, rates.hand);
+    if (!sameMoney(cps, derived.cps)) return 'CPConv does not match CPQL ÷ hand-raise.';
+  }
+  return null;
+}
+
+export function pickCostDriver(
+  custom: Partial<Record<KpiKey, CostTriple>> | null | undefined,
+  stock: Partial<Record<KpiKey, { bands?: CostTriple }>> | null | undefined,
+): CostDriver | null {
+  const fromCustom = driverFromTriples(custom?.cpl, custom?.cpql, custom?.cps);
+  if (fromCustom) return fromCustom;
+  return driverFromTriples(stock?.cpl?.bands, stock?.cpql?.bands, stock?.cps?.bands);
+}
+
+function driverFromTriples(
+  cpl: CostTriple | null | undefined,
+  cpql: CostTriple | null | undefined,
+  cps: CostTriple | null | undefined,
+): CostDriver | null {
+  if (approved(cpl ?? undefined)) return 'cpl';
+  if (approved(cpql ?? undefined)) return 'cpql';
+  if (approved(cps ?? undefined)) return 'cps';
+  return null;
+}
+
+/** Keep the typed price. Derived dollars are not stored as a second price. */
+export function retainCostDriver<T extends Partial<Record<KpiKey, unknown>>>(
+  bands: T,
+  driver: CostDriver | null,
+): T {
+  if (!driver) return bands;
+  const next = { ...bands };
+  for (const key of ['cpl', 'cpql', 'cps'] as const) {
+    if (key !== driver) delete next[key];
+  }
+  return next;
 }
 
 function specFromDefault(key: KpiKey, bands = DEFAULT_KPI_BANDS[key].bands): StoredBand {
@@ -340,6 +491,58 @@ function deriveQualifiedCosts(
   };
 }
 
+function typedCost(
+  driver: CostDriver,
+  custom: Partial<Record<KpiKey, CostTriple>>,
+  bands: Partial<Record<KpiKey, StoredBand>>,
+  stock: Partial<Record<KpiKey, StoredBand>>,
+): CostTriple | null {
+  const customTriple = custom[driver];
+  if (approved(customTriple)) return customTriple ?? null;
+  if (approved(bands[driver]?.bands)) return bands[driver]!.bands;
+  if (approved(stock[driver]?.bands)) return stock[driver]!.bands ?? null;
+  return null;
+}
+
+function writeCost(
+  bands: Partial<Record<KpiKey, StoredBand>>,
+  key: KpiKey,
+  triple: CostTriple,
+): void {
+  const spec = bands[key] ?? specFromDefault(key);
+  bands[key] = { ...spec, bands: { ...triple } };
+}
+
+function applyAllLeadsDriver(
+  bands: Partial<Record<KpiKey, StoredBand>>,
+  keys: KpiKey[],
+  driver: CostDriver,
+  typed: CostTriple,
+  qual: CostTriple,
+  hand: CostTriple,
+  yieldBands: CostTriple,
+): void {
+  if (driver === 'cpl') {
+    if (keys.includes('cps')) bands.cps = deriveAllLeadsCpconv(typed, yieldBands);
+    return;
+  }
+  if (driver === 'cpql') {
+    const filled = costBandsFromDriver('cpql', typed, qual, hand);
+    if (keys.includes('cpl')) writeCost(bands, 'cpl', filled.cpl);
+    if (keys.includes('cps')) bands.cps = deriveAllLeadsCpconv(filled.cpl, yieldBands);
+    return;
+  }
+  const cpl: CostTriple = {};
+  for (const edge of COST_EDGES) {
+    const conv = typed[edge];
+    const yieldPct = yieldBands[edge];
+    if (conv == null || yieldPct == null) continue;
+    cpl[edge] = roundMoney(conv * (yieldPct / 100));
+  }
+  if (keys.includes('cpl')) writeCost(bands, 'cpl', cpl);
+  if (keys.includes('cps')) writeCost(bands, 'cps', typed);
+}
+
 function deriveAllLeadsCpconv(
   cpl: { critical?: number; below?: number; at?: number },
   yieldBands: { critical?: number; below?: number; at?: number },
@@ -428,35 +631,32 @@ export function resolveClientCriteria(
     bands[key] = overlayNumber(stockBand, customBands[key], key);
   }
 
-  const qualLines = stock.bands.lead_to_qualified?.bands ?? DEFAULT_KPI_BANDS.lead_to_qualified.bands;
-  const handLines = stock.bands.hand_raise_rate?.bands ?? DEFAULT_KPI_BANDS.hand_raise_rate.bands;
+  const stockQual = stock.bands.lead_to_qualified?.bands ?? DEFAULT_KPI_BANDS.lead_to_qualified.bands;
+  const stockHand = stock.bands.hand_raise_rate?.bands ?? DEFAULT_KPI_BANDS.hand_raise_rate.bands;
   const yieldLines = stock.bands.lead_booking_rate?.bands ?? DEFAULT_KPI_BANDS.lead_booking_rate.bands;
-  const explicitCpql = customBands.cpql && stock.ruler === 'current' ? customBands.cpql : undefined;
-  const explicitCps = customBands.cps && stock.ruler === 'current' ? customBands.cps : undefined;
-  const customCplTurnsOnCost = stock.ruler === 'current' && approved(customBands.cpl);
+  const costDriver = stock.ruler === 'current' ? pickCostDriver(customBands, stock.bands) : null;
 
   if (stock.ruler === 'current' && pool === 'all' && shape.keys.includes('hand_raise_rate')) {
     const yieldSpec = stock.bands.lead_booking_rate ?? specFromDefault('lead_booking_rate');
     bands.hand_raise_rate = overlayNumber(yieldSpec, customBands.hand_raise_rate, 'hand_raise_rate');
   }
 
-  if (shape.keys.includes('cpql') || shape.keys.includes('cps')) {
-    const stockCostsApproved = approved(stock.bands.cpl?.bands);
-    if (stock.ruler === 'current' && !stockCostsApproved && !customCplTurnsOnCost) {
-      if (!approved(bands.cpl?.bands)) bands.cpl = undefined;
-      if (!explicitCpql) bands.cpql = undefined;
-      if (!explicitCps) bands.cps = undefined;
-    } else if (pool === 'all' && shape.keys.includes('cps') && !explicitCps) {
-      const cplForYield = bands.cpl?.bands ?? stock.bands.cpl?.bands;
-      if (cplForYield) bands.cps = deriveAllLeadsCpconv(cplForYield, yieldLines);
-    } else if (customCplTurnsOnCost && customBands.cpl && pool !== 'all') {
-      const derived = deriveQualifiedCosts(customBands.cpl, qualLines, handLines);
-      if (shape.keys.includes('cpql') && !explicitCpql) bands.cpql = derived.cpql;
-      if (shape.keys.includes('cps') && !explicitCps) bands.cps = derived.cps;
-    } else if (stock.ruler === 'current' && stockCostsApproved && pool !== 'all' && stock.bands.cpl?.bands) {
-      const derived = deriveQualifiedCosts(stock.bands.cpl.bands, qualLines, handLines);
-      if (shape.keys.includes('cpql') && !approved(stock.bands.cpql?.bands) && !explicitCpql) bands.cpql = derived.cpql;
-      if (shape.keys.includes('cps') && !approved(stock.bands.cps?.bands) && !explicitCps) bands.cps = derived.cps;
+  const qualLines = bands.lead_to_qualified?.bands ?? stockQual;
+  const handLines = pool === 'all' ? stockHand : (bands.hand_raise_rate?.bands ?? stockHand);
+
+  if (shape.keys.includes('cpql') || shape.keys.includes('cps') || shape.keys.includes('cpl')) {
+    if (stock.ruler === 'current' && costDriver) {
+      const typed = typedCost(costDriver, customBands, bands, stock.bands);
+      if (typed && pool === 'all') {
+        applyAllLeadsDriver(bands, shape.keys, costDriver, typed, qualLines, stockHand, yieldLines);
+      } else if (typed) {
+        const filled = costBandsFromDriver(costDriver, typed, qualLines, handLines);
+        for (const key of ['cpl', 'cpql', 'cps'] as const) {
+          if (!shape.keys.includes(key)) continue;
+          const spec = bands[key] ?? specFromDefault(key);
+          bands[key] = { ...spec, bands: { ...filled[key] } };
+        }
+      }
     } else if (stock.ruler === 'legacy' && customBands.cpl) {
       const legacy = deriveQualifiedCosts(
         customBands.cpl,
@@ -465,15 +665,14 @@ export function resolveClientCriteria(
       );
       if (shape.keys.includes('cpql')) bands.cpql = legacy.cpql;
       if (shape.keys.includes('cps')) bands.cps = legacy.cps;
+    } else if (stock.ruler === 'current' && !costDriver) {
+      if (!approved(bands.cpl?.bands)) bands.cpl = undefined;
+      bands.cpql = undefined;
+      bands.cps = undefined;
     }
-    if (explicitCpql) bands.cpql = overlayNumber(bands.cpql ?? specFromDefault('cpql'), explicitCpql, 'cpql');
-    if (explicitCps) bands.cps = overlayNumber(bands.cps ?? specFromDefault('cps'), explicitCps, 'cps');
   }
 
-  const costUnapproved = profile === 'DSCR'
-    && stock.ruler === 'current'
-    && !approved(stock.bands.cpl?.bands)
-    && !customCplTurnsOnCost;
+  const costUnapproved = profile === 'DSCR' && stock.ruler === 'current' && costDriver == null;
 
   const notes: Partial<Record<KpiKey, string>> = {};
   if (costUnapproved) {
@@ -508,6 +707,7 @@ export function resolveClientCriteria(
     customEffectiveStart: custom?.effectiveStart ?? null,
     rateLinesShared: profile === 'DSCR' && stock.placeholders?.rates?.source === 'shared_rm',
     costUnapproved,
+    costDriver,
     placeholders: stock.placeholders,
     accountMode: shape.accountMode,
     gradePlan,
