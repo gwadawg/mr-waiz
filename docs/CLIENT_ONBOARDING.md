@@ -423,48 +423,23 @@ and
 [`2026-10-07-client-landing-builder.md`](superpowers/plans/2026-10-07-client-landing-builder.md).
 
 ## 4. Launch checklist
-Open **Launch** from Client Roster when kickoff is complete. This is the last walkthrough before go-live. Creative and funnel QA are already signed off, so the form does not re-check headlines, budgets, pixels, or footer copy. Checklist answers live in `client_form_submissions.responses` JSON. On submit the form also writes `clients.phone_ghl` (Go High Level prospecting number) plus lifecycle / launch date.
+Open **Launch** from Client Roster when kickoff is complete. The client and CSM have already run the earlier forms. This page is a tech spot check, the same six lines on every account. Checklist answers live in `client_form_submissions.responses` JSON.
 
-Ad-running accounts (Call Center and Leads Only) stay locked until ads are **Scheduled** or **Published**. Dial-only Call Center Lead accounts do not have that gate.
+**Tech spot check** — each line needs the detail you saw, then the checkbox. A plain yes does not count.
 
-If the client has a built landing page, republish it from Client File
-with search indexing on before ads go live. The wizard does not block
-on that republish.
+- Ads are scheduled with the correct budget — type the budget on the scheduled campaign
+- The MAKE scenario is activated and a test run worked — type the scenario name and what the test run did
+- A lead was tested from the front of the funnel to the end — type the test lead and where it landed
+- The launch packet was sent to the client — type where you sent it
+- The team was updated on this new client with the details — type the channel and what you told them
+- The funnel pixel is set to the correct event — type the pixel event you saw fire
 
-### Call Center (ads + booking)
-
-**Ads**
-- Scheduled or Published — required before the rest of the form can be filled
-
-**Lead flow**
-- The ad link opens the live funnel
-- A lead from this ad reaches Go High Level
-- Text (949) 518-0137 and the appointment books in the AI Contact inbox *(type yes)*. Inbox: `https://app.gohighlevel.com/v2/location/oUpd4eO1gisJSY1A49vP/conversations/conversations/q0KzN7xCasbmo94N2hRY?category=team-inbox&tab=all`
-- That appointment is on the client calendar
-
-**Account**
-- Client info was not overwritten, and the assigned user still has the HP tag *(type yes)*
-- Mr. Waiz and ClickUp onboarding fields are filled out
-
-### Leads Only
-
-Same ads gate, then: the ad link opens the live funnel, a lead from the ad reaches Go High Level, a test lead lands in the client GHL and the client is notified *(type yes)*, and Mr. Waiz / ClickUp fields are filled out.
-
-### Call Center Lead (no ads)
-
-A test lead can be dialed, qualified, and booked *(type yes)*. New Lead Bonzo is active and the queue is clear. Claimed Bonzo is active. Client info was not overwritten and the HP tag is still on the assigned user *(type yes)*. Mr. Waiz and ClickUp fields are filled out.
-
-### Confirmation rules
-
-- **Go High Level number**: required text field — the subaccount number we prospect with (saved to `clients.phone_ghl`, used on the virtual card)
-- Routine items: checkbox only
-- Critical items (marked *type yes* above): rep must type `yes` and check the box
-- Final gate: rep types `LAUNCH` before submit
-- **Completed by** dropdown: required; lists users with Client Roster or Billing access
+Launch date and completed-by stay on the form because submit uses them to mark the client live. The rep types `LAUNCH` before submit.
 
 ### On complete
 
-- `lifecycle_status → active`, `launch_date` set, `phone_ghl` saved, launch call logged
+- ClickUp `launch_form` = `Submitted`
+- `lifecycle_status → active`, `launch_date` set, `is_live` synced
 - **ops-alerts** Slack channel: full department audit (configure slug in Automations; default `ops_alerts` via `SLACK_OPS_CHANNEL_SLUG`)
 - **Client Slack channel** (`clients.slack_id`): short go-live announcement
 - Make webhook fallback if Slack is unavailable: `MAKE_LAUNCH_COMPLETE_WEBHOOK_URL`

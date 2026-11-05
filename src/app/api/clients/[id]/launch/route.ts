@@ -6,7 +6,6 @@ import {
   applyClickUpFieldMap,
   getClickUpToken,
 } from '@/lib/clickup';
-import { CLIENT_CALL_FIELDS } from '@/lib/client-calls';
 import { recordClientFormNote, saveMarkedClientNote } from '@/lib/client-form-notes';
 import { insertFormSubmission, isBackfillFormSubmission, kickoffFiledClientIds } from '@/lib/form-submissions';
 import { isKickoffIncomplete } from '@/lib/kickoff';
@@ -18,7 +17,6 @@ import {
   isLaunchAdsReady,
   isLaunchChecklistComplete,
   isLaunchItemSatisfied,
-  launchAdsGateApplies,
   LAUNCH_CLIENT_NOTE_MARKER,
   LAUNCH_FINAL_CONFIRMATION,
   LAUNCH_FORM_CLICKUP_KEY,
@@ -133,14 +131,14 @@ function parseLaunchDraft(body: Record<string, unknown>, profile: OnboardingForm
   const rawConfirmations = body.confirmations;
   if (rawConfirmations && typeof rawConfirmations === 'object') {
     for (const item of items) {
-      if (item.confirmType === 'type_yes') {
+      if (item.confirmType === 'type_yes' || item.confirmType === 'evidence') {
         const val = (rawConfirmations as Record<string, unknown>)[item.key];
         confirmations[item.key] = typeof val === 'string' ? val : '';
       }
     }
   } else {
     for (const item of items) {
-      if (item.confirmType === 'type_yes') confirmations[item.key] = '';
+      if (item.confirmType === 'type_yes' || item.confirmType === 'evidence') confirmations[item.key] = '';
     }
   }
 
@@ -177,24 +175,6 @@ function validateLaunchDraft(
     return NextResponse.json({ error: 'Select who completed this launch checklist' }, { status: 400 });
   }
 
-  if (!draft.recording_url.trim()) {
-    return NextResponse.json({ error: 'Launch call recording link is required' }, { status: 400 });
-  }
-
-  if (!draft.phone_ghl.trim()) {
-    return NextResponse.json(
-      { error: 'Go High Level number is required (the number we prospect with)' },
-      { status: 400 },
-    );
-  }
-
-  if (launchAdsGateApplies(profile) && !isLaunchAdsReady(draft.ads_ready)) {
-    return NextResponse.json(
-      { error: 'Ads have to be scheduled or published before this checklist can be filled.' },
-      { status: 400 },
-    );
-  }
-
   const assignable = assignableUsers.find(u => u.id === draft.completed_by_user_id);
   if (!assignable) {
     return NextResponse.json({ error: 'Invalid completed-by user' }, { status: 400 });
@@ -215,9 +195,11 @@ function validateLaunchDraft(
     const incompleteKey = getFirstIncompleteItemKey(draft, profile);
     const incompleteItem = getLaunchItemsForProfile(profile).find(item => item.key === incompleteKey);
     const hint = incompleteItem
-      ? incompleteItem.confirmType === 'type_yes'
-        ? `"${incompleteItem.label}" requires typing yes and checking the box`
-        : `"${incompleteItem.label}" must be confirmed`
+      ? incompleteItem.confirmType === 'evidence'
+        ? `"${incompleteItem.label}" needs the detail you checked. A plain yes does not count.`
+        : incompleteItem.confirmType === 'type_yes'
+          ? `"${incompleteItem.label}" requires typing yes and checking the box`
+          : `"${incompleteItem.label}" must be confirmed`
       : 'All launch checklist items must be confirmed before going live';
     return NextResponse.json({ error: hint }, { status: 400 });
   }
@@ -410,30 +392,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     .update({
       lifecycle_status: lifecycleStatus,
       launch_date: draft.launch_date,
-      phone_ghl: draft.phone_ghl.trim(),
       is_live: syncIsLiveWithLifecycle(lifecycleStatus),
     })
     .eq('id', clientId);
   if (updateErr) return NextResponse.json({ error: updateErr.message }, { status: 500 });
-
-  const now = new Date().toISOString();
-  const { data: launchCall, error: callErr } = await ctx.service
-    .from('client_calls')
-    .insert({
-      client_id: clientId,
-      call_type: 'launch',
-      called_at: now,
-      recording_url: draft.recording_url.trim(),
-      transcript: draft.transcript.trim() || null,
-      disposition: 'completed',
-      notes: draft.notes || 'Launch checklist completed',
-      created_by: ctx.userId,
-      updated_by: ctx.userId,
-      updated_at: now,
-    })
-    .select(CLIENT_CALL_FIELDS)
-    .single();
-  if (callErr) return NextResponse.json({ error: callErr.message }, { status: 500 });
 
   await recordClientFormNote(
     ctx.service,
@@ -453,7 +415,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     applied_patch: {
       lifecycle_status: lifecycleStatus,
       launch_date: draft.launch_date,
-      phone_ghl: draft.phone_ghl.trim(),
       onboarding_clickup_task_id: taskId,
       clickup_field: LAUNCH_FORM_CLICKUP_KEY,
       clickup_value: LAUNCH_FORM_CLICKUP_VALUE,
@@ -471,7 +432,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   return NextResponse.json({
     client_id: clientId,
-    launch_call: launchCall,
     submission,
   });
 }

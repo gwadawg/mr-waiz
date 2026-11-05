@@ -90,12 +90,15 @@ function humanizeLaunchResponses(responses: Record<string, unknown>): { label: s
     const items = itemsForView.filter(item => item.section === section.id);
     for (const item of items) {
       const status = formatLaunchItemStatus(item, draft);
+      const proof = (draft.confirmations[item.key] ?? "").trim();
       const value =
-        status === "confirmed_typed_yes"
-          ? "✓ Confirmed (typed yes)"
-          : status === "confirmed"
-            ? "✓ Confirmed"
-            : "—";
+        status === "confirmed_evidence"
+          ? `✓ ${proof}`
+          : status === "confirmed_typed_yes"
+            ? "✓ Confirmed (typed yes)"
+            : status === "confirmed"
+              ? "✓ Confirmed"
+              : "—";
       rows.push({ label: item.label, value, section: section.label });
     }
   }
