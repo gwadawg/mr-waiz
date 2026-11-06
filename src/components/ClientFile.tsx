@@ -45,6 +45,7 @@ import LifecycleStatusSelect from "@/components/LifecycleStatusSelect";
 import AdsPausedControl from "@/components/AdsPausedControl";
 import ClientFormsSection, { type FormSubmissionSummary } from "@/components/ClientFormsSection";
 import LoanLogLinkSection from "@/components/loan-log/LoanLogLinkSection";
+import ConversionLogCorrections from "@/components/loan-log/ConversionLogCorrections";
 import KickOffCallWizard from "@/components/KickOffCallWizard";
 import LaunchChecklistWizard from "@/components/LaunchChecklistWizard";
 import LaunchKitWizard from "@/components/LaunchKitWizard";
@@ -2061,6 +2062,7 @@ export default function ClientFile({
             <Section title="Loan log form">
               <LoanLogLinkSection clientId={clientId} />
             </Section>
+            <ConversionLogCorrections clientId={clientId} />
             <Section title={`Onboarding forms (${formSubmissions.length})`}>
               <ClientFormsSection
                 submissions={formSubmissions}
