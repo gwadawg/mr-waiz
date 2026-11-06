@@ -9,14 +9,11 @@ import {
   emptyLaunchDraft,
   getLaunchItemsForProfile,
   getLaunchSectionsForProfile,
-  isLaunchAdsReady,
   isLaunchChecklistComplete,
   isLaunchItemSatisfied,
+  isSubstantiveLaunchEvidence,
   isTypedYes,
-  launchAdsGateApplies,
-  launchAdsReadyLabel,
   launchWalkthroughBlurb,
-  LAUNCH_ADS_READY,
   LAUNCH_FINAL_CONFIRMATION,
   type LaunchChecklistItemDef,
   type LaunchFormDraft,
@@ -90,7 +87,6 @@ export default function LaunchChecklistWizard({ clientId, fallbackName, onClose,
           data.default_launch_date ?? "",
           data.default_completed_by ?? "",
           data.default_completed_by_label ?? "",
-          data.client?.phone_ghl ?? "",
         ),
       );
       setLoading(false);
@@ -107,14 +103,20 @@ export default function LaunchChecklistWizard({ clientId, fallbackName, onClose,
   }
 
   function patchConfirmation(key: string, value: string) {
-    setDraft(prev => ({
-      ...prev,
-      confirmations: { ...prev.confirmations, [key]: value },
-      checklist: {
-        ...prev.checklist,
-        [key]: isTypedYes(value) ? prev.checklist[key] : false,
-      },
-    }));
+    setDraft(prev => {
+      const item = getLaunchItemsForProfile(formProfile).find(row => row.key === key);
+      const keepCheck = item?.confirmType === "evidence"
+        ? isSubstantiveLaunchEvidence(value)
+        : isTypedYes(value);
+      return {
+        ...prev,
+        confirmations: { ...prev.confirmations, [key]: value },
+        checklist: {
+          ...prev.checklist,
+          [key]: keepCheck ? prev.checklist[key] : false,
+        },
+      };
+    });
     setSaveError(null);
   }
 
@@ -137,12 +139,8 @@ export default function LaunchChecklistWizard({ clientId, fallbackName, onClose,
       setSaveError("Complete the kick-off call before launching.");
       return;
     }
-    if (launchAdsGateApplies(formProfile) && !isLaunchAdsReady(draft.ads_ready)) {
-      setSaveError("Ads have to be scheduled or published before this checklist can be filled.");
-      return;
-    }
     if (!isLaunchChecklistComplete(draft, formProfile)) {
-      setSaveError("Confirm every checklist item, add the Go High Level number, add the launch call recording link, select completed-by, and type LAUNCH before going live.");
+      setSaveError("Each spot check needs the detail you saw, plus completed-by and LAUNCH. A plain yes does not count.");
       const items = getLaunchItemsForProfile(formProfile);
       const firstIncomplete = items.find(item => !isLaunchItemSatisfied(item, draft));
       if (firstIncomplete) scrollToItem(firstIncomplete.key);
@@ -167,8 +165,6 @@ export default function LaunchChecklistWizard({ clientId, fallbackName, onClose,
 
   const totalItems = checklistConfig?.items.length ?? getLaunchItemsForProfile(formProfile).length;
   const satisfiedCount = countSatisfiedItems(draft, formProfile);
-  const adsGateApplies = launchAdsGateApplies(formProfile);
-  const adsReady = isLaunchAdsReady(draft.ads_ready);
   const canSubmit = kickoffComplete && isLaunchChecklistComplete(draft, formProfile) && !saving;
   const sections = checklistConfig?.sections ?? getLaunchSectionsForProfile(formProfile);
 
@@ -220,49 +216,13 @@ export default function LaunchChecklistWizard({ clientId, fallbackName, onClose,
                 {launchWalkthroughBlurb(formProfile)}
               </p>
 
-              {adsGateApplies && (
-                <fieldset className="rounded-lg px-4 py-3 space-y-2" style={{ border: "1px solid rgba(255,255,255,0.08)", background: "#0a1628" }}>
-                  <legend className="text-sm font-semibold text-slate-200 px-1">Ads</legend>
-                  <p className="text-xs text-slate-500">The checklist stays locked until the ads are scheduled or already published.</p>
-                  <div className="flex flex-wrap gap-2">
-                    {LAUNCH_ADS_READY.map(value => {
-                      const selected = draft.ads_ready === value;
-                      return (
-                        <label
-                          key={value}
-                          className="text-sm font-medium px-3 py-1.5 rounded-lg cursor-pointer"
-                          style={{
-                            color: selected ? "#e2e8f0" : "#94a3b8",
-                            background: selected ? "rgba(34,197,94,0.16)" : "#0f2040",
-                            border: selected ? "1px solid rgba(34,197,94,0.4)" : "1px solid rgba(255,255,255,0.12)",
-                          }}
-                        >
-                          <input
-                            type="radio"
-                            name="ads_ready"
-                            value={value}
-                            checked={selected}
-                            onChange={() => {
-                              setDraft(prev => ({ ...prev, ads_ready: value }));
-                              setSaveError(null);
-                            }}
-                            className="sr-only"
-                          />
-                          {launchAdsReadyLabel(value)}
-                        </label>
-                      );
-                    })}
-                  </div>
-                </fieldset>
-              )}
-
               {!hasLaunchKit && (
                 <p className="text-sm text-sky-300 rounded-lg px-4 py-3 bg-sky-950/40 border border-sky-500/30">
-                  No Launch Kit has been generated for this client. The kit is the leave-behind for the Launch Call — open <strong>Kit</strong> from the roster actions to generate it. You can still mark the client live.
+                  No Launch Kit has been generated for this client. That packet is what you send them — open <strong>Kit</strong> from the roster actions to generate it. You can still mark the client live.
                 </p>
               )}
 
-              <div className={adsGateApplies && !adsReady ? "space-y-5 opacity-50 pointer-events-none" : "space-y-5"}>
+              <div className="space-y-5">
               <div className="grid gap-4 sm:grid-cols-2">
                 <label className="block space-y-1.5">
                   <span className="text-sm font-medium text-slate-400">Launch date</span>
@@ -288,20 +248,6 @@ export default function LaunchChecklistWizard({ clientId, fallbackName, onClose,
                     ))}
                   </select>
                 </label>
-                <label className="block space-y-1.5 sm:col-span-2">
-                  <span className="text-sm font-medium text-slate-400">Go High Level number</span>
-                  <input
-                    type="tel"
-                    value={draft.phone_ghl}
-                    onChange={e => setDraft(prev => ({ ...prev, phone_ghl: e.target.value }))}
-                    placeholder="Number we prospect this client with"
-                    className="w-full px-3 py-2 rounded-lg text-sm outline-none"
-                    style={fieldStyle}
-                  />
-                  <p className="text-xs text-slate-500">
-                    Saved on the client file and used on the virtual business card — our GHL number, not the LO&apos;s personal phone.
-                  </p>
-                </label>
               </div>
 
               {sections.map(section => (
@@ -316,53 +262,6 @@ export default function LaunchChecklistWizard({ clientId, fallbackName, onClose,
                   onPatchConfirmation={patchConfirmation}
                 />
               ))}
-
-              <section
-                className="rounded-lg overflow-hidden"
-                style={{ border: "1px solid rgba(255,255,255,0.08)", background: "#0a1628" }}
-              >
-                <div className="px-4 py-3" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-                  <h3 className="text-sm font-semibold text-slate-200">Launch Call</h3>
-                  <p className="text-xs mt-0.5 text-slate-500">Saved to Client Calls history when you go live.</p>
-                </div>
-                <div className="px-4 py-4 space-y-4">
-                  <label className="block space-y-1.5">
-                    <span className="text-sm font-medium text-slate-400">Launch call recording link</span>
-                    <input
-                      type="url"
-                      value={draft.recording_url}
-                      onChange={e => setDraft(prev => ({ ...prev, recording_url: e.target.value }))}
-                      placeholder="https://…"
-                      className="w-full px-3 py-2 rounded-lg text-sm outline-none"
-                      style={fieldStyle}
-                    />
-                  </label>
-                  <label className="block space-y-1.5">
-                    <span className="text-sm font-medium text-slate-400">Launch call transcript</span>
-                    <textarea
-                      value={draft.transcript}
-                      onChange={e => setDraft(prev => ({ ...prev, transcript: e.target.value }))}
-                      rows={5}
-                      placeholder="Paste call transcript…"
-                      className="w-full px-3 py-2 rounded-lg text-sm outline-none resize-y"
-                      style={fieldStyle}
-                    />
-                    <p className="text-xs text-slate-500">Paste the full call transcript for search and review in Client Calls.</p>
-                  </label>
-                </div>
-              </section>
-
-              <label className="block space-y-1.5">
-                <span className="text-sm font-medium text-slate-400">Notes (optional)</span>
-                <p className="text-xs text-slate-500">Saved to Client notes on the client file.</p>
-                <textarea
-                  value={draft.notes}
-                  onChange={e => setDraft(prev => ({ ...prev, notes: e.target.value }))}
-                  rows={3}
-                  className="w-full px-3 py-2 rounded-lg text-sm outline-none"
-                  style={fieldStyle}
-                />
-              </label>
 
               <label className="block space-y-1.5">
                 <span className="text-sm font-medium text-slate-400">
@@ -465,8 +364,12 @@ function ChecklistItemRow({
   onPatchConfirmation: (key: string, value: string) => void;
 }) {
   const satisfied = isLaunchItemSatisfied(item, draft);
-  const yesTyped = item.confirmType === "type_yes" && isTypedYes(draft.confirmations[item.key] ?? "");
-  const checkboxDisabled = item.confirmType === "type_yes" && !yesTyped;
+  const typed = draft.confirmations[item.key] ?? "";
+  const yesTyped = item.confirmType === "type_yes" && isTypedYes(typed);
+  const evidenceReady = item.confirmType === "evidence" && isSubstantiveLaunchEvidence(typed);
+  const checkboxDisabled =
+    (item.confirmType === "type_yes" && !yesTyped) ||
+    (item.confirmType === "evidence" && !evidenceReady);
 
   return (
     <div
@@ -477,18 +380,22 @@ function ChecklistItemRow({
         border: satisfied ? "1px solid rgba(34,197,94,0.2)" : "1px solid transparent",
       }}
     >
-      {item.confirmType === "type_yes" && (
+      {(item.confirmType === "type_yes" || item.confirmType === "evidence") && (
         <div className="mb-2 space-y-1">
           <input
             type="text"
             value={draft.confirmations[item.key] ?? ""}
             onChange={e => onPatchConfirmation(item.key, e.target.value)}
-            placeholder='Type "yes" to confirm'
+            placeholder={item.confirmType === "evidence" ? item.evidencePrompt ?? "Type the detail you checked" : 'Type "yes" to confirm'}
             className="w-full px-2 py-1.5 rounded text-xs outline-none"
             style={fieldStyle}
             autoComplete="off"
           />
-          <p className="text-xs text-slate-500">Type yes to confirm you verified this item.</p>
+          <p className="text-xs text-slate-500">
+            {item.confirmType === "evidence"
+              ? "Type the detail you checked. A plain yes does not count."
+              : "Type yes to confirm you verified this item."}
+          </p>
         </div>
       )}
       <label className={`flex items-start gap-3 ${checkboxDisabled ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}>

@@ -9,18 +9,20 @@ import { normalizeServiceProgram } from '@/lib/service-program';
 
 /** Live walkthrough sections. Older submissions still use the legacy section ids. */
 export const LAUNCH_SECTIONS = [
-  { id: 'flow', label: 'Lead flow' },
-  { id: 'account', label: 'Account' },
+  { id: 'tech', label: 'Tech spot check' },
 ] as const;
 
 export type LaunchSectionId =
   | (typeof LAUNCH_SECTIONS)[number]['id']
+  | 'flow'
+  | 'account'
   | 'media_buying'
   | 'funnel'
   | 'ghl_subaccount'
   | 'admin';
 
 export const LAUNCH_SECTION_LABELS: Record<LaunchSectionId, string> = {
+  tech: 'Tech spot check',
   flow: 'Lead flow',
   account: 'Account',
   media_buying: 'Media Buying',
@@ -38,7 +40,9 @@ export type LaunchChecklistItemDef = {
   key: string;
   label: string;
   section: LaunchSectionId;
-  confirmType: 'checkbox' | 'type_yes';
+  confirmType: 'checkbox' | 'type_yes' | 'evidence';
+  /** Shown on evidence lines. The typed value is the proof, not the word yes. */
+  evidencePrompt?: string;
   helpText?: string;
   links?: LaunchChecklistLink[];
   profiles?: OnboardingFormProfile[];
@@ -59,6 +63,64 @@ const ALL_PROFILES: OnboardingFormProfile[] = ['marketing_core', 'marketing_lead
 const AD_PROFILES: OnboardingFormProfile[] = ['marketing_core', 'marketing_lead_gen'];
 
 export const LAUNCH_CHECKLIST_ITEMS: LaunchChecklistItemDef[] = [
+  {
+    key: 'tech_ads_budget',
+    label: 'Ads are scheduled with the correct budget',
+    section: 'tech',
+    confirmType: 'evidence',
+    evidencePrompt: 'Budget you saw on the scheduled campaign',
+    helpText: 'The campaign is scheduled, not a draft, and the budget matches what this client bought. A plain yes does not count.',
+    profiles: ALL_PROFILES,
+  },
+  {
+    key: 'tech_make_scenario',
+    label: 'The MAKE scenario is activated and a test run worked',
+    section: 'tech',
+    confirmType: 'evidence',
+    evidencePrompt: 'Scenario name and what the test run did',
+    helpText: 'The scenario that delivers this client’s leads is on, and you saw a test run succeed. Name the scenario.',
+    profiles: ALL_PROFILES,
+  },
+  {
+    key: 'tech_lead_end_to_end',
+    label: 'A lead was tested from the front of the funnel to the end',
+    section: 'tech',
+    confirmType: 'evidence',
+    evidencePrompt: 'Test lead name or phone, and where it landed',
+    helpText: 'You sent one lead through the live path and saw it arrive at the end. Name that lead.',
+    profiles: ALL_PROFILES,
+  },
+  {
+    key: 'tech_launch_packet_sent',
+    label: 'The launch packet was sent to the client',
+    section: 'tech',
+    confirmType: 'evidence',
+    evidencePrompt: 'Where you sent the packet',
+    helpText: 'Generated is not sent. The client has the packet. Name the channel.',
+    profiles: ALL_PROFILES,
+  },
+  {
+    key: 'tech_team_updated',
+    label: 'The team was updated on this new client with the details',
+    section: 'tech',
+    confirmType: 'evidence',
+    evidencePrompt: 'Channel you posted in, and what you told them',
+    helpText: 'The update names the client, the offer, and what is live. Name the channel.',
+    profiles: ALL_PROFILES,
+  },
+  {
+    key: 'tech_funnel_pixel',
+    label: 'The funnel pixel is set to the correct event',
+    section: 'tech',
+    confirmType: 'evidence',
+    evidencePrompt: 'Pixel event you saw fire',
+    helpText: 'You saw the pixel fire the conversion event this account uses. Name that event.',
+    profiles: ALL_PROFILES,
+  },
+];
+
+/** Previous spot check. Used only to read submissions already on file. */
+const PRIOR_LAUNCH_CHECKLIST_ITEMS: LaunchChecklistItemDef[] = [
   {
     key: 'flow_ad_opens_funnel',
     label: 'The ad link opens the live funnel',
@@ -331,13 +393,12 @@ export function getLaunchItemsForProfile(profile: OnboardingFormProfile): Launch
   return LAUNCH_CHECKLIST_ITEMS.filter(item => itemAppliesToProfile(item, profile));
 }
 
-function legacyLaunchItemsForProfile(profile: OnboardingFormProfile): LaunchChecklistItemDef[] {
-  return LEGACY_LAUNCH_CHECKLIST_ITEMS.filter(item => itemAppliesToProfile(item, profile));
+function priorLaunchItemsForProfile(profile: OnboardingFormProfile): LaunchChecklistItemDef[] {
+  return PRIOR_LAUNCH_CHECKLIST_ITEMS.filter(item => itemAppliesToProfile(item, profile));
 }
 
-/** Ad-running accounts stay locked until ads are scheduled or published. Dial-only does not. */
-export function launchAdsGateApplies(profile: OnboardingFormProfile): boolean {
-  return profile === 'marketing_core' || profile === 'marketing_lead_gen';
+function legacyLaunchItemsForProfile(profile: OnboardingFormProfile): LaunchChecklistItemDef[] {
+  return LEGACY_LAUNCH_CHECKLIST_ITEMS.filter(item => itemAppliesToProfile(item, profile));
 }
 
 export function isLaunchAdsReady(value: unknown): value is LaunchAdsReady {
@@ -348,14 +409,8 @@ export function launchAdsReadyLabel(value: LaunchAdsReady): string {
   return value === 'scheduled' ? 'Scheduled' : 'Published';
 }
 
-export function launchWalkthroughBlurb(profile: OnboardingFormProfile): string {
-  if (profile === 'call_center') {
-    return 'This account does not run ads. Walk the dial path before going live so a lead can be worked and booked.';
-  }
-  if (profile === 'marketing_lead_gen') {
-    return 'Creative and the funnel are already signed off. This stays locked until the ads are scheduled or published, then confirm a lead from the ad reaches the client.';
-  }
-  return 'Creative and the funnel are already signed off. This stays locked until the ads are scheduled or published. Then spot-check that a lead gets through and a test text books an appointment.';
+export function launchWalkthroughBlurb(_profile?: OnboardingFormProfile): string {
+  return 'The client and CSM already ran the earlier forms. Spot-check the tech path. Each line needs the detail you saw. A plain yes does not count.';
 }
 
 export function getLaunchSectionsForProfile(profile: OnboardingFormProfile) {
@@ -376,7 +431,7 @@ function checklistKeys(responses: Record<string, unknown>): string[] {
   return Object.keys(raw as Record<string, unknown>);
 }
 
-/** New walkthrough, unless this submission was filed on the old creative checklist. */
+/** Current tech spot check, unless this submission was filed on an older checklist. */
 export function itemsForLaunchResponses(
   responses: Record<string, unknown>,
   profileOverride?: OnboardingFormProfile,
@@ -385,9 +440,12 @@ export function itemsForLaunchResponses(
   const live = getLaunchItemsForProfile(profile);
   const keys = checklistKeys(responses);
   const liveKeys = new Set(live.map(item => item.key));
-  if (keys.some(key => liveKeys.has(key)) || isLaunchAdsReady(responses.ads_ready) || keys.length === 0) {
-    return live;
-  }
+  if (keys.some(key => liveKeys.has(key)) || keys.length === 0) return live;
+
+  const prior = priorLaunchItemsForProfile(profile);
+  const priorKeys = new Set(prior.map(item => item.key));
+  if (keys.some(key => priorKeys.has(key)) || isLaunchAdsReady(responses.ads_ready)) return prior;
+
   const legacy = legacyLaunchItemsForProfile(profile);
   const legacyKeys = new Set(legacy.map(item => item.key));
   if (keys.some(key => legacyKeys.has(key))) return legacy;
@@ -424,7 +482,7 @@ export function emptyLaunchDraft(
   const confirmations: Record<string, string> = {};
   for (const item of getLaunchItemsForProfile(profile)) {
     checklist[item.key] = false;
-    if (item.confirmType === 'type_yes') confirmations[item.key] = '';
+    if (item.confirmType === 'type_yes' || item.confirmType === 'evidence') confirmations[item.key] = '';
   }
   return {
     launch_date: launchDate || new Date().toISOString().slice(0, 10),
@@ -445,10 +503,27 @@ export function isTypedYes(value: string): boolean {
   return value.trim().toLowerCase() === 'yes';
 }
 
+const LAUNCH_RUBBER_STAMP = new Set([
+  'yes', 'y', 'ok', 'okay', 'done', 'checked', 'check', 'complete', 'completed',
+  'na', 'pass', 'passed', 'good', 'true', 'confirmed', 'yup', 'yeah', 'yep',
+  'sure', 'correct', 'right', 'launch',
+]);
+
+/** Proof typed on a spot check. A plain yes, or the word LAUNCH, does not count. */
+export function isSubstantiveLaunchEvidence(value: string): boolean {
+  const trimmed = value.trim();
+  if (trimmed.length < 3) return false;
+  const normalized = trimmed.toLowerCase().replace(/[^a-z0-9]+/g, '');
+  return normalized.length >= 3 && !LAUNCH_RUBBER_STAMP.has(normalized);
+}
+
 export function isLaunchItemSatisfied(item: LaunchChecklistItemDef, draft: LaunchFormDraft): boolean {
   if (!draft.checklist[item.key]) return false;
   if (item.confirmType === 'type_yes') {
     return isTypedYes(draft.confirmations[item.key] ?? '');
+  }
+  if (item.confirmType === 'evidence') {
+    return isSubstantiveLaunchEvidence(draft.confirmations[item.key] ?? '');
   }
   return true;
 }
@@ -478,9 +553,6 @@ export function isLaunchChecklistComplete(
 ): boolean {
   if (!draft.launch_date.trim()) return false;
   if (!draft.completed_by_user_id.trim()) return false;
-  if (!draft.phone_ghl.trim()) return false;
-  if (!draft.recording_url.trim()) return false;
-  if (launchAdsGateApplies(profile) && !isLaunchAdsReady(draft.ads_ready)) return false;
   if (draft.final_confirmation.trim().toUpperCase() !== LAUNCH_FINAL_CONFIRMATION) return false;
   return getLaunchItemsForProfile(profile).every(item => isLaunchItemSatisfied(item, draft));
 }
@@ -553,7 +625,7 @@ export function launchResponsesToDraft(
   const rawConfirmations = responses.confirmations;
   if (rawConfirmations && typeof rawConfirmations === 'object') {
     for (const item of items) {
-      if (item.confirmType === 'type_yes') {
+      if (item.confirmType === 'type_yes' || item.confirmType === 'evidence') {
         const val = (rawConfirmations as Record<string, string>)[item.key];
         draft.confirmations[item.key] = typeof val === 'string' ? val : '';
       }
@@ -595,12 +667,15 @@ export function launchClientFileNoteSections(
     const items = getLaunchItemsForProfile(profile).filter(item => item.section === section.id);
     for (const item of items) {
       const status = formatLaunchItemStatus(item, draft);
+      const proof = (draft.confirmations[item.key] ?? '').trim();
       const value =
-        status === 'confirmed_typed_yes'
-          ? 'Confirmed (typed yes)'
-          : status === 'confirmed'
-            ? 'Confirmed'
-            : 'Not confirmed';
+        status === 'confirmed_evidence'
+          ? proof
+          : status === 'confirmed_typed_yes'
+            ? 'Confirmed (typed yes)'
+            : status === 'confirmed'
+              ? 'Confirmed'
+              : 'Not confirmed';
       sections.push({ label: `${section.label} — ${item.label}`, value });
     }
   }
@@ -611,8 +686,9 @@ export function launchClientFileNoteSections(
 export function formatLaunchItemStatus(
   item: LaunchChecklistItemDef,
   draft: LaunchFormDraft,
-): 'confirmed' | 'confirmed_typed_yes' | 'missing' {
+): 'confirmed' | 'confirmed_typed_yes' | 'confirmed_evidence' | 'missing' {
   if (!isLaunchItemSatisfied(item, draft)) return 'missing';
+  if (item.confirmType === 'evidence') return 'confirmed_evidence';
   if (item.confirmType === 'type_yes') return 'confirmed_typed_yes';
   return 'confirmed';
 }
@@ -654,6 +730,9 @@ export function formatLaunchSlackChecklist(responses: Record<string, unknown>): 
       const status = formatLaunchItemStatus(item, draft);
       if (status === 'missing') {
         lines.push(`  — ${item.label}`);
+      } else if (status === 'confirmed_evidence') {
+        const proof = (draft.confirmations[item.key] ?? '').trim();
+        lines.push(`  ✓ ${item.label}: ${proof}`);
       } else if (status === 'confirmed_typed_yes') {
         lines.push(`  ✓ ${item.label} (typed yes)`);
       } else {
