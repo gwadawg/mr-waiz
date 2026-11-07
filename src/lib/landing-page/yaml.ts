@@ -1,5 +1,5 @@
 import YAML from "yaml";
-import { HS_FIT_AGE, HS_STOCK_HERO, RM_STOCK_HERO, type LandingProduct } from "./products";
+import { DEFAULT_TAGLINE, HS_FIT_AGE, HS_STOCK_HERO, RM_STOCK_HERO, type LandingProduct } from "./products";
 import type { LandingDraft } from "./types";
 
 function phoneDigits(phone: string): string {
@@ -46,6 +46,13 @@ function contactBlock(draft: LandingDraft) {
   };
 }
 
+/** Reverse and HomeSafe must not ship the DSCR stock line. A real tagline is kept. */
+function equityTagline(raw: string): string {
+  const tagline = raw.trim();
+  if (!tagline || tagline === DEFAULT_TAGLINE) return "";
+  return tagline;
+}
+
 function equityYaml(draft: LandingDraft, product: "RM" | "HS"): string {
   const first = draft.firstName.trim() || draft.name.trim().split(/\s+/)[0] || "";
   const hero = product === "HS" ? HS_STOCK_HERO : RM_STOCK_HERO;
@@ -54,7 +61,7 @@ function equityYaml(draft: LandingDraft, product: "RM" | "HS"): string {
     firstName: draft.brandType === "company" ? "" : first,
     title: draft.title.trim(),
     company: draft.company.trim(),
-    tagline: draft.tagline.trim(),
+    tagline: equityTagline(draft.tagline),
   };
   if (draft.legalName.trim()) identity.legalName = draft.legalName.trim();
   const doc: Record<string, unknown> = {

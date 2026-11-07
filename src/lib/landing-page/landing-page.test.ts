@@ -12,7 +12,7 @@ import {
   validateForPublish,
   type SlugContext,
 } from "./intake";
-import { HS_STOCK_HERO, RM_STOCK_HERO } from "./products";
+import { DEFAULT_TAGLINE, HS_STOCK_HERO, RM_STOCK_HERO, type LandingProduct } from "./products";
 import { emptyPublish, toLandingResponses } from "./responses";
 import { verifyGithubSignature } from "./signature";
 import { groupLandingSites, shouldWritePrimaryUrl } from "./sites";
@@ -165,6 +165,7 @@ describe("landing page yaml", () => {
     assert.equal(parsed.fit, undefined);
     assert.equal((parsed.contacts as { phoneE164: string }).phoneE164, "15555550100");
     assert.equal((sms as { programName: string }).programName, "Jane Doe / Acme Lending");
+    assert.equal((parsed.identity as { tagline: string }).tagline, DEFAULT_TAGLINE);
 
     const later = YAML.parse(draftToYaml(draftForPublish(filled({ preview: false }), true))) as {
       preview: boolean;
@@ -190,6 +191,7 @@ describe("landing page yaml", () => {
     assert.equal(parsed.bookingUrl, undefined);
     assert.equal(identity.bio, undefined);
     assert.equal(identity.name, "Jane Doe");
+    assert.equal(identity.tagline, "");
     assert.equal(assets.headshot, "");
     assert.equal(assets.logo, "");
     assert.equal(compliance.sms.status, "ready");
@@ -368,6 +370,7 @@ describe("homesafe landing", () => {
     assert.equal(parsed.products, undefined);
     assert.equal(parsed.bookingUrl, undefined);
     assert.equal((parsed.copy as { heroHeadline: string }).heroHeadline, HS_STOCK_HERO);
+    assert.equal((parsed.identity as { tagline: string }).tagline, "");
     assert.equal(fit.age, 55);
     assert.equal(fit.creditScore, undefined);
     const withCredit = YAML.parse(
@@ -427,6 +430,73 @@ describe("homesafe landing", () => {
       },
     ]);
     assert.equal(sites[0]?.landingPageUrl, "https://hs.retirementmortgagexpert.com/jane-doe-1/");
+  });
+});
+
+describe("quiz url on publish", () => {
+  const products: LandingProduct[] = ["DSCR", "RM", "HS"];
+  const liveQuizzes = [
+    "https://hecm.homequityhacks.com/heath-ramsey/",
+    "https://quiz.dscrexperts.com/nicholas-donlon/1stpage",
+    "http://quiz.dscrexperts.com/plain",
+  ];
+
+  it("allows the live quiz hosts on every product", () => {
+    for (const product of products) {
+      for (const applyUrl of liveQuizzes) {
+        const errors = validateForPublish(filled({ applyUrl }), openSlug, product).filter(error =>
+          /quiz url/i.test(error),
+        );
+        assert.deepEqual(errors, []);
+      }
+    }
+  });
+
+  it("rejects javascript and userinfo, including on the live hosts", () => {
+    const rejected = [
+      ["javascript:alert(1)", /http\(s\)/i],
+      ["JavaScript:alert(1)", /http\(s\)/i],
+      ["https://user:pass@hecm.homequityhacks.com/quiz", /username or password/i],
+      ["https://user@quiz.dscrexperts.com/quiz", /username or password/i],
+      ["https://:secret@example.com/quiz", /username or password/i],
+    ] as const;
+    for (const product of products) {
+      for (const [applyUrl, pattern] of rejected) {
+        assert.ok(
+          validateForPublish(filled({ applyUrl }), openSlug, product).some(error => pattern.test(error)),
+          `${product} should reject ${applyUrl}`,
+        );
+      }
+    }
+  });
+});
+
+describe("equity tagline on publish", () => {
+  it("writes an empty tagline when reverse or HomeSafe would ship the DSCR line", () => {
+    for (const product of ["RM", "HS"] as const) {
+      for (const tagline of ["", "   ", DEFAULT_TAGLINE, `  ${DEFAULT_TAGLINE}  `]) {
+        const parsed = YAML.parse(draftToYaml(filled({ tagline }), product)) as {
+          identity: { tagline: string };
+          copy: { heroHeadline: string };
+        };
+        assert.equal(parsed.identity.tagline, "");
+        assert.equal(parsed.copy.heroHeadline, product === "HS" ? HS_STOCK_HERO : RM_STOCK_HERO);
+      }
+    }
+  });
+
+  it("keeps a real equity tagline and still writes the DSCR default on DSCR", () => {
+    const custom = "Cash from the home you already own";
+    for (const product of ["RM", "HS"] as const) {
+      const parsed = YAML.parse(draftToYaml(filled({ tagline: custom }), product)) as {
+        identity: { tagline: string };
+      };
+      assert.equal(parsed.identity.tagline, custom);
+    }
+    const dscr = YAML.parse(draftToYaml(filled({ tagline: DEFAULT_TAGLINE }))) as {
+      identity: { tagline: string };
+    };
+    assert.equal(dscr.identity.tagline, DEFAULT_TAGLINE);
   });
 });
 
