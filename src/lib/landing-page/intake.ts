@@ -372,6 +372,28 @@ function pushHexError(errors: string[], label: string, value: string, required: 
   if (!HEX_COLOR.test(value)) errors.push(`${label} must be a hex color like #1B3A2F`);
 }
 
+/** Publish accepts any http(s) host. It rejects other schemes and userinfo. */
+function applyUrlError(raw: string): string | null {
+  const url = raw.trim();
+  if (!/^https?:\/\/\S+$/i.test(url)) {
+    return "Quiz URL must be a full http(s) link";
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return "Quiz URL must be a full http(s) link";
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    return "Quiz URL must be a full http(s) link";
+  }
+  const authority = url.slice(url.indexOf("//") + 2).split(/[/?#]/)[0] ?? "";
+  if (authority.includes("@") || parsed.username !== "" || parsed.password !== "") {
+    return "Quiz URL must not include a username or password";
+  }
+  return null;
+}
+
 export function validateForPublish(
   draft: LandingDraft,
   ctx: SlugContext,
@@ -390,10 +412,12 @@ export function validateForPublish(
   if (individualBrand && !draft.nmlsIndividual) errors.push("Individual NMLS is required");
   if (!draft.nmlsCompany) errors.push("Company NMLS is required");
   if (!draft.applyUrl) errors.push("Quiz URL is required");
-  else if (!/^https?:\/\/\S+$/i.test(draft.applyUrl)) {
-    errors.push("Quiz URL must be a full http(s) link");
-  } else if (equity && hasTrackingParams(draft.applyUrl)) {
-    errors.push("Quiz URL must be a plain link. Leave off utm, fbclid, and gclid.");
+  else {
+    const applyProblem = applyUrlError(draft.applyUrl);
+    if (applyProblem) errors.push(applyProblem);
+    else if (equity && hasTrackingParams(draft.applyUrl)) {
+      errors.push("Quiz URL must be a plain link. Leave off utm, fbclid, and gclid.");
+    }
   }
   if (product === "DSCR") {
     if (draft.bookingUrl && !/^https?:\/\/\S+$/i.test(draft.bookingUrl)) {
