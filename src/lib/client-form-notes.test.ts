@@ -165,10 +165,10 @@ describe('client form notes', () => {
     }));
     const labels = sections.map(section => section.label);
     assert.ok(labels.includes('Company NMLS'));
-    assert.ok(labels.includes('Review link'));
     assert.ok(labels.includes('Company address'));
     assert.equal(labels.includes('Company licensed states'), false);
-    assert.equal(sections.some(section => section.value.includes('Bio on the profile')), true);
+    assert.equal(labels.includes('Review link'), false);
+    assert.equal(sections.some(section => section.value.includes('Bio on the profile')), false);
   });
 
   it('keeps churn feedback and internal notes for the client file', () => {

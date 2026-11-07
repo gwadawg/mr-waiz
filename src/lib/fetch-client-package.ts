@@ -73,6 +73,7 @@ export async function fetchClientContextPackage(
       .from('client_notes')
       .select(NOTE_FIELDS)
       .eq('client_id', clientId)
+      .is('contact_id', null)
       .is('deleted_at', null)
       .order('created_at', { ascending: false })
       .limit(50),

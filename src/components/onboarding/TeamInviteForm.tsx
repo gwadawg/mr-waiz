@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type CSSProperties, type FormEvent, type ReactNode } from "react";
+import PersonPlusEditor, { type PlusDraft } from "@/components/person/PersonPlusEditor";
 import {
   BTN_PRIMARY_BG,
   FONT_BODY,
@@ -10,11 +11,14 @@ import {
   WaizWordmark,
 } from "@/components/onboarding/brand";
 import {
-  CONTACT_TYPE_OPTIONS,
-  contactRequiresLicensedStates,
+  ADDITIONAL_CONTACT_TYPE_OPTIONS,
   type ContactType,
 } from "@/lib/client-contacts";
-import { US_STATES } from "@/lib/us-states";
+import {
+  missingRoleRequirement,
+  type PersonProfile,
+  type PlusItemKey,
+} from "@/lib/person-profile";
 
 type Prefetch = {
   client_name: string;
@@ -28,7 +32,10 @@ type Draft = {
   phone: string;
   nmls: string;
   states_licensed: string[];
-  notes: string;
+  profile: PersonProfile;
+  notes: { body: string }[];
+  headshot: File | null;
+  files: File[];
 };
 
 const EMPTY: Draft = {
@@ -38,11 +45,30 @@ const EMPTY: Draft = {
   phone: "",
   nmls: "",
   states_licensed: [],
-  notes: "",
+  profile: {},
+  notes: [],
+  headshot: null,
+  files: [],
 };
 
-const INPUT =
-  "w-full px-4 py-3 text-sm outline-none rounded-xl border bg-white";
+const INPUT = "w-full px-4 py-3 text-sm outline-none rounded-xl border bg-white";
+
+function plusDraft(draft: Draft): PlusDraft {
+  return {
+    email: draft.email,
+    phone: draft.phone,
+    nmls: draft.nmls,
+    states_licensed: draft.states_licensed,
+    profile: draft.profile,
+    notes: draft.notes,
+    files: [
+      ...(draft.headshot
+        ? [{ kind: "headshot" as const, file_name: draft.headshot.name, public_url: null }]
+        : []),
+      ...draft.files.map(file => ({ kind: "other" as const, file_name: file.name, public_url: null })),
+    ],
+  };
+}
 
 export default function TeamInviteForm({ token }: { token: string }) {
   const [prefetch, setPrefetch] = useState<Prefetch | null>(null);
@@ -61,9 +87,7 @@ export default function TeamInviteForm({ token }: { token: string }) {
         if (!res.ok) throw new Error(data.error ?? "Invalid invite link");
         if (!cancelled) setPrefetch(data);
       } catch (e) {
-        if (!cancelled) {
-          setLoadError(e instanceof Error ? e.message : "Invalid invite link");
-        }
+        if (!cancelled) setLoadError(e instanceof Error ? e.message : "Invalid invite link");
       }
     })();
     return () => {
@@ -71,35 +95,57 @@ export default function TeamInviteForm({ token }: { token: string }) {
     };
   }, [token]);
 
-  const showNmls = draft.contact_type === "loa" || draft.contact_type === "co_lo";
-  const showStates = contactRequiresLicensedStates(draft.contact_type);
-
-  function canSubmit(): boolean {
-    if (!draft.contact_type || !draft.name.trim()) return false;
-    if (showStates && draft.states_licensed.length === 0) return false;
-    return true;
+  function attach(key: PlusItemKey, value: string | string[] | File) {
+    setDraft(current => {
+      const next = { ...current, profile: { ...current.profile } };
+      if (value instanceof File) {
+        if (key === "headshot") next.headshot = value;
+        else if (key === "file") next.files = [...current.files, value];
+        return next;
+      }
+      if (key === "states_licensed" && Array.isArray(value)) {
+        next.states_licensed = value;
+        return next;
+      }
+      if (typeof value !== "string") return next;
+      const text = value.trim();
+      if (key === "email") next.email = text;
+      else if (key === "phone") next.phone = text;
+      else if (key === "nmls") next.nmls = text;
+      else if (key === "note") next.notes = [...current.notes, { body: text }];
+      else if (key === "biography" || key === "review_url" || key === "timezone" || key === "personal_address") {
+        next.profile = { ...current.profile, [key]: text };
+      }
+      return next;
+    });
   }
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
-    if (!canSubmit() || submitting) return;
+    if (!draft.contact_type || !draft.name.trim() || submitting) return;
+    const gap = missingRoleRequirement(draft.contact_type, {
+      states_licensed: draft.states_licensed,
+    });
+    if (gap) {
+      setSubmitError(gap);
+      return;
+    }
     setSubmitting(true);
     setSubmitError(null);
     try {
-      const res = await fetch("/api/onboard/team", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          token,
-          contact_type: draft.contact_type,
-          name: draft.name.trim(),
-          email: draft.email.trim() || null,
-          phone: draft.phone.trim() || null,
-          nmls: draft.nmls.trim() || null,
-          states_licensed: showStates ? draft.states_licensed : null,
-          notes: draft.notes.trim() || null,
-        }),
-      });
+      const form = new FormData();
+      form.set("token", token);
+      form.set("contact_type", draft.contact_type);
+      form.set("name", draft.name.trim());
+      if (draft.email) form.set("email", draft.email);
+      if (draft.phone) form.set("phone", draft.phone);
+      if (draft.nmls) form.set("nmls", draft.nmls);
+      form.set("states_licensed", JSON.stringify(draft.states_licensed));
+      form.set("profile", JSON.stringify(draft.profile));
+      form.set("notes", JSON.stringify(draft.notes.map(note => note.body)));
+      if (draft.headshot) form.set("headshot", draft.headshot);
+      draft.files.forEach((file, index) => form.set(`file_${index}`, file));
+      const res = await fetch("/api/onboard/team", { method: "POST", body: form });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to submit");
       setDone(true);
@@ -136,19 +182,6 @@ export default function TeamInviteForm({ token }: { token: string }) {
     return (
       <Shell>
         <Card>
-          <p
-            style={{
-              fontFamily: FONT_BODY,
-              fontSize: ".78rem",
-              fontWeight: 500,
-              letterSpacing: ".12em",
-              textTransform: "uppercase",
-              color: WAIZ.accent700,
-              marginBottom: "0.75rem",
-            }}
-          >
-            You&apos;re on the file
-          </p>
           <h1 style={titleStyle}>Thanks — you&apos;re added</h1>
           <p style={bodyStyle}>
             Your info is on the <strong>{prefetch.client_name}</strong> account
@@ -160,57 +193,34 @@ export default function TeamInviteForm({ token }: { token: string }) {
     );
   }
 
+  const canSubmit = Boolean(draft.contact_type && draft.name.trim());
+
   return (
     <Shell>
       <Card>
-        <p
-          style={{
-            fontFamily: FONT_BODY,
-            fontSize: ".78rem",
-            fontWeight: 500,
-            letterSpacing: ".12em",
-            textTransform: "uppercase",
-            color: WAIZ.accent700,
-            marginBottom: "0.5rem",
-          }}
-        >
+        <p style={{ fontFamily: FONT_BODY, fontSize: ".78rem", fontWeight: 500, letterSpacing: ".12em", textTransform: "uppercase", color: WAIZ.accent700, marginBottom: "0.5rem" }}>
           Team member form
         </p>
         <h1 style={titleStyle}>Join {prefetch.client_name}</h1>
         <p style={{ ...bodyStyle, marginBottom: "1.5rem" }}>
-          {prefetch.primary_contact_name
-            ? `Fill this out so we can add you to ${prefetch.primary_contact_name}'s account.`
-            : "Fill this out so we can add you to this Waiz client account."}
+          Start with your name and role. Press plus to add a headshot, bio, note, file, or anything else — only on your profile.
         </p>
-
         <form onSubmit={onSubmit} className="space-y-4">
           <label className="block">
             <span style={labelStyle}>Your role</span>
             <select
               required
               value={draft.contact_type}
-              onChange={e =>
-                setDraft(d => ({
-                  ...d,
-                  contact_type: e.target.value as ContactType | "",
-                  states_licensed:
-                    e.target.value === "co_lo" ? d.states_licensed : [],
-                }))
-              }
+              onChange={e => setDraft(d => ({ ...d, contact_type: e.target.value as ContactType | "" }))}
               className={INPUT}
               style={inputStyle}
             >
-              <option value="" disabled>
-                Select…
-              </option>
-              {CONTACT_TYPE_OPTIONS.map(o => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
+              <option value="" disabled>Select…</option>
+              {ADDITIONAL_CONTACT_TYPE_OPTIONS.map(option => (
+                <option key={option.value} value={option.value}>{option.label}</option>
               ))}
             </select>
           </label>
-
           <label className="block">
             <span style={labelStyle}>Full name</span>
             <input
@@ -223,106 +233,26 @@ export default function TeamInviteForm({ token }: { token: string }) {
               placeholder="Jane Smith"
             />
           </label>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <label className="block">
-              <span style={labelStyle}>Email</span>
-              <input
-                type="email"
-                value={draft.email}
-                onChange={e => setDraft(d => ({ ...d, email: e.target.value }))}
-                className={INPUT}
-                style={inputStyle}
-              />
-            </label>
-            <label className="block">
-              <span style={labelStyle}>Phone</span>
-              <input
-                type="tel"
-                value={draft.phone}
-                onChange={e => setDraft(d => ({ ...d, phone: e.target.value }))}
-                className={INPUT}
-                style={inputStyle}
-              />
-            </label>
-          </div>
-
-          {showNmls && (
-            <label className="block">
-              <span style={labelStyle}>NMLS (optional)</span>
-              <input
-                type="text"
-                value={draft.nmls}
-                onChange={e => setDraft(d => ({ ...d, nmls: e.target.value }))}
-                className={INPUT}
-                style={inputStyle}
-              />
-            </label>
-          )}
-
-          {showStates && (
-            <fieldset>
-              <legend style={{ ...labelStyle, marginBottom: "0.5rem" }}>
-                Licensed states <span style={{ color: "#b45309" }}>*</span>
-              </legend>
-              <div
-                className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-48 overflow-y-auto p-3 rounded-xl"
-                style={{ border: `1px solid ${WAIZ.line}`, background: WAIZ.tint }}
-              >
-                {US_STATES.map(s => {
-                  const checked = draft.states_licensed.includes(s.code);
-                  return (
-                    <label
-                      key={s.code}
-                      className="flex items-center gap-2 text-sm cursor-pointer"
-                      style={{ fontFamily: FONT_BODY, color: WAIZ.ink }}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={() =>
-                          setDraft(d => ({
-                            ...d,
-                            states_licensed: checked
-                              ? d.states_licensed.filter(c => c !== s.code)
-                              : [...d.states_licensed, s.code],
-                          }))
-                        }
-                      />
-                      {s.code}
-                    </label>
-                  );
-                })}
-              </div>
-            </fieldset>
-          )}
-
-          <label className="block">
-            <span style={labelStyle}>Anything we should know? (optional)</span>
-            <textarea
-              value={draft.notes}
-              onChange={e => setDraft(d => ({ ...d, notes: e.target.value }))}
-              rows={2}
-              className={`${INPUT} resize-y`}
-              style={inputStyle}
-              placeholder="Role on the team, best times to loop you in…"
+          {draft.contact_type && (
+            <PersonPlusEditor
+              tone="light"
+              role={draft.contact_type}
+              draft={plusDraft(draft)}
+              disabled={submitting}
+              onAttach={attach}
             />
-          </label>
-
-          {submitError && (
-            <p style={{ fontFamily: FONT_BODY, fontSize: ".875rem", color: "#dc2626" }}>
-              {submitError}
-            </p>
           )}
-
+          {submitError && (
+            <p style={{ fontFamily: FONT_BODY, fontSize: ".875rem", color: "#dc2626" }}>{submitError}</p>
+          )}
           <button
             type="submit"
-            disabled={submitting || !canSubmit()}
+            disabled={submitting || !canSubmit}
             className="w-full py-3.5 rounded-xl text-white font-semibold text-sm"
             style={{
               fontFamily: FONT_BODY,
               background: BTN_PRIMARY_BG,
-              opacity: submitting || !canSubmit() ? 0.55 : 1,
+              opacity: submitting || !canSubmit ? 0.55 : 1,
               boxShadow: SHADOW,
             }}
           >
@@ -349,15 +279,7 @@ function Shell({ children }: { children: ReactNode }) {
 
 function Card({ children }: { children: ReactNode }) {
   return (
-    <div
-      className="w-full max-w-lg p-6 sm:p-8"
-      style={{
-        borderRadius: 22,
-        background: WAIZ.white,
-        border: `1px solid ${WAIZ.line}`,
-        boxShadow: SHADOW,
-      }}
-    >
+    <div className="w-full max-w-lg p-6 sm:p-8" style={{ borderRadius: 22, background: WAIZ.white, border: `1px solid ${WAIZ.line}`, boxShadow: SHADOW }}>
       {children}
     </div>
   );

@@ -2,9 +2,9 @@ import { NextResponse } from 'next/server';
 import { getAuthContext, isAuthError, requireAnyPermission } from '@/lib/api-auth';
 import {
   CLIENT_CONTACT_FIELDS,
-  type ContactType,
   validateContactPatch,
 } from '@/lib/client-contacts';
+import { syncPersonColumns } from '@/lib/person-store';
 
 // PATCH /api/clients/[id]/contacts/[contactId] — update an additional contact.
 export async function PATCH(
@@ -31,10 +31,7 @@ export async function PATCH(
     return NextResponse.json({ error: fetchError.message }, { status });
   }
 
-  const validated = validateContactPatch(body, {
-    contact_type: existing.contact_type as ContactType,
-    states_licensed: existing.states_licensed,
-  });
+  const validated = validateContactPatch(body);
   if (!validated.ok) {
     return NextResponse.json({ error: validated.error }, { status: 400 });
   }
@@ -55,6 +52,14 @@ export async function PATCH(
     const status = error.code === 'PGRST116' ? 404 : 500;
     return NextResponse.json({ error: error.message }, { status });
   }
+
+  try {
+    await syncPersonColumns(ctx.service, clientId, contactId);
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+
   return NextResponse.json({ contact: data });
 }
 
@@ -69,6 +74,20 @@ export async function DELETE(
   if (denied) return denied;
 
   const { id: clientId, contactId } = await params;
+
+  const { data: existing, error: fetchError } = await ctx.service
+    .from('client_contacts')
+    .select('id, contact_type')
+    .eq('id', contactId)
+    .eq('client_id', clientId)
+    .single();
+  if (fetchError) {
+    const status = fetchError.code === 'PGRST116' ? 404 : 500;
+    return NextResponse.json({ error: fetchError.message }, { status });
+  }
+  if (existing.contact_type === 'primary_lo') {
+    return NextResponse.json({ error: 'The primary loan officer stays on the account' }, { status: 400 });
+  }
 
   const { data, error } = await ctx.service
     .from('client_contacts')

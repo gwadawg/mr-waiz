@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase';
 import { applyOnboardingSubmission, uploadClientHeadshot } from '@/lib/apply-onboarding';
 import { parseOnboardingFormFields } from '@/lib/onboarding-form';
+import { uploadLoosePersonFile } from '@/lib/person-store';
 
 const RATE_LIMIT_MS = 30_000;
 const recentSubmits = new Map<string, number>();
@@ -14,6 +15,8 @@ function rateLimitKey(req: Request, email: string): string {
 async function parseMultipart(req: Request): Promise<{
   body: Record<string, unknown>;
   headshotFile: File | null;
+  memberFiles: { index: number; kind: 'headshot' | 'other'; file: File }[];
+  primaryFiles: File[];
 }> {
   let form: FormData;
   try {
@@ -31,13 +34,36 @@ async function parseMultipart(req: Request): Promise<{
 
   const body: Record<string, unknown> = {};
   let headshotFile: File | null = null;
+  const memberFiles: { index: number; kind: 'headshot' | 'other'; file: File }[] = [];
+  const primaryFiles: File[] = [];
 
   for (const [key, value] of form.entries()) {
-    if (key === 'headshot' && value instanceof File && value.size > 0) {
-      headshotFile = value;
-      continue;
+    if (value instanceof File && value.size > 0) {
+      if (key === 'headshot') {
+        headshotFile = value;
+        continue;
+      }
+      const memberHeadshot = /^member_headshot_(\d+)$/.exec(key);
+      const memberFile = /^member_file_(\d+)_\d+$/.exec(key);
+      if (memberHeadshot) {
+        memberFiles.push({ index: Number(memberHeadshot[1]), kind: 'headshot', file: value });
+        continue;
+      }
+      if (memberFile) {
+        memberFiles.push({ index: Number(memberFile[1]), kind: 'other', file: value });
+        continue;
+      }
+      if (/^primary_file_\d+$/.test(key)) {
+        primaryFiles.push(value);
+        continue;
+      }
     }
-    if (key === 'states_licensed' || key === 'company_states_licensed' || key === 'additional_members') {
+    if (
+      key === 'states_licensed' ||
+      key === 'company_states_licensed' ||
+      key === 'additional_members' ||
+      key === 'person_notes'
+    ) {
       try {
         body[key] = JSON.parse(String(value));
       } catch {
@@ -52,7 +78,7 @@ async function parseMultipart(req: Request): Promise<{
     body[key] = typeof value === 'string' ? value : String(value);
   }
 
-  return { body, headshotFile };
+  return { body, headshotFile, memberFiles, primaryFiles };
 }
 
 // POST /api/onboard/submit — public client onboarding form (multipart or JSON).
@@ -61,9 +87,11 @@ export async function POST(req: Request) {
     const contentType = req.headers.get('content-type') ?? '';
     let body: Record<string, unknown> = {};
     let headshotFile: File | null = null;
+    let memberFiles: { index: number; kind: 'headshot' | 'other'; file: File }[] = [];
+    let primaryFiles: File[] = [];
 
     if (contentType.includes('multipart/form-data')) {
-      ({ body, headshotFile } = await parseMultipart(req));
+      ({ body, headshotFile, memberFiles, primaryFiles } = await parseMultipart(req));
     } else {
       body = await req.json();
     }
@@ -81,6 +109,23 @@ export async function POST(req: Request) {
     if (headshotFile) {
       input.headshot_url = await uploadClientHeadshot(service, headshotFile);
       body.headshot_url = input.headshot_url;
+    }
+
+    input.primary_attachments = [];
+    for (const file of primaryFiles) {
+      input.primary_attachments.push(await uploadLoosePersonFile(service, 'other', file));
+    }
+
+    for (const item of memberFiles) {
+      const member = input.additional_members[item.index];
+      if (!member) continue;
+      const stored = await uploadLoosePersonFile(service, item.kind, item.file);
+      member.attachments = [...(member.attachments ?? []), stored];
+      if (Array.isArray(body.additional_members) && body.additional_members[item.index]) {
+        const rawMember = body.additional_members[item.index] as Record<string, unknown>;
+        const existing = Array.isArray(rawMember.attachments) ? rawMember.attachments : [];
+        rawMember.attachments = [...existing, stored];
+      }
     }
 
     const result = await applyOnboardingSubmission(service, input, body);

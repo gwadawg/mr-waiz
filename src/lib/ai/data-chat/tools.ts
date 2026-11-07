@@ -557,6 +557,7 @@ async function fetchClientNotes(ctx: AuthContext, clientId: string, limit = 15) 
     .from('client_notes')
     .select('id, note_type, reason_code, body, related_call_id, created_at')
     .eq('client_id', clientId)
+    .is('contact_id', null)
     .is('deleted_at', null)
     .order('created_at', { ascending: false })
     .limit(limit);

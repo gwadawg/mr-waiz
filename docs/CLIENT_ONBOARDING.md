@@ -96,7 +96,7 @@ Do **not** send GHL sub-account name at sign-up — kick-off sets `clients.name`
 
 **Example:** `https://<your-app>/onboard` or `https://<your-app>/onboard/dscr`
 
-Clients enter email + phone (required for matching), licensed states, business info, address, and optional headshot.
+Company and engagement questions stay on the form. The person starts with a name and role. Email and phone are added from plus (both are required before submit so the account can be matched). Headshot, bio, notes, files, and the other profile items are the same plus list — nothing else is on the page until it is added.
 
 - **1 match** → fields applied to `clients`, `new_account` → `onboarding`, then **GHL tag** + **ClickUp comment** + **Slack ops alert**. GHL/ClickUp only run when matched.
 - **0 or 2+ matches** → `client_form_submissions` row with `status: unmapped`; **Slack ops alert** explains the match failure. Resolve in **Client Roster → Unmapped onboarding forms** — linking to a client then triggers GHL + ClickUp.
@@ -106,7 +106,7 @@ Clients enter email + phone (required for matching), licensed states, business i
 Primary onboarding stays on the universal `/onboard` link. For additional users (LOA / Co-LO / other), use the **unique team invite** on Client File → Contacts:
 
 - **Copy link** generates (or returns) `clients.team_invite_token` → `/onboard/team/<token>`
-- Submit writes directly to `client_contacts` for that client (no email/phone matching)
+- The form is the same sparse profile as Client File → People: name, role, then plus (Headshot, Bio, Note, File, and the rest). Submit writes that person to `client_contacts` (no email/phone matching). A co-LO must add licensed states before submit.
 - **Rotate** invalidates the old token and copies a new URL
 
 | Endpoint | Auth | Purpose |

@@ -1226,24 +1226,14 @@ export default function ClientFile({
 
             {accountTab === "contacts" && (
             <div className="space-y-7">
-            <Section title={`Contacts (${contacts.length + 1})`}>
+            <Section title={`People (${contacts.length})`}>
               <p className="text-xs mb-3" style={{ color: "#64748b" }}>
-                Team members and the primary LO — shared across all offers for this client.
+                Each person starts with a name and role. Plus adds a headshot, bio, note, file, or anything else — on that person only.
               </p>
               <ClientContactsSection
                 clientId={identityClientId}
-                primary={{
-                  primary_contact_name: client?.primary_contact_name ?? null,
-                  primary_contact: client?.primary_contact ?? null,
-                  email: client?.email ?? null,
-                  billing_email: client?.billing_email ?? null,
-                  phone: client?.phone ?? null,
-                  nmls: client?.nmls ?? null,
-                  states_licensed: client?.states_licensed ?? null,
-                }}
                 contacts={contacts}
                 onReload={() => { void load(); }}
-                onEditProfile={() => setEditing(true)}
               />
             </Section>
             </div>
