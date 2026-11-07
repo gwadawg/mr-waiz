@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getAuthContext, isAuthError, requireAnyPermission } from '@/lib/api-auth';
 import { CLIENT_CALL_FIELDS } from '@/lib/client-calls';
-import { CLIENT_CONTACT_FIELDS } from '@/lib/client-contacts';
+import { dedupePeople, loadPeople } from '@/lib/person-store';
 import {
   resolveAccountIdentityClientId,
   resolveAccountMemberIds,
@@ -60,7 +60,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
   const labelMap = new Map(labelRows.map(r => [r.id, r]));
 
-  const [callsRes, notesRes, contactsRes] = await Promise.all([
+  const [callsRes, notesRes] = await Promise.all([
     ctx.service
       .from('client_calls')
       .select(CLIENT_CALL_FIELDS)
@@ -71,19 +71,21 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       .from('client_notes')
       .select(CLIENT_NOTES_FIELDS)
       .in('client_id', memberIds)
+      .is('contact_id', null)
       .is('deleted_at', null)
       .order('created_at', { ascending: false }),
-    ctx.service
-      .from('client_contacts')
-      .select(CLIENT_CONTACT_FIELDS)
-      .in('client_id', memberIds)
-      .order('sort_order', { ascending: true })
-      .order('created_at', { ascending: true }),
   ]);
 
   if (callsRes.error) return NextResponse.json({ error: callsRes.error.message }, { status: 500 });
   if (notesRes.error) return NextResponse.json({ error: notesRes.error.message }, { status: 500 });
-  if (contactsRes.error) return NextResponse.json({ error: contactsRes.error.message }, { status: 500 });
+
+  let contacts;
+  try {
+    contacts = dedupePeople(await loadPeople(ctx.service, memberIds, identityClientId));
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
 
   const authorIds = [
     ...(callsRes.data ?? []).map((c: { created_by?: string | null }) => c.created_by),
@@ -102,15 +104,6 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     offer_label: labelForClient(labelMap, n.client_id),
     created_by_label: n.created_by ? authorLabels[n.created_by] ?? null : null,
   }));
-
-  // Deduplicate contacts that were copied across offer rows (same name + email).
-  const seenContacts = new Set<string>();
-  const contacts = (contactsRes.data ?? []).filter((c: { name: string; email: string | null }) => {
-    const key = `${c.name.trim().toLowerCase()}|${(c.email ?? '').trim().toLowerCase()}`;
-    if (seenContacts.has(key)) return false;
-    seenContacts.add(key);
-    return true;
-  });
 
   const { data: identityRow } = mergedIdentity
     ? { data: mergedIdentity }

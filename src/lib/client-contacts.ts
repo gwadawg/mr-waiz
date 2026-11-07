@@ -1,15 +1,33 @@
-// Client account contacts: LOA, Co-LO, and other team members (primary holder stays on clients).
+// People on a client account. The primary loan officer is a row here too
+// (contact_type primary_lo). Optional facts live in profile, not extra columns.
 
+import { parsePersonProfile, type PersonFileSummary, type PersonProfile } from '@/lib/person-profile';
 import { normalizeStatesLicensed } from '@/lib/us-states';
 
-export const CONTACT_TYPE_CODES = ['loa', 'co_lo', 'other'] as const;
+export const CONTACT_TYPE_CODES = ['primary_lo', 'loa', 'co_lo', 'other'] as const;
 export type ContactType = (typeof CONTACT_TYPE_CODES)[number];
 
 export const CONTACT_TYPE_OPTIONS: { value: ContactType; label: string }[] = [
+  { value: 'primary_lo', label: 'Primary loan officer' },
   { value: 'loa', label: 'LOA / Assistant' },
   { value: 'co_lo', label: 'Co-LO / Partner LO' },
   { value: 'other', label: 'Other' },
 ];
+
+/** Roles a teammate can pick when adding someone. The primary row is created for the account. */
+export const ADDITIONAL_CONTACT_TYPE_OPTIONS = CONTACT_TYPE_OPTIONS.filter(o => o.value !== 'primary_lo');
+
+export type PersonNoteRow = {
+  id: string;
+  body: string;
+  created_at: string;
+};
+
+export type PersonFileRow = PersonFileSummary & {
+  id: string;
+  content_type?: string | null;
+  created_at?: string;
+};
 
 export type ClientContact = {
   id: string;
@@ -21,15 +39,18 @@ export type ClientContact = {
   nmls: string | null;
   states_licensed: string[] | null;
   notes: string | null;
+  profile: PersonProfile;
   sort_order: number;
   created_at: string;
   updated_at: string | null;
   created_by: string | null;
   updated_by: string | null;
+  person_notes?: PersonNoteRow[];
+  person_files?: PersonFileRow[];
 };
 
 export const CLIENT_CONTACT_FIELDS =
-  'id, client_id, contact_type, name, email, phone, nmls, states_licensed, notes, sort_order, created_at, updated_at, created_by, updated_by';
+  'id, client_id, contact_type, name, email, phone, nmls, states_licensed, notes, profile, sort_order, created_at, updated_at, created_by, updated_by';
 
 export function isValidContactType(value: unknown): value is ContactType {
   return typeof value === 'string' && (CONTACT_TYPE_CODES as readonly string[]).includes(value);
@@ -52,6 +73,7 @@ export type ContactInput = {
   nmls: string | null;
   states_licensed: string[] | null;
   notes: string | null;
+  profile: PersonProfile;
 };
 
 function optionalText(value: unknown): string | null {
@@ -72,13 +94,9 @@ export function validateContactInput(
     return { ok: false, error: 'name is required' };
   }
 
-  const states_licensed = contactRequiresLicensedStates(body.contact_type)
-    ? normalizeStatesLicensed(body.states_licensed)
-    : null;
-
-  if (contactRequiresLicensedStates(body.contact_type) && !states_licensed?.length) {
-    return { ok: false, error: 'Licensed states are required for Co-LO contacts' };
-  }
+  // States are a plus item. A co-LO can be created without them; the profile
+  // asks for them when that role is saved if they are still missing.
+  const states_licensed = normalizeStatesLicensed(body.states_licensed);
 
   return {
     ok: true,
@@ -90,13 +108,13 @@ export function validateContactInput(
       nmls: optionalText(body.nmls),
       states_licensed,
       notes: optionalText(body.notes),
+      profile: parsePersonProfile(body.profile),
     },
   };
 }
 
 export function validateContactPatch(
   body: Record<string, unknown>,
-  current: Pick<ClientContact, 'contact_type' | 'states_licensed'>,
 ): { ok: true; updates: Partial<ContactInput> } | { ok: false; error: string } {
   const updates: Partial<ContactInput> = {};
 
@@ -117,23 +135,9 @@ export function validateContactPatch(
   if ('phone' in body) updates.phone = optionalText(body.phone);
   if ('nmls' in body) updates.nmls = optionalText(body.nmls);
   if ('notes' in body) updates.notes = optionalText(body.notes);
-
-  const effectiveType = updates.contact_type ?? current.contact_type;
-
+  if ('profile' in body) updates.profile = parsePersonProfile(body.profile);
   if ('states_licensed' in body) {
-    updates.states_licensed = contactRequiresLicensedStates(effectiveType)
-      ? normalizeStatesLicensed(body.states_licensed)
-      : null;
-  } else if (updates.contact_type && !contactRequiresLicensedStates(effectiveType)) {
-    updates.states_licensed = null;
-  }
-
-  if (contactRequiresLicensedStates(effectiveType)) {
-    const resolvedStates =
-      updates.states_licensed !== undefined ? updates.states_licensed : current.states_licensed;
-    if (!resolvedStates?.length) {
-      return { ok: false, error: 'Licensed states are required for Co-LO contacts' };
-    }
+    updates.states_licensed = normalizeStatesLicensed(body.states_licensed);
   }
 
   if (Object.keys(updates).length === 0) {

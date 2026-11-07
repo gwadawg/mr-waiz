@@ -1073,9 +1073,30 @@ create table if not exists client_contacts (
   updated_at       timestamptz,
   created_by       uuid    references auth.users(id) on delete set null,
   updated_by       uuid    references auth.users(id) on delete set null,
+  profile          jsonb   not null default '{}'::jsonb,
   constraint client_contacts_type_check check (
-    contact_type in ('loa', 'co_lo', 'other')
+    contact_type in ('primary_lo', 'loa', 'co_lo', 'other')
   )
+);
+
+alter table client_contacts add column if not exists profile jsonb not null default '{}'::jsonb;
+alter table client_contacts drop constraint if exists client_contacts_type_check;
+alter table client_contacts add constraint client_contacts_type_check
+  check (contact_type in ('primary_lo', 'loa', 'co_lo', 'other'));
+
+alter table client_notes add column if not exists contact_id uuid references client_contacts(id) on delete cascade;
+
+create table if not exists client_contact_files (
+  id            uuid primary key default gen_random_uuid(),
+  contact_id    uuid not null references client_contacts(id) on delete cascade,
+  kind          text not null,
+  file_name     text not null,
+  content_type  text,
+  storage_path  text not null,
+  public_url    text,
+  created_at    timestamptz not null default now(),
+  created_by    uuid references auth.users(id) on delete set null,
+  constraint client_contact_files_kind_check check (kind in ('headshot', 'license', 'other'))
 );
 
 -- ─────────────────────────────────────────────────────────────────────────────

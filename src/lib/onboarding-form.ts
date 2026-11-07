@@ -1,4 +1,5 @@
 import { validateContactInput, type ContactType } from '@/lib/client-contacts';
+import { parsePersonProfile, type PersonProfile } from '@/lib/person-profile';
 import {
   normalizeEmailForMatch,
   normalizePhoneForMatch,
@@ -25,6 +26,15 @@ export type OnboardingMemberInput = {
   phone: string | null;
   nmls: string | null;
   states_licensed: string[] | null;
+  profile: PersonProfile;
+  notes: string[];
+  attachments?: {
+    kind: 'headshot' | 'other';
+    file_name: string;
+    content_type: string | null;
+    storage_path: string;
+    public_url: string | null;
+  }[];
 };
 
 export type OnboardingFormInput = {
@@ -53,6 +63,8 @@ export type OnboardingFormInput = {
   performance_unit: PerformanceUnit | null;
   crm_choice: CrmChoice | null;
   headshot_url?: string | null;
+  person_notes?: string[];
+  primary_attachments?: OnboardingMemberInput['attachments'];
   additional_members: OnboardingMemberInput[];
 };
 
@@ -95,11 +107,23 @@ function parseMembers(body: Record<string, unknown>): OnboardingMemberInput[] {
     if (!item || typeof item !== 'object') {
       throw new Error(`Invalid team member at position ${i + 1}`);
     }
-    const validated = validateContactInput(item as Record<string, unknown>);
+    const record = item as Record<string, unknown>;
+    const validated = validateContactInput(record);
     if (!validated.ok) {
       throw new Error(`Team member ${i + 1}: ${validated.error}`);
     }
-    members.push(validated.data);
+    const notes = Array.isArray(record.notes)
+      ? record.notes.filter((note): note is string => typeof note === 'string' && note.trim().length > 0)
+      : [];
+    const attachments = Array.isArray(record.attachments)
+      ? record.attachments.filter(item => item && typeof item === 'object') as OnboardingMemberInput['attachments']
+      : [];
+    members.push({
+      ...validated.data,
+      profile: parsePersonProfile(record.profile ?? validated.data.profile),
+      notes,
+      attachments,
+    });
   }
   return members;
 }
@@ -167,25 +191,16 @@ export function parseOnboardingFormFields(body: Record<string, unknown>): Onboar
   const crm_choice = parseCrmChoice(body, form_variant, performance_unit);
 
   const nmls = trim(body.nmls);
-  if (!nmls) throw new Error('NMLS is required');
-
   const states_licensed = normalizeStatesLicensed(body.states_licensed) ?? [];
-  if (!states_licensed.length) throw new Error('At least one licensed state is required');
-
   const city = trim(body.city);
   const state = trim(body.state).toUpperCase().slice(0, 2);
-  if (!city) throw new Error('City is required');
-  if (!state) throw new Error('State is required');
 
   const timezone = trim(body.timezone);
-  if (!timezone) throw new Error('Timezone is required');
-  if (!isKnownUsClientTimezone(timezone)) {
+  if (timezone && !isKnownUsClientTimezone(timezone)) {
     throw new Error('Please select a valid US timezone');
   }
 
   const biography = trim(body.biography);
-  if (!biography) throw new Error('Bio is required');
-
   const review_url = trim(body.review_url) || null;
   if (review_url && !/^https?:\/\/.+/i.test(review_url)) {
     throw new Error('Review URL must start with http:// or https://');
@@ -216,6 +231,9 @@ export function parseOnboardingFormFields(body: Record<string, unknown>): Onboar
   }
 
   const additional_members = parseMembers(body);
+  const person_notes = Array.isArray(body.person_notes)
+    ? body.person_notes.filter((note): note is string => typeof note === 'string' && note.trim().length > 0)
+    : [];
 
   return {
     form_variant,
@@ -243,6 +261,7 @@ export function parseOnboardingFormFields(body: Record<string, unknown>): Onboar
     performance_unit,
     crm_choice,
     headshot_url: trim(body.headshot_url) || null,
+    person_notes,
     additional_members,
   };
 }
@@ -261,16 +280,16 @@ export function onboardingToClientPatch(input: OnboardingFormInput): Record<stri
     email: input.email,
     billing_email: input.email,
     phone: input.phone,
-    nmls: input.nmls,
-    states_licensed: input.states_licensed,
-    biography: input.biography,
-    street_address: input.street_address || null,
-    city: input.city,
-    state: input.state,
-    zip_code: input.zip_code || null,
-    timezone: input.timezone,
     contact_role: obRoleToContactRole(input.ob_role),
   };
+  if (input.nmls) patch.nmls = input.nmls;
+  if (input.states_licensed.length) patch.states_licensed = input.states_licensed;
+  if (input.biography) patch.biography = input.biography;
+  if (input.street_address) patch.street_address = input.street_address;
+  if (input.city) patch.city = input.city;
+  if (input.state) patch.state = input.state;
+  if (input.zip_code) patch.zip_code = input.zip_code;
+  if (input.timezone) patch.timezone = input.timezone;
 
   const fullName = primaryContactNameFromInput(input);
   if (fullName) {
@@ -340,14 +359,9 @@ export function onboardingOverflowNoteSections(
   };
 
   add('Form', input.form_variant === 'dscr_performance' ? 'DSCR performance' : 'Core');
-  add('Name', [input.first_name, input.last_name].filter(Boolean).join(' '));
   const management = ACCOUNT_MANAGEMENT_OPTIONS.find(option => option.value === input.account_management);
   add('Account management', management?.label);
   add('Role', input.ob_role === 'owner' ? 'Owner of brokerage / lender' : input.ob_role === 'mlo' ? 'MLO' : input.ob_role);
-  add('Email', input.email);
-  add('Phone', input.phone);
-  add('NMLS', input.nmls);
-  if (input.states_licensed.length) add('States licensed', formatStatesLicensed(input.states_licensed));
   add('Brokerage', input.brokerage_name);
   add('Legal business name', input.legal_business_name);
   add('Website', input.website);
@@ -356,18 +370,10 @@ export function onboardingOverflowNoteSections(
   if (input.company_states_licensed.length) {
     add('Company licensed states', formatStatesLicensed(input.company_states_licensed));
   }
-  add('Bio', input.biography);
-  add('Review link', input.review_url);
-  add('Street', input.street_address);
-  add('City', input.city);
-  add('State', input.state);
-  add('ZIP', input.zip_code);
-  add('Timezone', input.timezone);
   const unit = PERFORMANCE_UNIT_OPTIONS.find(option => option.value === input.performance_unit);
   add('Leads or Conversations', unit?.label);
   const crm = CRM_CHOICE_OPTIONS.find(option => option.value === input.crm_choice);
   add('CRM', crm?.label);
-  add('Headshot', input.headshot_url);
   if (input.additional_members.length) {
     add(
       'Team members',
@@ -438,6 +444,7 @@ export function draftToSubmitBody(
     crm_choice: string;
     review_url: string;
     biography: string;
+    person_notes?: string[];
     additional_members: MemberDraft[];
   },
   formVariant: OnboardingFormVariant = 'core',
@@ -451,7 +458,13 @@ export function draftToSubmitBody(
       phone: m.phone.trim() || null,
       nmls: m.nmls.trim() || null,
       states_licensed: m.states_licensed.length ? m.states_licensed : null,
-      notes: null,
+      profile: {
+        ...(m.biography.trim() ? { biography: m.biography.trim() } : {}),
+        ...(m.review_url.trim() ? { review_url: m.review_url.trim() } : {}),
+        ...(m.timezone.trim() ? { timezone: m.timezone.trim() } : {}),
+        ...(m.personal_address.trim() ? { personal_address: m.personal_address.trim() } : {}),
+      },
+      notes: m.notes.map(note => note.trim()).filter(Boolean),
     }));
 
   return {
@@ -483,6 +496,7 @@ export function draftToSubmitBody(
     crm_choice: draft.crm_choice,
     review_url: draft.review_url,
     biography: draft.biography,
+    person_notes: JSON.stringify(draft.person_notes ?? []),
     additional_members: JSON.stringify(members),
   };
 }

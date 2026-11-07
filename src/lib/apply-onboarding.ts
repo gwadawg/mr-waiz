@@ -19,6 +19,7 @@ import {
 } from '@/lib/form-submissions';
 import { runOnboardingSideEffects, runOnboardingUnmappedNotification } from '@/lib/onboarding-side-effects';
 import { ensureAccountGroupForNewClient } from '@/lib/client-account-groups';
+import { saveSubmittedPerson } from '@/lib/person-store';
 
 const CLIENT_FIELDS =
   'id, name, lifecycle_status, email, phone, primary_contact_name, slack_id, onboarding_clickup_task_id, clickup_task_id, ghl_contact_id';
@@ -101,6 +102,7 @@ export async function applyOnboardingSubmission(
   if (error) throw new Error(error.message);
 
   await insertOnboardingContacts(service, client.id, input.additional_members);
+  await savePrimaryFromOnboarding(service, client.id, input);
   await saveOnboardingOverflowNote(service, client.id, input);
 
   const submission = await insertFormSubmission(service, {
@@ -168,6 +170,7 @@ export async function applyPendingOnboardingToClient(
   if (upErr) throw new Error(upErr.message);
 
   await insertOnboardingContacts(service, clientId, input.additional_members);
+  await savePrimaryFromOnboarding(service, clientId, input);
   await saveOnboardingOverflowNote(service, clientId, input);
 
   const { data: updatedSub, error: subErr } = await service
@@ -260,22 +263,44 @@ export async function insertOnboardingContacts(
   clientId: string,
   members: OnboardingMemberInput[],
 ): Promise<void> {
-  if (!members.length) return;
+  for (const member of members) {
+    await saveSubmittedPerson(service, clientId, {
+      contact_type: member.contact_type,
+      name: member.name,
+      email: member.email,
+      phone: member.phone,
+      nmls: member.nmls,
+      states_licensed: member.states_licensed,
+      profile: member.profile,
+      notes: member.notes,
+      attachments: member.attachments,
+    }, null);
+  }
+}
 
-  const rows = members.map((member, index) => ({
-    client_id: clientId,
-    contact_type: member.contact_type,
-    name: member.name,
-    email: member.email,
-    phone: member.phone,
-    nmls: member.nmls,
-    states_licensed: member.states_licensed,
-    notes: null,
-    sort_order: index,
-  }));
-
-  const { error } = await service.from('client_contacts').insert(rows);
-  if (error) throw new Error(error.message);
+async function savePrimaryFromOnboarding(
+  service: SupabaseClient,
+  clientId: string,
+  input: OnboardingFormInput,
+): Promise<void> {
+  const address = [input.street_address, input.city, input.state, input.zip_code].filter(Boolean).join(', ');
+  await saveSubmittedPerson(service, clientId, {
+    contact_type: 'primary_lo',
+    name: primaryContactNameFromInput(input) || input.email,
+    email: input.email,
+    phone: input.phone,
+    nmls: input.nmls,
+    states_licensed: input.states_licensed,
+    profile: {
+      ...(input.biography ? { biography: input.biography } : {}),
+      ...(input.review_url ? { review_url: input.review_url } : {}),
+      ...(input.timezone ? { timezone: input.timezone } : {}),
+      ...(address ? { personal_address: address } : {}),
+    },
+    notes: input.person_notes ?? [],
+    headshotUrl: input.headshot_url,
+    attachments: input.primary_attachments ?? [],
+  }, null);
 }
 
 export async function uploadClientHeadshot(

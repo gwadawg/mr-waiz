@@ -83,6 +83,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       .from('client_notes')
       .select(CLIENT_NOTES_FIELDS)
       .eq('client_id', id)
+      .is('contact_id', null)
       .is('deleted_at', null)
       .order('created_at', { ascending: false }),
     ctx.service

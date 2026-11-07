@@ -3,6 +3,7 @@
 import { useCallback, useMemo, useState } from "react";
 import OnboardingChoiceCard from "@/components/onboarding/OnboardingChoiceCard";
 import OnboardingThankYou from "@/components/onboarding/OnboardingThankYou";
+import PersonPlusEditor, { type PlusDraft } from "@/components/person/PersonPlusEditor";
 import {
   BTN_PRIMARY_BG,
   FONT_BODY,
@@ -11,7 +12,7 @@ import {
   WAIZ,
   WaizWordmark,
 } from "@/components/onboarding/brand";
-import { CONTACT_TYPE_OPTIONS } from "@/lib/client-contacts";
+import { ADDITIONAL_CONTACT_TYPE_OPTIONS } from "@/lib/client-contacts";
 import { draftToSubmitBody } from "@/lib/onboarding-form";
 import { prepareOnboardingHeadshot } from "@/lib/onboarding-headshot";
 import {
@@ -33,6 +34,7 @@ import {
   type PerformanceUnit,
   type StepId,
 } from "@/lib/onboarding-steps";
+import { type PlusItemKey } from "@/lib/person-profile";
 import { US_STATES } from "@/lib/us-states";
 import { US_CLIENT_TIMEZONES } from "@/lib/us-timezones";
 
@@ -188,6 +190,15 @@ export default function OnboardingWizard({ variant = "core" }: Props) {
         const headshot = await prepareOnboardingHeadshot(draft.headshot);
         form.set("headshot", headshot);
       }
+      for (let i = 0; i < draft.person_files.length; i++) {
+        form.set(`primary_file_${i}`, draft.person_files[i]);
+      }
+      draft.additional_members.forEach((member, index) => {
+        if (member.headshot) form.set(`member_headshot_${index}`, member.headshot);
+        member.files.forEach((file, fileIndex) => {
+          form.set(`member_file_${index}_${fileIndex}`, file);
+        });
+      });
 
       const res = await fetch("/api/onboard/submit", { method: "POST", body: form });
       const data = await res.json().catch(() => ({}));
@@ -744,6 +755,38 @@ export default function OnboardingWizard({ variant = "core" }: Props) {
             </div>
           )}
 
+          {step === "person_plus" && !inMemberFlow && (
+            <div className="max-w-md mx-auto space-y-4">
+              <p style={{ fontFamily: FONT_BODY, color: WAIZ.muted, fontSize: ".92rem" }}>
+                {draft.ob_role === "owner" ? "Owner" : draft.ob_role === "mlo" ? "Loan officer" : "You"} — add a headshot, bio, note, file, or anything else. Nothing else is on this page until you press plus.
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <input
+                  value={draft.first_name}
+                  onChange={e => patchDraft({ first_name: e.target.value })}
+                  placeholder="First name"
+                  className={INPUT}
+                />
+                <input
+                  value={draft.last_name}
+                  onChange={e => patchDraft({ last_name: e.target.value })}
+                  placeholder="Last name"
+                  className={INPUT}
+                />
+              </div>
+              <PersonPlusEditor
+                tone="light"
+                role="primary_lo"
+                draft={primaryPlusDraft(draft)}
+                disabled={submitting}
+                onAttach={(key, value) => {
+                  setDraft(current => ({ ...current, ...applyPrimaryPlus(current, key, value) }));
+                }}
+              />
+              <ContinueButton onClick={goNext} label="Continue" />
+            </div>
+          )}
+
           {step === "add_members" && !inMemberFlow && (
             <div className="max-w-md mx-auto space-y-4">
               {draft.additional_members.length > 0 && (
@@ -767,7 +810,7 @@ export default function OnboardingWizard({ variant = "core" }: Props) {
                           color: WAIZ.accent700,
                         }}
                       >
-                        {CONTACT_TYPE_OPTIONS.find(o => o.value === m.contact_type)?.label}
+                        {ADDITIONAL_CONTACT_TYPE_OPTIONS.find(o => o.value === m.contact_type)?.label}
                       </span>
                     </li>
                   ))}
@@ -792,7 +835,7 @@ export default function OnboardingWizard({ variant = "core" }: Props) {
 
           {inMemberFlow && step === "member_type" && (
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-xl mx-auto">
-              {CONTACT_TYPE_OPTIONS.map(opt => (
+              {ADDITIONAL_CONTACT_TYPE_OPTIONS.map(opt => (
                 <OnboardingChoiceCard
                   key={opt.value}
                   label={opt.label}
@@ -814,6 +857,23 @@ export default function OnboardingWizard({ variant = "core" }: Props) {
               placeholder="Full name"
               onContinue={goNext}
             />
+          )}
+
+          {inMemberFlow && step === "member_plus" && (
+            <div className="max-w-md mx-auto space-y-4">
+              <p style={{ fontFamily: FONT_BODY, color: WAIZ.muted, fontSize: ".92rem" }}>
+                {memberDraft.name || "This person"} starts with a name and role. Plus adds a headshot, bio, note, file, or anything else — only for them.
+              </p>
+              <PersonPlusEditor
+                tone="light"
+                role={memberDraft.contact_type}
+                draft={memberPlusDraft(memberDraft)}
+                onAttach={(key, value) => {
+                  setMemberDraft(current => ({ ...current, ...applyMemberPlus(current, key, value) }));
+                }}
+              />
+              <ContinueButton onClick={goNext} label="Add this person" />
+            </div>
           )}
 
           {inMemberFlow && step === "member_email" && (
@@ -1205,6 +1265,94 @@ function CrmOursIcon() {
       <path d="M8 14h3" />
     </svg>
   );
+}
+
+function primaryPlusDraft(draft: OnboardingDraft): PlusDraft {
+  return {
+    email: draft.email,
+    phone: draft.phone,
+    nmls: draft.nmls,
+    states_licensed: draft.states_licensed,
+    profile: {
+      ...(draft.biography ? { biography: draft.biography } : {}),
+      ...(draft.review_url ? { review_url: draft.review_url } : {}),
+      ...(draft.timezone ? { timezone: draft.timezone } : {}),
+      ...(draft.street_address ? { personal_address: draft.street_address } : {}),
+    },
+    notes: draft.person_notes.map(body => ({ body })),
+    files: [
+      ...(draft.headshot ? [{ kind: "headshot" as const, file_name: draft.headshot.name }] : []),
+      ...draft.person_files.map(file => ({ kind: "other" as const, file_name: file.name })),
+    ],
+  };
+}
+
+function applyPrimaryPlus(
+  draft: OnboardingDraft,
+  key: PlusItemKey,
+  value: string | string[] | File,
+): Partial<OnboardingDraft> {
+  if (value instanceof File) {
+    if (key === "headshot") return { headshot: value };
+    if (key === "file") return { person_files: [...draft.person_files, value] };
+    return {};
+  }
+  if (key === "states_licensed" && Array.isArray(value)) return { states_licensed: value };
+  if (typeof value !== "string") return {};
+  const text = value.trim();
+  if (key === "email") return { email: text };
+  if (key === "phone") return { phone: text };
+  if (key === "nmls") return { nmls: text };
+  if (key === "biography") return { biography: text };
+  if (key === "review_url") return { review_url: text };
+  if (key === "timezone") return { timezone: text };
+  if (key === "personal_address") return { street_address: text };
+  if (key === "note") return { person_notes: [...draft.person_notes, text] };
+  return {};
+}
+
+function memberPlusDraft(member: MemberDraft): PlusDraft {
+  return {
+    email: member.email,
+    phone: member.phone,
+    nmls: member.nmls,
+    states_licensed: member.states_licensed,
+    profile: {
+      ...(member.biography ? { biography: member.biography } : {}),
+      ...(member.review_url ? { review_url: member.review_url } : {}),
+      ...(member.timezone ? { timezone: member.timezone } : {}),
+      ...(member.personal_address ? { personal_address: member.personal_address } : {}),
+    },
+    notes: member.notes.map(body => ({ body })),
+    files: [
+      ...(member.headshot ? [{ kind: "headshot" as const, file_name: member.headshot.name }] : []),
+      ...member.files.map(file => ({ kind: "other" as const, file_name: file.name })),
+    ],
+  };
+}
+
+function applyMemberPlus(
+  member: MemberDraft,
+  key: PlusItemKey,
+  value: string | string[] | File,
+): Partial<MemberDraft> {
+  if (value instanceof File) {
+    if (key === "headshot") return { headshot: value };
+    if (key === "file") return { files: [...member.files, value] };
+    return {};
+  }
+  if (key === "states_licensed" && Array.isArray(value)) return { states_licensed: value };
+  if (typeof value !== "string") return {};
+  const text = value.trim();
+  if (key === "email") return { email: text };
+  if (key === "phone") return { phone: text };
+  if (key === "nmls") return { nmls: text };
+  if (key === "biography") return { biography: text };
+  if (key === "review_url") return { review_url: text };
+  if (key === "timezone") return { timezone: text };
+  if (key === "personal_address") return { personal_address: text };
+  if (key === "note") return { notes: [...member.notes, text] };
+  return {};
 }
 
 function CrmTheirsIcon() {

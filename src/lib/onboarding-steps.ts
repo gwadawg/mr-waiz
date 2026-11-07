@@ -1,4 +1,5 @@
 import type { ContactType } from '@/lib/client-contacts';
+import { missingRoleRequirement } from '@/lib/person-profile';
 
 export const ACCOUNT_MANAGEMENT_OPTIONS = [
   { value: 'solo' as const, label: 'Just me (solo operator)', icon: 'solo' },
@@ -56,6 +57,13 @@ export type MemberDraft = {
   phone: string;
   nmls: string;
   states_licensed: string[];
+  biography: string;
+  review_url: string;
+  timezone: string;
+  personal_address: string;
+  notes: string[];
+  headshot: File | null;
+  files: File[];
 };
 
 export type CompanyAddress = {
@@ -90,6 +98,8 @@ export type OnboardingDraft = {
   review_url: string;
   biography: string;
   headshot: File | null;
+  person_notes: string[];
+  person_files: File[];
   additional_members: MemberDraft[];
 };
 
@@ -118,6 +128,8 @@ export const EMPTY_ONBOARDING_DRAFT: OnboardingDraft = {
   review_url: '',
   biography: '',
   headshot: null,
+  person_notes: [],
+  person_files: [],
   additional_members: [],
 };
 
@@ -128,6 +140,13 @@ export const EMPTY_MEMBER_DRAFT: MemberDraft = {
   phone: '',
   nmls: '',
   states_licensed: [],
+  biography: '',
+  review_url: '',
+  timezone: '',
+  personal_address: '',
+  notes: [],
+  headshot: null,
+  files: [],
 };
 
 export type MainStepId =
@@ -152,11 +171,13 @@ export type MainStepId =
   | 'review_url'
   | 'bio'
   | 'headshot'
+  | 'person_plus'
   | 'add_members';
 
 export type MemberStepId =
   | 'member_type'
   | 'member_name'
+  | 'member_plus'
   | 'member_email'
   | 'member_phone'
   | 'member_nmls'
@@ -185,25 +206,6 @@ function companySteps(role: ObRole | ''): MainStepId[] {
   return [];
 }
 
-const PERSONAL_STEPS_CORE: MainStepId[] = [
-  'person_nmls',
-  'person_phone',
-  'person_email',
-  'person_states',
-  'person_location',
-  'person_timezone',
-];
-
-/** DSCR collects email/phone in the early contact block. */
-const PERSONAL_STEPS_DSCR: MainStepId[] = [
-  'person_nmls',
-  'person_states',
-  'person_location',
-  'person_timezone',
-];
-
-const CREATIVE_STEPS: MainStepId[] = ['review_url', 'bio', 'headshot'];
-
 export function getMainStepSequence(
   draft: OnboardingDraft,
   variant: OnboardingFormVariant = 'core',
@@ -214,14 +216,11 @@ export function getMainStepSequence(
     return [
       'welcome',
       'contact_name',
-      'person_email',
-      'person_phone',
       'management',
       'role',
       ...companySteps(draft.ob_role),
-      ...PERSONAL_STEPS_DSCR,
       ...unitSteps,
-      ...CREATIVE_STEPS,
+      'person_plus',
       'add_members',
     ];
   }
@@ -231,26 +230,13 @@ export function getMainStepSequence(
     'management',
     'role',
     ...companySteps(draft.ob_role),
-    ...PERSONAL_STEPS_CORE,
-    ...CREATIVE_STEPS,
+    'person_plus',
     'add_members',
   ];
 }
 
-export function getMemberStepSequence(member: MemberDraft): MemberStepId[] {
-  const steps: MemberStepId[] = [
-    'member_type',
-    'member_name',
-    'member_email',
-    'member_phone',
-  ];
-  if (member.contact_type === 'co_lo' || member.contact_type === 'loa') {
-    steps.push('member_nmls');
-  }
-  if (member.contact_type === 'co_lo') {
-    steps.push('member_states');
-  }
-  return steps;
+export function getMemberStepSequence(_member: MemberDraft): MemberStepId[] {
+  return ['member_type', 'member_name', 'member_plus'];
 }
 
 export function getActiveStepSequence(ctx: StepContext): StepId[] {
@@ -347,6 +333,11 @@ export function validateStep(step: StepId, ctx: StepContext): string | null {
       return null;
     case 'headshot':
       return null;
+    case 'person_plus':
+      if (!trim(draft.email)) return 'Add an email from the plus menu so we can match your account';
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trim(draft.email))) return 'Enter a valid email address';
+      if (!trim(draft.phone)) return 'Add a phone from the plus menu so we can match your account';
+      return null;
     case 'add_members':
       return null;
     case 'member_type':
@@ -366,6 +357,10 @@ export function validateStep(step: StepId, ctx: StepContext): string | null {
     case 'member_states':
       if (!memberDraft.states_licensed.length) return 'Select at least one licensed state for this Co-LO';
       return null;
+    case 'member_plus':
+      return missingRoleRequirement(memberDraft.contact_type, {
+        states_licensed: memberDraft.states_licensed,
+      });
     default:
       return null;
   }
@@ -394,6 +389,7 @@ export function stepQuestion(step: StepId): string {
     review_url: 'Do you have a link to your reviews? (optional)',
     bio: 'Share a short bio or anything we should know for your landing page',
     headshot: 'Upload a professional headshot (optional)',
+    person_plus: 'Your profile — add only what we should keep',
     add_members: 'Would you like to add another team member?',
     member_type: 'What role does this team member have?',
     member_name: 'What is their name?',
@@ -401,6 +397,7 @@ export function stepQuestion(step: StepId): string {
     member_phone: 'What is their phone number?',
     member_nmls: 'What is their NMLS number? (optional)',
     member_states: 'Which states are they licensed in?',
+    member_plus: 'Add anything we should keep on their profile',
   };
   return questions[step] ?? '';
 }
