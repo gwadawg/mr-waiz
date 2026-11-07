@@ -321,19 +321,6 @@ export function reviewHeroHeadline(
   return { length, error: null };
 }
 
-function hasTrackingParams(url: string): boolean {
-  try {
-    const parsed = new URL(url);
-    for (const key of parsed.searchParams.keys()) {
-      const name = key.toLowerCase();
-      if (name.startsWith("utm_") || name === "fbclid" || name === "gclid") return true;
-    }
-    return false;
-  } catch {
-    return false;
-  }
-}
-
 export type SlugContext = {
   slugTaken: boolean;
   repoYamlExists: boolean;
@@ -411,13 +398,11 @@ export function validateForPublish(
   }
   if (individualBrand && !draft.nmlsIndividual) errors.push("Individual NMLS is required");
   if (!draft.nmlsCompany) errors.push("Company NMLS is required");
+  // utm_*, fbclid, and gclid stay on the URL. Apply hops already forward those keys.
   if (!draft.applyUrl) errors.push("Quiz URL is required");
   else {
     const applyProblem = applyUrlError(draft.applyUrl);
     if (applyProblem) errors.push(applyProblem);
-    else if (equity && hasTrackingParams(draft.applyUrl)) {
-      errors.push("Quiz URL must be a plain link. Leave off utm, fbclid, and gclid.");
-    }
   }
   if (product === "DSCR") {
     if (draft.bookingUrl && !/^https?:\/\/\S+$/i.test(draft.bookingUrl)) {
