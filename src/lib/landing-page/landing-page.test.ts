@@ -267,17 +267,18 @@ describe("reverse landing validation", () => {
     );
   });
 
-  it("refuses host paths, demos, tracking params, and a long hero", () => {
+  it("refuses host paths, demos, and a long hero", () => {
     assert.ok(validateForPublish(filled({ slug: "guides" }), openSlug, "RM").some(e => /reserved/i.test(e)));
     assert.ok(
       validateForPublish(filled({ slug: "demo-specialist" }), openSlug, "RM").some(e => /demo/i.test(e)),
     );
-    assert.ok(
+    assert.equal(
       validateForPublish(
-        filled({ applyUrl: "https://example.com/quiz?utm_source=facebook" }),
+        filled({ applyUrl: "https://example.com/quiz?utm_source=facebook&fbclid=IwAR0abc&gclid=Cj0KCQ" }),
         openSlug,
         "RM",
-      ).some(e => /plain link/i.test(e)),
+      ).filter(error => /plain link|utm|fbclid|gclid/i.test(error)).length,
+      0,
     );
     assert.ok(
       validateForPublish(filled({ heroHeadline: "a".repeat(81) }), openSlug, "RM").some(e => /80/.test(e)),
@@ -468,6 +469,44 @@ describe("quiz url on publish", () => {
         );
       }
     }
+  });
+});
+
+describe("quiz tracking on publish", () => {
+  const products: LandingProduct[] = ["DSCR", "RM", "HS"];
+  // Keys pass-query and the apply redirect already forward. Do not rename them.
+  const tracked =
+    "https://quiz.dscrexperts.com/nicholas-donlon/1stpage?utm_source=facebook&utm_medium=paid&utm_campaign=launch&utm_content=ad-1&utm_term=WM&fbclid=IwAR0abc&gclid=Cj0KCQ";
+  const hecm =
+    "https://hecm.homequityhacks.com/heath-ramsey/?utm_source=ig&utm_medium=paid&fbclid=IwAR0abc&gclid=EAIa";
+
+  it("keeps utm, fbclid, and gclid on every product", () => {
+    for (const product of products) {
+      for (const applyUrl of [tracked, hecm]) {
+        const errors = validateForPublish(filled({ applyUrl }), openSlug, product).filter(error =>
+          /quiz url|plain link|utm|fbclid|gclid/i.test(error),
+        );
+        assert.deepEqual(errors, [], `${product} rejected ${applyUrl}`);
+        const parsed = YAML.parse(draftToYaml(filled({ applyUrl }), product)) as { applyUrl: string };
+        assert.equal(parsed.applyUrl, applyUrl);
+      }
+    }
+  });
+
+  it("writes the same query onto the apply redirect", () => {
+    const vercel = JSON.parse(
+      patchVercelApplyRedirects(JSON.stringify({ redirects: [] }), "jane-doe", tracked),
+    ) as { redirects: { source: string; destination: string }[] };
+    assert.deepEqual(
+      vercel.redirects.map(row => [row.source, row.destination]),
+      [
+        ["/jane-doe/apply", tracked],
+        ["/jane-doe/apply.html", tracked],
+      ],
+    );
+    const manifest = JSON.parse(patchRedirectManifest(null, "jane-doe", hecm)) as Record<string, string>;
+    assert.equal(manifest["/jane-doe/apply"], hecm);
+    assert.equal(manifest["/jane-doe/apply.html"], hecm);
   });
 });
 
